@@ -1,0 +1,25 @@
+{
+  "name": "seed",
+  "private": true,
+  "version": "0.0.1",
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0",
+    "@mui/material": "^6.3.0",
+    "@mui/icons-material": "^6.3.0",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "express": "^4.21.2",
+    "cors": "^2.8.5",
+    "better-sqlite3": "^9.6.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.5",
+    "@types/better-sqlite3": "^7.6.8",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.0"
+  }
+}

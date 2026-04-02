@@ -1,0 +1,14 @@
+FROM node:20-alpine
+WORKDIR /app
+RUN apk add --no-cache openssl
+
+COPY package.json ./
+RUN npm install
+
+COPY prisma ./prisma
+RUN npx prisma generate
+
+EXPOSE 4000
+
+# In dev: run migrate dev (creates migration files if needed) then start with hot reload
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss && npx tsx watch src/index.ts"]

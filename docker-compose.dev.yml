@@ -1,0 +1,35 @@
+version: '3.9'
+
+# Override for local development: hot reload via volume mounts
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/prisma:/app/prisma
+      - generated-apps:/generated-apps
+
+  app-runner:
+    build:
+      context: ./app-runner
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./app-runner/src:/app/src
+      - generated-apps:/generated-apps
+    command: npx tsx watch src/index.ts
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./frontend/src:/app/src
+    ports:
+      - '5173:5173'
+    environment:
+      # Same-origin /preview-app/ via Vite proxy → nginx (avoids broken direct http://localhost:4100 in iframe)
+      VITE_PREVIEW_USE_HOST_PORT: ${VITE_PREVIEW_USE_HOST_PORT:-false}
+      VITE_PREVIEW_PROXY_TARGET: ${VITE_PREVIEW_PROXY_TARGET:-http://nginx}
+    command: npx vite --host

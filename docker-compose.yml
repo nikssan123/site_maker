@@ -1,0 +1,114 @@
+version: '3.9'
+
+networks:
+  app-net:
+    driver: bridge
+
+volumes:
+  pgdata:
+  generated-apps:
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-appuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-apppassword}
+      POSTGRES_DB: ${POSTGRES_DB:-appdb}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - app-net
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-appuser} -d ${POSTGRES_DB:-appdb}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-appuser}:${POSTGRES_PASSWORD:-apppassword}@postgres:5432/${POSTGRES_DB:-appdb}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      MAX_FIX_ATTEMPTS: ${MAX_FIX_ATTEMPTS:-5}
+      DAILY_ITERATION_LIMIT: ${DAILY_ITERATION_LIMIT:-10}
+      JWT_SECRET: ${JWT_SECRET}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      PRICE_PROJECT_CENTS: ${PRICE_PROJECT_CENTS:-15000}
+      PRICE_HOSTING_CENTS: ${PRICE_HOSTING_CENTS:-999}
+      STRIPE_CLIENT_ID: ${STRIPE_CLIENT_ID}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost}
+      STRIPE_SUCCESS_URL: ${STRIPE_SUCCESS_URL:-http://localhost/billing?success=true}
+      STRIPE_CANCEL_URL: ${STRIPE_CANCEL_URL:-http://localhost/pricing}
+      GENERATED_APPS_DIR: /generated-apps
+      APP_RUNNER_URL: http://app-runner:4001
+      # CNAME target host: <projectId>.<HOSTING_SITES_HOST> — must match nginx hosting server_name
+      HOSTING_SITES_HOST: ${HOSTING_SITES_HOST:-sites.lvh.me}
+      # Testing only: set to "true" in .env to download ZIP without Stripe (never in production)
+      ALLOW_UNPAID_PROJECT_DOWNLOAD: ${ALLOW_UNPAID_PROJECT_DOWNLOAD:-false}
+      PRICE_ITERATION_SINGLE_CENTS: ${PRICE_ITERATION_SINGLE_CENTS:-100}
+      PRICE_ITERATION_PACK_CENTS: ${PRICE_ITERATION_PACK_CENTS:-10000}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+    volumes:
+      - generated-apps:/generated-apps
+    networks:
+      - app-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app-runner:
+    build:
+      context: ./app-runner
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      GENERATED_APPS_DIR: /generated-apps
+      # pnpm store lives inside the same volume as generated apps so hard links work (same filesystem).
+      # One canonical copy of each package version; all projects hard-link to it — no duplication.
+      PNPM_STORE_DIR: /generated-apps/.pnpm-store
+      # PM2 home inside the volume so saved process list survives container recreates
+      PM2_HOME: /generated-apps/.pm2
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      BACKEND_INTERNAL_URL: http://backend:4000
+    ports:
+      - '4100-4199:4100-4199'
+    volumes:
+      - generated-apps:/generated-apps
+    networks:
+      - app-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_PREVIEW_USE_HOST_PORT: ${VITE_PREVIEW_USE_HOST_PORT:-false}
+        VITE_PREVIEW_HOST: ${VITE_PREVIEW_HOST:-}
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost/api}
+      VITE_PREVIEW_USE_HOST_PORT: ${VITE_PREVIEW_USE_HOST_PORT:-false}
+      VITE_PREVIEW_HOST: ${VITE_PREVIEW_HOST:-}
+    networks:
+      - app-net
+
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - '80:80'
+    networks:
+      - app-net
+    depends_on:
+      - frontend
+      - backend
+      - app-runner

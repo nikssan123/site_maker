@@ -1,0 +1,60 @@
+import { Router } from 'express';
+import { z } from 'zod';
+import { requireAuth } from '../middleware/requireAuth';
+import { runIteration } from '../services/iteratorService';
+import { prisma } from '../index';
+import { AppError } from '../middleware/errorHandler';
+
+export const FREE_ITERATION_LIMIT = 2;
+
+const router = Router();
+
+router.post('/', requireAuth, async (req, res, next) => {
+  try {
+    const { sessionId, message } = z
+      .object({ sessionId: z.string(), message: z.string().min(1) })
+      .parse(req.body);
+
+    const userId = req.user.userId;
+
+    const session = await prisma.session.findFirst({
+      where: { id: sessionId, userId },
+      include: { project: true },
+    });
+
+    if (!session?.project) throw new AppError(400, 'Проектът не е намерен');
+
+    const project = session.project;
+
+    // Count all iterations ever run on this project
+    const totalUsed = await prisma.iterationLog.count({
+      where: { projectId: project.id },
+    });
+
+    const allowedTotal = FREE_ITERATION_LIMIT + project.paidIterationCredits;
+
+    if (totalUsed >= allowedTotal) {
+      throw new AppError(
+        402,
+        'Безплатните подобрения са изчерпани — закупете още, за да продължите',
+        'iteration_payment_required',
+      );
+    }
+
+    // Credit deduction happens synchronously before the fire-and-forget launch
+    await prisma.iterationLog.create({
+      data: { projectId: project.id, userId },
+    });
+
+    // Fire and forget — pipeline runs to completion regardless of client connection
+    runIteration(sessionId, userId, message).catch((err) => {
+      console.error('[iterate] unhandled pipeline error', err);
+    });
+
+    res.json({ sessionId });
+  } catch (err) {
+    next(err);
+  }
+});
+
+export default router;
