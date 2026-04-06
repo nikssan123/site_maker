@@ -1,7 +1,14 @@
 import { extractFilesFromCodegenResponse } from '../lib/extractCodegenJson';
-import { getChatClient, getCodeClient } from './aiClient';
-import { ITERATOR_SYSTEM, buildIteratorPrompt } from '../lib/prompts';
+import { getChatClient, getCodeClient, ChatMessage } from './aiClient';
+import {
+  ITERATOR_SYSTEM,
+  buildIteratorPrompt,
+  CODE_GEN_JSON_REPAIR_SYSTEM,
+  CODE_GEN_JSON_REPAIR_USER,
+} from '../lib/prompts';
+import { BG_CODEGEN_RETRY } from '../lib/localePrompt';
 import { writeProjectFiles } from '../lib/fileWriter';
+import { writeAdminTokenFile } from '../lib/adminToken';
 import { installDeps, buildProject, runProject, stopProject } from './appRunner';
 import { autoFix } from './fixerService';
 import { prisma } from '../index';
@@ -16,12 +23,14 @@ import {
   ITERATE_READING_REQUEST,
   ITERATE_SAVING_BUILD,
   ITERATE_VERIFY_BUILD,
+  GEN_JSON_REPAIR_INITIAL,
 } from '../lib/generationFriendly';
 
 export async function runIteration(
   sessionId: string,
   userId: string,
   changeRequest: string,
+  opts?: { spec?: string; logId?: string },
 ): Promise<void> {
   await clearSessionEvents(sessionId);
 
@@ -41,34 +50,51 @@ export async function runIteration(
 
   await publishEvent(sessionId, { type: 'user_progress', message: ITERATE_READING_REQUEST });
 
-  // Phase 1: OpenAI refines the change request into a precise technical spec
-  let refinedSpec = changeRequest;
-  try {
-    const chatAi = getChatClient();
-    const refinementSystem = `You are a technical requirements analyst for a React web app.
-Given the user's informal change request and the current app context,
-output a single precise technical specification (2-3 sentences max) describing
-exactly what code changes to make. No explanations, just the spec.`;
-    const refinementUserMsg = JSON.stringify({
-      plan: planData,
-      files: Object.keys(currentFiles),
-      changeRequest,
-    });
-    refinedSpec = await chatAi.complete(
-      [{ role: 'user', content: refinementUserMsg }],
-      refinementSystem,
-      { maxTokens: 256 },
-    );
-    if (refinedSpec) {
-      await publishEvent(sessionId, { type: 'user_progress', message: `Ще приложа: ${refinedSpec}` });
-    }
-  } catch {
+  // If the UI already clarified requirements, it can send a spec to execute directly.
+  // Otherwise, we do a quick internal refinement.
+  let refinedSpec = (opts?.spec ?? '').trim();
+  if (!refinedSpec) {
     refinedSpec = changeRequest;
+    try {
+      const chatAi = getChatClient();
+      const refinementSystem = `You are a senior full-stack engineer writing a precise implementation brief for another engineer (Claude) who will edit the code.
+
+Given the app plan, the list of existing files, and the user's change request, write a detailed technical specification covering:
+1. Which files to edit and exactly what to change in each (component names, function names, prop names, SQL columns, API routes — be specific)
+2. Any new files to create and their purpose
+3. Data flow: if the change touches both frontend and backend, describe both ends
+4. Edge cases or constraints to preserve (loading states, error handling, existing styles)
+5. What NOT to change (to avoid regressions)
+
+Rules:
+- Be specific and concrete — no vague phrases like "update the component"
+- Reference exact file names from the provided list
+- Keep it under 200 words total
+- English only
+- No preamble, no sign-off — just the spec`;
+      const refinementUserMsg = `App plan: ${JSON.stringify(planData)}\n\nFiles: ${Object.keys(currentFiles).join(', ')}\n\nUser request: ${changeRequest}`;
+      refinedSpec = await chatAi.complete(
+        [{ role: 'user', content: refinementUserMsg }],
+        refinementSystem,
+        { maxTokens: 350 },
+      );
+    } catch {
+      refinedSpec = changeRequest;
+    }
+  }
+
+  // Save description to the iteration log now that we have the refined spec
+  if (opts?.logId) {
+    prisma.iterationLog.update({
+      where: { id: opts.logId },
+      data: { description: refinedSpec.slice(0, 500) },
+    }).catch(() => {});
   }
 
   // Phase 2: Claude executes the refined spec
   const ai = getCodeClient();
   const prompt = buildIteratorPrompt(planData, currentFiles, refinedSpec);
+  const iterMaxTokens = parseInt(process.env.CLAUDE_MAX_OUTPUT_TOKENS ?? '8192', 10);
   let idx = 0;
   const hintTimer = setInterval(() => {
     publishEvent(sessionId, {
@@ -79,23 +105,48 @@ exactly what code changes to make. No explanations, just the spec.`;
   }, 12000);
 
   let raw: string;
+  let rawRetry = '';
   try {
-    raw = await ai.complete([{ role: 'user', content: prompt }], ITERATOR_SYSTEM);
+    raw = await ai.complete([{ role: 'user', content: prompt }], ITERATOR_SYSTEM, { maxTokens: iterMaxTokens });
   } finally {
     clearInterval(hintTimer);
   }
 
   let changedFiles = extractFilesFromCodegenResponse(raw);
+
+  // One retry: tell Claude its output was rejected and ask for pure JSON
   if (!changedFiles) {
     try {
-      const parsed = JSON.parse(raw.trim()) as { files?: Record<string, unknown> };
-      if (parsed.files && typeof parsed.files === 'object' && !Array.isArray(parsed.files)) {
-        const out: Record<string, string> = {};
-        for (const [k, v] of Object.entries(parsed.files)) {
-          if (typeof v === 'string') out[k] = v;
-        }
-        changedFiles = Object.keys(out).length > 0 ? out : null;
-      }
+      const retryMessages: ChatMessage[] = [
+        { role: 'user', content: prompt },
+        { role: 'assistant', content: raw },
+        { role: 'user', content: BG_CODEGEN_RETRY },
+      ];
+      rawRetry = await ai.complete(retryMessages, ITERATOR_SYSTEM, { maxTokens: iterMaxTokens });
+      changedFiles = extractFilesFromCodegenResponse(rawRetry);
+      if (!changedFiles) raw = rawRetry;
+    } catch {
+      /* ignore retry failure */
+    }
+  }
+
+  // Third pass: strict JSON repair (same pipeline as initial codegen) — fixes fences, prose, minor escaping issues
+  if (!changedFiles || Object.keys(changedFiles).length === 0) {
+    const repairCap = parseInt(process.env.CODE_GEN_REPAIR_INPUT_CHARS ?? '120000', 10);
+    const repairBody = `# First model output\n${raw.slice(0, repairCap)}\n\n---\n\n# Second model output\n${rawRetry.slice(0, repairCap)}`;
+    const repairUser = `${CODE_GEN_JSON_REPAIR_USER}\n\n${repairBody}`;
+    const repairMaxTokens = Math.max(
+      iterMaxTokens,
+      parseInt(process.env.CODE_GEN_MAX_TOKENS ?? '16384', 10),
+    );
+    try {
+      await publishEvent(sessionId, { type: 'user_progress', message: GEN_JSON_REPAIR_INITIAL });
+      const rawRepair = await ai.complete(
+        [{ role: 'user', content: repairUser }],
+        CODE_GEN_JSON_REPAIR_SYSTEM,
+        { maxTokens: repairMaxTokens },
+      );
+      changedFiles = extractFilesFromCodegenResponse(rawRepair);
     } catch {
       /* ignore */
     }
@@ -111,6 +162,11 @@ exactly what code changes to make. No explanations, just the spec.`;
 
   const mergedFiles = { ...currentFiles, ...changedFiles };
   await writeProjectFiles(project.id, changedFiles);
+  try {
+    await writeAdminTokenFile(project.id);
+  } catch (e) {
+    console.error('[iterate] writeAdminTokenFile failed:', e);
+  }
   await prisma.project.update({
     where: { id: project.id },
     data: { files: mergedFiles, status: 'building' },
@@ -121,8 +177,9 @@ exactly what code changes to make. No explanations, just the spec.`;
   await publishEvent(sessionId, { type: 'user_progress', message: ITERATE_VERIFY_BUILD });
 
   // Re-write VITE_ public env vars before rebuild so they're baked into the new bundle
-  if (project.buildEnv && typeof project.buildEnv === 'object' && !Array.isArray(project.buildEnv)) {
-    const envLines = Object.entries(project.buildEnv as Record<string, string>)
+  const buildEnv = (project as any).buildEnv as unknown;
+  if (buildEnv && typeof buildEnv === 'object' && !Array.isArray(buildEnv)) {
+    const envLines = Object.entries(buildEnv as Record<string, string>)
       .filter(([k]) => k.startsWith('VITE_'))
       .map(([k, v]) => `${k}=${v}`);
     if (envLines.length > 0) {

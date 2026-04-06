@@ -87,7 +87,9 @@ export default function PreviewFrame({ projectId, port, editToken }: Props) {
       injectOverlay();
     } else {
       win.__editActive = false;
-      iframe.contentDocument?.getElementById('__edit-card')?.remove();
+      // Clean up any overlay remnants (IDs defined in EDIT_OVERLAY_SCRIPT).
+      iframe.contentDocument?.getElementById('__edit-overlay-card')?.remove();
+      iframe.contentDocument?.getElementById('__edit-overlay-backdrop')?.remove();
     }
   }, [editToken, injectOverlay]);
 

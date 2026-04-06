@@ -1,19 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Button, IconButton, Dialog, DialogTitle, DialogContent,
-  DialogActions, List, ListItem, ListItemText, ListItemAvatar,
-  Avatar, Divider, CircularProgress, Alert, Stack, Tooltip, Select,
-  MenuItem, FormControl, InputLabel,
+  DialogActions, List, ListItem, ListItemText, Divider, CircularProgress,
+  Alert, Stack, Tooltip, Select, MenuItem, FormControl, InputLabel,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import StorefrontIcon from '@mui/icons-material/Storefront';
+import ArticleIcon from '@mui/icons-material/Article';
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 import { AdminField, inferFieldType, renderField } from '../lib/adminFields';
 
-const MAX_FILE_BYTES = 7 * 1024 * 1024; // 7 MB
+const MAX_FILE_BYTES = 7 * 1024 * 1024;
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -27,49 +26,30 @@ function readFileAsDataUrl(file: File): Promise<string> {
 interface Props {
   projectId: string;
   runPort: number | null;
-  /** Sent as X-Admin-Token for POST/PUT/DELETE to generated /api (required when app-runner enforces writes). */
-  adminApiToken?: string | null;
 }
 
 type Row = Record<string, unknown>;
 type TypedModel = { name: string; fields: AdminField[] | null };
 
-export default function CatalogPanel({ projectId, runPort, adminApiToken }: Props) {
+export default function BlogPanel({ projectId, runPort }: Props) {
   const { t } = useTranslation();
 
-  // Step 1: discover models
   const [models, setModels] = useState<TypedModel[] | null>(null);
   const [modelsError, setModelsError] = useState(false);
   const [activeModel, setActiveModel] = useState<string | null>(null);
 
-  // Step 2: fetch rows for the active model
   const [rows, setRows] = useState<Row[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Row | null>(null);
   const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
   const [saving, setSaving] = useState(false);
-  // Per-field upload state
   const [fieldUploading, setFieldUploading] = useState<Record<string, boolean>>({});
 
-  const displayImageUrl = (raw: unknown): string => {
-    const url = typeof raw === 'string' ? raw : '';
-    if (!url) return '';
-    // Avoid browser caching a 404 while the upload is being written / served.
-    // Only apply to our own uploaded assets so external URLs stay untouched.
-    const prefix = `/preview-app/${projectId}/uploads/`;
-    if (url.startsWith(prefix) && !url.includes('?')) {
-      return `${url}?v=${Date.now()}`;
-    }
-    return url;
-  };
-
-  // ── Discover models ──────────────────────────────────────────────
   useEffect(() => {
     api.getCatalogModels(projectId)
       .then(({ models: m }) => {
@@ -79,7 +59,6 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken }: Prop
       .catch(() => setModelsError(true));
   }, [projectId]);
 
-  // ── Fetch rows whenever active model or port changes ─────────────
   const fetchRows = useCallback(async (model: string) => {
     if (!runPort) return;
     setLoading(true);
@@ -102,10 +81,8 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken }: Prop
     else if (!runPort) { setRows([]); setLoading(false); }
   }, [activeModel, runPort, fetchRows]);
 
-  // ── Field inference ──────────────────────────────────────────────
   const activeTypedModel = models?.find((m) => m.name === activeModel) ?? null;
 
-  // Typed fields from config; fall back to keys from first data row
   const typedFields: AdminField[] = activeTypedModel?.fields
     ?? (rows && rows.length > 0
       ? Object.keys(rows[0]).filter((k) => k !== 'id').map((k) => ({ name: k, type: inferFieldType(k) }))
@@ -113,20 +90,15 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken }: Prop
 
   const fields = typedFields.map((f) => f.name);
 
-  const nameField =
-    fields.find((f) => /name|title|label|make|brand|model/.test(f.toLowerCase())) ??
-    fields[0] ??
-    'name';
-  const priceField = fields.find((f) => /price|cost|amount/.test(f.toLowerCase()));
-  const imgField = typedFields.find((f) => f.type === 'image')?.name
-    ?? fields.find((f) => /url|image|img|photo|pic|avatar|thumbnail/.test(f.toLowerCase()));
+  const titleField =
+    fields.find((f) => /title|heading|name|subject/.test(f.toLowerCase())) ??
+    fields[0] ?? 'title';
+  const dateField = fields.find((f) => /date|publishedat|createdat|postedat/.test(f.toLowerCase()));
+  const authorField = fields.find((f) => /author|by|writer|creator/.test(f.toLowerCase()));
 
-  // ── Dialog helpers ───────────────────────────────────────────────
   const openAdd = () => {
     setEditing(null);
-    // Use discovered fields if available, otherwise empty form with just one text field
-    const f = fields.length > 0 ? fields : [];
-    setFormValues(Object.fromEntries(f.map((k) => [k, ''])));
+    setFormValues(Object.fromEntries(fields.map((k) => [k, ''])));
     setFormError(null);
     setDialogOpen(true);
   };
@@ -150,12 +122,9 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken }: Prop
       });
       const base = `/preview-app/${projectId}/api/${activeModel}`;
       const url = editing ? `${base}/${editing.id}` : base;
-      const method = editing ? 'PUT' : 'POST';
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (adminApiToken) headers['X-Admin-Token'] = adminApiToken;
       const res = await fetch(url, {
-        method,
-        headers,
+        method: editing ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -172,11 +141,9 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken }: Prop
     if (!deleteTarget || !activeModel) return;
     setSaving(true);
     try {
-      const delHeaders: Record<string, string> = {};
-      if (adminApiToken) delHeaders['X-Admin-Token'] = adminApiToken;
       const res = await fetch(
         `/preview-app/${projectId}/api/${activeModel}/${deleteTarget.id}`,
-        { method: 'DELETE', headers: delHeaders },
+        { method: 'DELETE' },
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setDeleteTarget(null);
@@ -206,13 +173,11 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken }: Prop
     }
   };
 
-  // ── Render ───────────────────────────────────────────────────────
-
   if (!runPort) {
     return <Alert severity="info" sx={{ m: 2 }}>{t('catalog.notRunning')}</Alert>;
   }
 
-  if (modelsError || (models !== null && (models as TypedModel[]).length === 0)) {
+  if (modelsError || (models !== null && models.length === 0)) {
     return <Alert severity="warning" sx={{ m: 2 }}>{t('catalog.notAvailable')}</Alert>;
   }
 
@@ -227,7 +192,6 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken }: Prop
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
-      {/* Model selector (only when more than one model detected) */}
       {models.length > 1 && (
         <Box sx={{ px: 2, pt: 1.5, pb: 1, flexShrink: 0 }}>
           <FormControl size="small" fullWidth>
@@ -235,10 +199,7 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken }: Prop
             <Select
               label={t('catalog.modelLabel')}
               value={activeModel ?? ''}
-              onChange={(e) => {
-                setActiveModel(e.target.value);
-                setRows(null);
-              }}
+              onChange={(e) => { setActiveModel(e.target.value); setRows(null); }}
             >
               {models.map((m) => (
                 <MenuItem key={m.name} value={m.name}>{m.name}</MenuItem>
@@ -248,32 +209,26 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken }: Prop
         </Box>
       )}
 
-      {/* Toolbar */}
       <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
         <Typography variant="body2" color="text.secondary" sx={{ flex: 1, fontWeight: 600 }}>
           {loading ? '…' : `${rows?.length ?? 0} ${activeModel ?? ''}`}
         </Typography>
         <Button
-          size="small"
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={openAdd}
+          size="small" variant="contained" startIcon={<AddIcon />} onClick={openAdd}
           disabled={loading || fields.length === 0}
           sx={{ fontSize: 11, py: 0.4 }}
         >
-          {t('catalog.addProduct')}
+          {t('blog.addPost')}
         </Button>
       </Box>
       <Divider />
 
-      {/* Loading */}
       {loading && (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
           <CircularProgress size={28} />
         </Box>
       )}
 
-      {/* Fetch error */}
       {!loading && fetchError && (
         <Stack spacing={1.5} sx={{ m: 2 }}>
           <Alert severity="warning">{t('catalog.fetchError')}</Alert>
@@ -283,29 +238,22 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken }: Prop
         </Stack>
       )}
 
-      {/* Empty state */}
       {!loading && !fetchError && rows?.length === 0 && (
         <Box sx={{
           flex: 1, display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center', gap: 2, p: 3,
         }}>
-          <StorefrontIcon sx={{ fontSize: 48, color: 'text.disabled' }} />
+          <ArticleIcon sx={{ fontSize: 48, color: 'text.disabled' }} />
           <Typography variant="body2" color="text.secondary" textAlign="center">
-            {t('catalog.empty')}
+            {t('blog.empty')}
           </Typography>
           <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={openAdd}
             disabled={fields.length === 0}>
-            {t('catalog.addFirst')}
+            {t('blog.addFirst')}
           </Button>
-          {fields.length === 0 && (
-            <Typography variant="caption" color="text.disabled" textAlign="center">
-              {t('catalog.noFieldsHint')}
-            </Typography>
-          )}
         </Box>
       )}
 
-      {/* Product list */}
       {!loading && !fetchError && rows && rows.length > 0 && (
         <List dense disablePadding sx={{ flex: 1, overflow: 'auto' }}>
           {rows.map((row, i) => (
@@ -327,17 +275,16 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken }: Prop
                   </Stack>
                 }
               >
-                {imgField && (
-                  <ListItemAvatar sx={{ minWidth: 48 }}>
-                    <Avatar src={displayImageUrl(row[imgField])} variant="rounded"
-                      sx={{ width: 36, height: 36 }}>
-                      <StorefrontIcon sx={{ fontSize: 18 }} />
-                    </Avatar>
-                  </ListItemAvatar>
-                )}
                 <ListItemText
-                  primary={String(row[nameField] ?? '—')}
-                  secondary={priceField != null ? String(row[priceField]) : undefined}
+                  primary={String(row[titleField] ?? '—')}
+                  secondary={
+                    [
+                      dateField ? String(row[dateField] ?? '').slice(0, 10) : null,
+                      authorField ? String(row[authorField] ?? '') : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || undefined
+                  }
                   primaryTypographyProps={{ variant: 'body2', fontWeight: 600, noWrap: true }}
                   secondaryTypographyProps={{ variant: 'caption' }}
                 />
@@ -348,11 +295,10 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken }: Prop
         </List>
       )}
 
-      {/* Add / Edit dialog */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth
         PaperProps={{ sx: { borderRadius: 2 } }}>
         <DialogTitle fontWeight={700} sx={{ fontSize: 16 }}>
-          {editing ? t('catalog.editProduct') : t('catalog.addProduct')}
+          {editing ? t('blog.editPost') : t('blog.addPost')}
         </DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '12px !important' }}>
           {formError && <Alert severity="error" sx={{ mb: 0.5 }}>{formError}</Alert>}
@@ -374,13 +320,12 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken }: Prop
         </DialogActions>
       </Dialog>
 
-      {/* Delete confirmation */}
       <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)}
         PaperProps={{ sx: { borderRadius: 2 } }}>
         <DialogTitle fontWeight={700} sx={{ fontSize: 16 }}>{t('catalog.confirmDelete')}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary">
-            {t('catalog.confirmDeleteBody', { name: String(deleteTarget?.[nameField] ?? '') })}
+            {t('catalog.confirmDeleteBody', { name: String(deleteTarget?.[titleField] ?? '') })}
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>

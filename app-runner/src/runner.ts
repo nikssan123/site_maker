@@ -12,6 +12,17 @@ export const BASE_DIR = process.env.GENERATED_APPS_DIR ?? '/generated-apps';
  */
 const PNPM_STORE_DIR = process.env.PNPM_STORE_DIR ?? '/generated-apps/.pnpm-store';
 
+function rebuildNativeAddons(dir: string): void {
+  // Best-effort: some generated projects may accidentally include native deps.
+  // Rebuild them once to avoid a hard crash loop.
+  execFileSync('pnpm', ['rebuild'], {
+    cwd: dir,
+    timeout: 180_000,
+    encoding: 'utf8',
+    stdio: 'pipe',
+  });
+}
+
 
 // Track running processes: projectId → child process
 const runningProcesses = new Map<string, ChildProcess>();
@@ -151,9 +162,25 @@ function rewriteViteDistRootAssets(projectId: string, dir: string): void {
     // Rewrite absolute API calls so they route through the preview proxy.
     // Generated code uses fetch("/api/...") but those go to the main app's nginx root.
     // After rewrite: fetch("/preview-app/{id}/api/...") → proxied correctly to the generated Express server.
+    // Common literal patterns
     s = s.replaceAll('"/api/', `"${root}/api/`);
     s = s.replaceAll("'/api/", `'${root}/api/`);
     s = s.replace(/`\/api\//g, `\`${root}/api/`);
+
+    // Rollup/Vite may escape "/" as \u002f inside strings
+    if (unicodeRoot.length > 0) {
+      s = s.replace(/"\\u002fapi\\u002f/g, `"\\u002f${unicodeRoot}\\u002fapi\\u002f`);
+      s = s.replace(/'\\u002fapi\\u002f/g, `'\\u002f${unicodeRoot}\\u002fapi\\u002f`);
+    }
+
+    // Catch minified paths: /api/ not preceded by a letter, digit, _, or / (avoids …/uuid/api/ and URLs)
+    s = s.replace(/(?<![\w/])\/api\//g, `${root}/api/`);
+
+    // More robust: handle "/api" that isn't followed by "/" (e.g. "/api?x=1" or "/api")
+    // and common URL constructor usage.
+    s = s.replace(/(["'])\/api(?=(?:[?"'#]|\\u002f))/g, `$1${root}/api`);
+    s = s.replace(/new URL\((["'])\/api(?=(?:[?"'#]|\\u002f))/g, `new URL($1${root}/api`);
+    s = s.replace(/fetch\((["'])\/api(?=(?:[?"'#]|\\u002f))/g, `fetch($1${root}/api`);
 
     return s;
   };
@@ -183,53 +210,10 @@ function rewriteViteDistRootAssets(projectId: string, dir: string): void {
   walk(dist);
 }
 
-/**
- * Compile native addons for packages in the pnpm virtual store.
- * `pnpm rebuild` doesn't reliably reach transitive deps — run node-gyp rebuild
- * directly inside each matching package directory instead.
- */
-function rebuildNativeAddons(projectDir: string): void {
-  const pnpmDir = path.join(projectDir, 'node_modules', '.pnpm');
-  if (!fs.existsSync(pnpmDir)) return;
-
-  const NATIVE_PACKAGES = ['better-sqlite3'];
-
-  for (const pkgName of NATIVE_PACKAGES) {
-    const storeEntry = fs.readdirSync(pnpmDir).find((d) => d.startsWith(`${pkgName}@`));
-    if (!storeEntry) continue;
-
-    const pkgDir = path.join(pnpmDir, storeEntry, 'node_modules', pkgName);
-    if (!fs.existsSync(pkgDir)) continue;
-
-    console.log(`[runner] node-gyp rebuild in ${pkgDir}`);
-    // node-pre-gyp is better-sqlite3's build tool; fall back to node-gyp
-    let rebuilt = false;
-    const nodePreGyp = path.join(pkgDir, 'node_modules', '.bin', 'node-pre-gyp');
-    if (fs.existsSync(nodePreGyp)) {
-      try {
-        execFileSync(nodePreGyp, ['rebuild'], { cwd: pkgDir, timeout: 120_000, encoding: 'utf8', stdio: 'pipe' });
-        rebuilt = true;
-      } catch { /* fall through to node-gyp */ }
-    }
-    if (!rebuilt) {
-      execFileSync('node-gyp', ['rebuild'], { cwd: pkgDir, timeout: 120_000, encoding: 'utf8', stdio: 'pipe' });
-    }
-  }
-}
-
 export function install(projectId: string): { success: boolean; log: string } {
   const dir = getProjectDir(projectId);
   try {
-    // Force native addons to always compile from source — prevents pnpm from
-    // reusing a prebuilt binary from the store that was compiled for the wrong platform.
-    const npmrc = path.join(dir, '.npmrc');
-    const npmrcExtra = 'better-sqlite3_build_from_source=true\n';
-    const existing = fs.existsSync(npmrc) ? fs.readFileSync(npmrc, 'utf8') : '';
-    if (!existing.includes('better-sqlite3_build_from_source')) {
-      fs.writeFileSync(npmrc, existing + npmrcExtra);
-    }
-
-    let log = execFileSync(
+    const log = execFileSync(
       'pnpm',
       ['install', '--store-dir', PNPM_STORE_DIR, '--no-lockfile', '--prefer-offline'],
       {
@@ -239,15 +223,6 @@ export function install(projectId: string): { success: boolean; log: string } {
         stdio: 'pipe',
       },
     );
-
-    // Rebuild native addons (e.g. better-sqlite3) after install.
-    // Prebuilt binaries in the pnpm store may be for the wrong platform.
-    try {
-      rebuildNativeAddons(dir);
-    } catch (rebuildErr: any) {
-      console.log(`[runner] native addon rebuild warning: ${(rebuildErr.stderr ?? rebuildErr.message ?? '').slice(0, 300)}`);
-    }
-
     return { success: true, log };
   } catch (err: any) {
     return { success: false, log: err.stderr ?? err.message ?? String(err) };

@@ -5,8 +5,7 @@ import {
   createGenerationCheckout,
   createProjectCheckout,
   createHostingCheckout,
-  createIterationSingleCheckout,
-  createIterationPackCheckout,
+  createIterationCheckout,
   createPortalSession,
   handleWebhook,
 } from '../services/billingService';
@@ -46,13 +45,14 @@ router.post('/hosting-checkout', requireAuth, async (req, res, next) => {
   }
 });
 
-// Iteration credits — pack: false → €1 single, pack: true → €100 for 100 credits
+// Iteration credits — quantity 1–20; pricing: €1.50 each, capped at €20 for 20
 router.post('/iteration-checkout', requireAuth, async (req, res, next) => {
   try {
-    const { projectId, pack } = z.object({ projectId: z.string(), pack: z.boolean().default(false) }).parse(req.body);
-    const result = pack
-      ? await createIterationPackCheckout(req.user.userId, req.user.email, projectId)
-      : await createIterationSingleCheckout(req.user.userId, req.user.email, projectId);
+    const { projectId, quantity } = z.object({
+      projectId: z.string(),
+      quantity: z.number().int().min(1).max(20).default(1),
+    }).parse(req.body);
+    const result = await createIterationCheckout(req.user.userId, req.user.email, projectId, quantity);
     res.json(result);
   } catch (err) {
     next(err);

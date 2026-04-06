@@ -126,7 +126,7 @@ export const api = {
   download: (path: string, fallbackFilename: string) => downloadWithAuth(path, fallbackFilename),
 
   getCatalogModels: (projectId: string) =>
-    request<{ models: string[] }>('GET', `/preview/${projectId}/catalog-models`),
+    request<{ appType: string | null; models: Array<{ name: string; fields: Array<{ name: string; type: string }> | null }> }>('GET', `/preview/${projectId}/catalog-models`),
 
   uploadImage: (projectId: string, dataUrl: string, filename: string) =>
     request<{ url: string }>('POST', `/preview/${projectId}/upload-image`, { data: dataUrl, filename }),
@@ -134,8 +134,21 @@ export const api = {
   getEditToken: (projectId: string) =>
     request<{ token: string }>('GET', `/preview/${projectId}/edit-token`),
 
+  getAdminToken: (projectId: string) =>
+    request<{ token: string }>('GET', `/preview/${projectId}/admin-token`),
+
   patchContent: (projectId: string, body: { token: string; original: string; replacement: string }) =>
     request<{ ok: boolean }>('PATCH', `/preview/${projectId}/content`, body),
+
+  setHostedSubdomain: (projectId: string, slug: string) =>
+    request<{
+      customDomain: string | null;
+      customDomainVerifiedAt: string | null;
+      hostingSitesConfigured: boolean;
+      cnameTarget: string | null;
+      challengeTxtName: string | null;
+      challengeTxtValue: string | null;
+    }>('PUT', `/preview/${projectId}/subdomain`, { slug }),
 
   /**
    * Two-step resilient SSE flow:

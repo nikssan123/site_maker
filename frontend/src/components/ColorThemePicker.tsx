@@ -62,6 +62,53 @@ export default function ColorThemePicker({ value, onChange, onExtractFromImage }
   const anchorRefs = useRef<Partial<Record<PickerKey, HTMLElement | null>>>({});
 
   const isPreset = THEME_PRESETS.some((p) => p.name === value.name);
+  const isCustom = value.name === 'Custom';
+  const isExtracted = !isPreset && !isCustom;
+
+  const renderThemeTile = (theme: ColorTheme, selected: boolean, label: string, key: string) => (
+    <Box
+      key={key}
+      onClick={() => { onChange(theme); setShowCustom(false); }}
+      sx={{
+        cursor: 'pointer',
+        borderRadius: 2,
+        border: `2px solid ${selected ? theme.primary : 'rgba(255,255,255,0.08)'}`,
+        overflow: 'hidden',
+        transition: 'all 0.18s',
+        boxShadow: selected ? `0 0 0 1px ${theme.primary}55, 0 4px 16px ${theme.primary}30` : 'none',
+        '&:hover': {
+          borderColor: theme.primary,
+          boxShadow: `0 0 0 1px ${theme.primary}44, 0 4px 12px ${theme.primary}22`,
+        },
+      }}
+    >
+      <Box
+        sx={{
+          height: 44,
+          background: `linear-gradient(135deg, ${theme.primary} 0%, ${theme.secondary} 100%)`,
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'flex-end',
+          px: 1,
+          pb: 0.5,
+        }}
+      >
+        {selected && (
+          <CheckIcon sx={{ fontSize: 13, color: '#fff', ml: 'auto', mb: 0.25, filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.5))' }} />
+        )}
+      </Box>
+      <Box sx={{ bgcolor: theme.background, px: 1, py: 0.75, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: theme.primary, flexShrink: 0 }} />
+        <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: theme.secondary, flexShrink: 0, opacity: 0.8 }} />
+        <Typography
+          variant="caption"
+          sx={{ color: selected ? '#f1f5f9' : '#94a3b8', fontSize: 10, fontWeight: selected ? 700 : 500, ml: 0.25, letterSpacing: 0.2 }}
+        >
+          {label}
+        </Typography>
+      </Box>
+    </Box>
+  );
 
   // Close picker when custom panel is hidden
   useEffect(() => { if (!showCustom) setOpenPicker(null); }, [showCustom]);
@@ -110,55 +157,10 @@ export default function ColorThemePicker({ value, onChange, onExtractFromImage }
 
       {/* Preset grid — 3 columns × 2 rows */}
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, mt: 1 }}>
-        {THEME_PRESETS.map((preset) => {
-          const selected = value.name === preset.name;
-          return (
-            <Box
-              key={preset.name}
-              onClick={() => { onChange(preset); setShowCustom(false); }}
-              sx={{
-                cursor: 'pointer',
-                borderRadius: 2,
-                border: `2px solid ${selected ? preset.primary : 'rgba(255,255,255,0.08)'}`,
-                overflow: 'hidden',
-                transition: 'all 0.18s',
-                boxShadow: selected ? `0 0 0 1px ${preset.primary}55, 0 4px 16px ${preset.primary}30` : 'none',
-                '&:hover': {
-                  borderColor: preset.primary,
-                  boxShadow: `0 0 0 1px ${preset.primary}44, 0 4px 12px ${preset.primary}22`,
-                },
-              }}
-            >
-              {/* Mini preview: gradient accent strip + background fill */}
-              <Box
-                sx={{
-                  height: 44,
-                  background: `linear-gradient(135deg, ${preset.primary} 0%, ${preset.secondary} 100%)`,
-                  position: 'relative',
-                  display: 'flex',
-                  alignItems: 'flex-end',
-                  px: 1,
-                  pb: 0.5,
-                }}
-              >
-                {selected && (
-                  <CheckIcon sx={{ fontSize: 13, color: '#fff', ml: 'auto', mb: 0.25, filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.5))' }} />
-                )}
-              </Box>
-              {/* Label row on the bg color */}
-              <Box sx={{ bgcolor: preset.background, px: 1, py: 0.75, display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: preset.primary, flexShrink: 0 }} />
-                <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: preset.secondary, flexShrink: 0, opacity: 0.8 }} />
-                <Typography
-                  variant="caption"
-                  sx={{ color: selected ? '#f1f5f9' : '#94a3b8', fontSize: 10, fontWeight: selected ? 700 : 500, ml: 0.25, letterSpacing: 0.2 }}
-                >
-                  {t(`theme.presets.${preset.name}`)}
-                </Typography>
-              </Box>
-            </Box>
-          );
-        })}
+        {isExtracted && renderThemeTile(value, true, value.name, '__extracted')}
+        {THEME_PRESETS.map((preset) => (
+          renderThemeTile(preset, value.name === preset.name, t(`theme.presets.${preset.name}`), preset.name)
+        ))}
       </Box>
 
       {/* Logo upload zone — primary affordance */}
@@ -310,7 +312,7 @@ export default function ColorThemePicker({ value, onChange, onExtractFromImage }
       )}
 
       {/* Badge for non-preset themes */}
-      {!isPreset && (
+      {!isPreset && !isExtracted && (
         <Stack direction="row" gap={0.75} mt={0.75} alignItems="center">
           <Box sx={{ width: 8, height: 8, borderRadius: 0.4, bgcolor: value.background, border: '1px solid rgba(255,255,255,0.2)' }} />
           <Box sx={{ width: 8, height: 8, borderRadius: 0.4, bgcolor: value.primary }} />

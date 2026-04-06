@@ -17,7 +17,7 @@ export default function UsageBanner() {
   const { user } = useAuthStore();
   const { messages, phase, plan } = useProjectStore();
 
-  if (!user || user.freeProjectUsed || phase !== 'planning' || messages.length === 0) return null;
+  if (!user || user.freeProjectUsed || phase !== 'planning') return null;
 
   const tokensUsed = estimateTokens(messages);
   const pct = Math.min(100, Math.round((tokensUsed / FREE_TOKEN_LIMIT) * 100));

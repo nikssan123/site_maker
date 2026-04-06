@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../index';
 import { autoFix } from '../services/fixerService';
 import { runProject } from '../services/appRunner';
+import { deriveAdminToken } from '../lib/adminToken';
 
 const router = Router();
 
@@ -26,6 +27,29 @@ router.get('/resolve-domain', async (req, res) => {
 
   if (!project) return res.status(404).json({ error: 'not found' });
   return res.json({ projectId: project.id });
+});
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Derived admin token for app-runner (catalog PUT/DELETE gate). Docker-internal only.
+ */
+router.get('/admin-token/:projectId', async (req, res) => {
+  const projectId = String(req.params.projectId ?? '');
+  if (!UUID_RE.test(projectId)) return res.status(400).json({ error: 'invalid project id' });
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { id: true },
+  });
+  if (!project) return res.status(404).json({ error: 'not found' });
+
+  try {
+    const token = deriveAdminToken(projectId);
+    return res.json({ token });
+  } catch {
+    return res.status(500).json({ error: 'token derivation failed' });
+  }
 });
 
 /**

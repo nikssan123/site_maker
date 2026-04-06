@@ -128,7 +128,11 @@
     "downloadFailed": "Изтеглянето неуспа",
     "refresh": "Опресни",
     "showImprovements": "Отвори подобренията",
-    "hideImprovements": "Скрий подобренията"
+    "hideImprovements": "Скрий подобренията",
+    "improvementsHint": "Опиши какво да промениш и ще го приложа веднага.",
+    "changesApplied": "Промените са приложени успешно.",
+    "historyLabel": "История на подобренията ({{n}})",
+    "historyUntitled": "Подобрение"
   },
   "iteration": {
     "freeRemaining": "Остават {{n}} от {{total}} безплатни подобрения",
@@ -140,10 +144,14 @@
     "noCreditsPlaceholder": "Няма оставащи подобрения — купете още, за да продължите",
     "submit": "Приложи промяната",
     "apply": "Приложи",
-    "buySingle": "€1 — 1 подобрение",
-    "buyPack": "€100 — 100 подобрения",
+    "buyCredits": "Купи подобрения",
     "buyPackBadge": "Най-добра стойност",
-    "buyTooltip": "Купете подобрения, за да продължите",
+    "buyDialogTitle": "Купи подобрения",
+    "buyDialogQty": "Брой подобрения",
+    "buyDialogOne": "1 подобрение",
+    "buyDialogMany": "{{n}} подобрения",
+    "buyDialogPackHint": "Избери 20 за {{price}} — най-добра стойност",
+    "buyDialogConfirm": "Купи за {{price}}",
     "barLabel": "Подобрения"
   },
   "previewFrame": {
@@ -356,6 +364,28 @@
     "uploadImage": "Качи изображение от компютъра",
     "uploading": "Качване…",
     "fileTooLarge": "Файлът е твърде голям. Максималният размер е 7 MB."
+  },
+  "bookingSlots": {
+    "label": "Заети часове",
+    "tooltip": "Виж и маркирай заети (недостъпни) часове"
+  },
+  "blog": {
+    "label": "Блог",
+    "tooltip": "Управление на публикации",
+    "addPost": "Добави публикация",
+    "addFirst": "Добави първата публикация",
+    "editPost": "Редактирай публикация",
+    "empty": "Все още няма публикации.",
+    "confirmDelete": "Изтриване на публикация"
+  },
+  "dashboard": {
+    "label": "Данни",
+    "tooltip": "Преглед на данните",
+    "refresh": "Опресни",
+    "noData": "Няма данни",
+    "records": "записа",
+    "models": "таблици",
+    "moreRows": "още реда"
   },
   "editMode": {
     "label": "Редактиране",

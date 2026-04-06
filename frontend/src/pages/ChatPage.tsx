@@ -89,6 +89,8 @@ export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [colorTheme, setColorTheme] = useState<ColorTheme>(THEME_PRESETS[0]); // Indigo default
   const [planVisible, setPlanVisible] = useState(false);
+  /** When a plan is present, hide chat until user explicitly clicks Edit. */
+  const [chatUnlockedForEditing, setChatUnlockedForEditing] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   /** True while this tab started generation via Build (skip watch+resume duplicate). */
@@ -177,7 +179,15 @@ export default function ChatPage() {
     store.setSessionId(paramSessionId);
 
     api.get<any>(`/sessions/${paramSessionId}`)
-      .then((session) => { applySessionFromApi(session); if (session.plan) setPlanVisible(true); })
+      .then((session) => {
+        applySessionFromApi(session);
+        if (session.plan) {
+          setPlanVisible(true);
+          setChatUnlockedForEditing(false);
+        } else {
+          setChatUnlockedForEditing(true);
+        }
+      })
       .catch(() => {});
   }, [paramSessionId]);
 
@@ -247,7 +257,10 @@ export default function ChatPage() {
 
       store.addMessage({ role: 'assistant', content: res.message });
       if (res.plan) { store.setPlan(res.plan); }
-      if (res.plan || store.plan) { setPlanVisible(true); }
+      if (res.plan || store.plan) {
+        setPlanVisible(true);
+        setChatUnlockedForEditing(false);
+      }
 
       // Navigate last so Zustand already has messages + plan before any route-driven effects run.
       if (wasNewSession) {
@@ -317,6 +330,11 @@ export default function ChatPage() {
   const isFreeProject = !user?.freeProjectUsed;
   const atChatLimit = isFreeProject && estimateTokens(store.messages) >= FREE_TOKEN_LIMIT;
   const isEmpty = store.messages.length === 0;
+  const planBlockingChat =
+    planVisible &&
+    Boolean(store.plan) &&
+    store.phase !== 'running' &&
+    !chatUnlockedForEditing;
 
   const handleNewProject = () => {
     store.reset();
@@ -461,18 +479,23 @@ export default function ChatPage() {
         )}
 
         {store.messages.map((m, i) => (
-          <MessageBubble key={i} role={m.role} content={m.content} />
+          !planBlockingChat ? <MessageBubble key={i} role={m.role} content={m.content} /> : null
         ))}
 
         {store.streamBuffer && (
-          <MessageBubble role="assistant" content={store.streamBuffer} />
+          !planBlockingChat ? <MessageBubble role="assistant" content={store.streamBuffer} /> : null
         )}
 
         {planVisible && store.plan && store.phase !== 'running' && (
           <PlanSummary
             plan={store.plan}
             onConfirm={handleBuildIt}
-            onEdit={() => { setPlanVisible(false); inputRef.current?.focus(); }}
+            onEdit={() => {
+              setChatUnlockedForEditing(true);
+              setPlanVisible(false);
+              // Keep focus behavior for quick edits
+              inputRef.current?.focus();
+            }}
             loading={store.isStreaming || paymentLoading}
             ctaLabel={isFreeProject ? t('plan.buildFree') : t('plan.buildPaid')}
             colorTheme={colorTheme}
@@ -573,6 +596,7 @@ export default function ChatPage() {
             </Button>
           </Box>
         ) : (
+          !planBlockingChat ? (
           <>
             <Box
               sx={{
@@ -644,6 +668,7 @@ export default function ChatPage() {
               {t('chat.sendHint')}
             </Typography>
           </>
+          ) : null
         )}
       </Box>
 

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/requireAuth';
 import { prisma } from '../index';
+import { isHostingActive } from '../lib/hostingActive';
 
 const router = Router();
 
@@ -12,7 +13,17 @@ router.get('/:sessionId', requireAuth, async (req, res, next) => {
       include: {
         messages: { orderBy: { createdAt: 'asc' } },
         plan: true,
-        project: { select: { id: true, status: true, runPort: true, paid: true, hosted: true } },
+        project: {
+          select: {
+            id: true,
+            status: true,
+            runPort: true,
+            paid: true,
+            hosted: true,
+            hostingFreeUntil: true,
+            hostingSubscriptionId: true,
+          },
+        },
       },
     });
 
@@ -26,7 +37,12 @@ router.get('/:sessionId', requireAuth, async (req, res, next) => {
       plan: session.plan
         ? { id: session.plan.id, data: session.plan.data, locked: session.plan.locked }
         : null,
-      project: session.project ?? null,
+      project: session.project
+        ? {
+            ...session.project,
+            hosted: isHostingActive(session.project),
+          }
+        : null,
     });
   } catch (err) {
     return next(err);
@@ -40,7 +56,17 @@ router.get('/', requireAuth, async (req, res, next) => {
       orderBy: { createdAt: 'desc' },
       include: {
         plan: true,
-        project: { select: { id: true, status: true, runPort: true, paid: true, hosted: true } },
+        project: {
+          select: {
+            id: true,
+            status: true,
+            runPort: true,
+            paid: true,
+            hosted: true,
+            hostingFreeUntil: true,
+            hostingSubscriptionId: true,
+          },
+        },
         messages: {
           where: { role: 'user' },
           orderBy: { createdAt: 'asc' },
@@ -68,7 +94,7 @@ router.get('/', requireAuth, async (req, res, next) => {
             status: s.project.status,
             runPort: s.project.runPort,
             paid: s.project.paid,
-            hosted: s.project.hosted,
+            hosted: isHostingActive(s.project),
           }
         : null,
     }));

@@ -6,9 +6,10 @@ import { buildProject, runProject, RunnerResult } from './appRunner';
 import { prisma } from '../index';
 
 const MAX_ATTEMPTS = parseInt(process.env.MAX_FIX_ATTEMPTS ?? '3', 10);
-const FIX_MAX_OUTPUT_TOKENS = parseInt(process.env.FIX_MAX_OUTPUT_TOKENS ?? '2048', 10);
-const FIX_ERROR_LOG_MAX = 3000;   // chars of error log sent to Claude
-const FIX_FILE_CONTENT_MAX = 6000; // chars per file sent as context
+const FIX_MAX_OUTPUT_TOKENS_BUILD = parseInt(process.env.FIX_MAX_OUTPUT_TOKENS ?? '2048', 10);
+const FIX_MAX_OUTPUT_TOKENS_RUN = parseInt(process.env.FIX_MAX_OUTPUT_TOKENS_RUN ?? '8192', 10);
+const FIX_ERROR_LOG_MAX = 3000;
+const FIX_FILE_CONTENT_MAX = 6000;
 
 export interface FixContext {
   projectId: string;
@@ -53,11 +54,11 @@ export async function autoFix(ctx: FixContext): Promise<RunnerResult> {
       ? ctx.errorLog.slice(0, FIX_ERROR_LOG_MAX) + '\n… truncated'
       : ctx.errorLog;
 
-    const prompt = buildFixPrompt(truncatedLog, truncatedFiles);
+    const prompt = buildFixPrompt(truncatedLog, truncatedFiles, ctx.failedStep);
     const raw = await ai.complete(
       [{ role: 'user', content: prompt }],
       FIX_SYSTEM,
-      { maxTokens: FIX_MAX_OUTPUT_TOKENS },
+      { maxTokens: ctx.failedStep === 'run' ? FIX_MAX_OUTPUT_TOKENS_RUN : FIX_MAX_OUTPUT_TOKENS_BUILD },
     );
 
     let fixedFiles = extractFilesFromCodegenResponse(raw);

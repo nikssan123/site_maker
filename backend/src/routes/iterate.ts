@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth';
 import { runIteration } from '../services/iteratorService';
+import { clarifyIteration } from '../services/iterateClarifyService';
 import { prisma } from '../index';
 import { AppError } from '../middleware/errorHandler';
 
@@ -9,10 +10,28 @@ export const FREE_ITERATION_LIMIT = 2;
 
 const router = Router();
 
+router.post('/clarify', requireAuth, async (req, res, next) => {
+  try {
+    const { sessionId, messages } = z.object({
+      sessionId: z.string(),
+      messages: z.array(z.object({
+        role: z.enum(['user', 'assistant']),
+        content: z.string(),
+      })).min(1),
+    }).parse(req.body);
+
+    const userId = req.user.userId;
+    const result = await clarifyIteration(sessionId, userId, messages);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post('/', requireAuth, async (req, res, next) => {
   try {
-    const { sessionId, message } = z
-      .object({ sessionId: z.string(), message: z.string().min(1) })
+    const { sessionId, message, spec } = z
+      .object({ sessionId: z.string(), message: z.string().min(1), spec: z.string().min(1).optional() })
       .parse(req.body);
 
     const userId = req.user.userId;
@@ -42,12 +61,12 @@ router.post('/', requireAuth, async (req, res, next) => {
     }
 
     // Credit deduction happens synchronously before the fire-and-forget launch
-    await prisma.iterationLog.create({
-      data: { projectId: project.id, userId },
+    const log = await prisma.iterationLog.create({
+      data: { projectId: project.id, userId, title: message.slice(0, 120) },
     });
 
     // Fire and forget — pipeline runs to completion regardless of client connection
-    runIteration(sessionId, userId, message).catch((err) => {
+    runIteration(sessionId, userId, message, { spec, logId: log.id }).catch((err) => {
       console.error('[iterate] unhandled pipeline error', err);
     });
 

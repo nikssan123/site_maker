@@ -151,7 +151,15 @@ export default function Sidebar({ onNewProject }: Props) {
                 <IconButton
                   size="small"
                   onClick={(e) => { e.stopPropagation(); navigate(`/preview/${s.project!.id}`); }}
-                  sx={{ opacity: 0, '.MuiBox-root:hover &': { opacity: 1 }, p: 0.25, color: 'text.disabled', '&:hover': { color: 'text.primary' } }}
+                  sx={{
+                    opacity: 0,
+                    pointerEvents: 'none',
+                    // Only make it clickable when the row is hovered; avoids accidental clicks on invisible icon.
+                    '.MuiBox-root:hover &': { opacity: 1, pointerEvents: 'auto' },
+                    p: 0.25,
+                    color: 'text.disabled',
+                    '&:hover': { color: 'text.primary' },
+                  }}
                 >
                   <OpenInNewIcon sx={{ fontSize: 12 }} />
                 </IconButton>

@@ -83,7 +83,8 @@ booking:
   Hero (gradient bg, headline, subtitle, large "Book an Appointment" Button) →
   Services section: Grid of service Cards (icon, name, duration, price, "Book" Button) →
   Booking form page (/book): Stepper with steps [Select Service → Pick Date & Time → Your Details → Confirm] →
-  Confirmation page (/confirmation): success icon, booking reference, summary
+  Confirmation page (/confirmation): success icon, booking reference, summary →
+  Calendar section (/calendar): show taken (unavailable) slots in a clean calendar view, and allow users to mark a slot as taken (block time). The booking flow MUST respect taken slots (prevent selecting unavailable times).
 
 dashboard:
   Permanent Drawer sidebar (logo top, nav items with icons, user info bottom) →
@@ -193,27 +194,69 @@ FRONTEND (always):
 - Use @mui/icons-material for all icons
 - React state for UI (useState, useEffect); no Redux or Zustand
 - If hasDatabase: API calls MUST use fetch(import.meta.env.BASE_URL + 'api/products') — NEVER fetch('/api/products') with a leading slash (that bypasses the preview proxy). Define const API = import.meta.env.BASE_URL.replace(/\/$/, '') at the top of each file that calls the backend, then call fetch(API + '/api/products'). Show Skeleton during loading, Alert on error.
+- The "/" route MUST render meaningful content immediately (no blank/empty dark screen). The landing view should include real UI and, when hasDatabase is true, it should trigger the initial data fetch on first load (useEffect on mount) instead of only after the user clicks a navigation link.
+- If hasDatabase: ALL dynamic/business data shown in the UI (products, services, bookings, listings, prices, descriptions, etc.) MUST be fetched from the backend via server.js REST endpoints. The frontend MUST NOT contain hardcoded arrays/objects of domain data (no "const products = [...]", no inline lists of items, no JSON files with seed rows rendered by the UI). The only acceptable hardcoded frontend data is UI-only (labels, navigation structure, enums for filters, etc.).
+- If hasDatabase: Any “seed/demo data” MUST live in the SQLite database seeded by server.js on startup. The UI must read it via HTTP (GET /api/:model) and update it via POST/PUT/DELETE. Never duplicate the same records in frontend code as literals.
+- Routing/Base-path correctness (critical for preview under /preview-app/<id>/):
+  - NEVER use window.location.pathname / location.href / hard-coded path strings to decide what page you're on or when to load data.
+  - Use React Router hooks (useLocation, useParams, useMatch) to determine the active route.
+  - Any "load on homepage" logic must work regardless of BASE_URL being "/" or "/preview-app/<id>/". Do not gate fetches on pathname === "/".
 
 BACKEND (only when hasDatabase is true):
 - server.js at project root, CommonJS (require())
 - express + cors + sql.js (NOT better-sqlite3 — sql.js is pure WebAssembly, no native build needed)
-  const initSqlJs = require('sql.js');
-  const DB_PATH = process.env.DB_PATH || './data.sqlite';
-  const fs = require('fs');
-  // Load or create DB:
-  let db;
-  initSqlJs().then(SQL => {
-    db = fs.existsSync(DB_PATH) ? new SQL.Database(fs.readFileSync(DB_PATH)) : new SQL.Database();
-    // run migrations + seed here, then start server
-    startServer();
-  });
-  // Persist after writes: fs.writeFileSync(DB_PATH, Buffer.from(db.export()));
-- CREATE TABLE IF NOT EXISTS for each model
-- Seed 5-8 realistic rows (real names, proper dates using Date.now() arithmetic, sensible values)
+- Follow this EXACT server.js skeleton (adapt table names / endpoints, keep the structure):
+
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
+const initSqlJs = require('sql.js');
+
+const PORT = process.env.PORT || 3000;
+const DB_PATH = process.env.DB_PATH || './data.sqlite';
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+function persist(db) { fs.writeFileSync(DB_PATH, Buffer.from(db.export())); }
+
+async function main() {
+  const SQL = await initSqlJs();
+  const db = fs.existsSync(DB_PATH)
+    ? new SQL.Database(fs.readFileSync(DB_PATH))
+    : new SQL.Database();
+
+  // CREATE TABLE IF NOT EXISTS …
+  // INSERT seed rows only when table is empty: if (db.exec("SELECT COUNT(*) FROM t")[0].values[0][0] === 0) { … }
+
+  // REST endpoints — wrap every handler in try/catch:
+  // app.get('/api/items', (req, res) => { try { … res.json(rows); } catch(e) { res.status(500).json({error:e.message}); } });
+  // After every INSERT/UPDATE/DELETE call persist(db);
+
+  // Serve frontend
+  app.use(express.static(path.join(__dirname, 'dist')));
+  app.get('*', (_req, res) => res.sendFile(path.join(__dirname, 'dist', 'index.html')));
+
+  app.listen(PORT, () => console.log('Server running on port ' + PORT));
+}
+main().catch(err => { console.error('Fatal:', err); process.exit(1); });
+
+KEY RULES FOR server.js ROBUSTNESS:
+- Top-level async main() with .catch() — if anything fails, log it and exit cleanly
+- Every route handler wrapped in try/catch — NEVER let an unhandled throw crash the process
+- Always call persist(db) after writes
+- Use path.join(__dirname, 'dist') for static serving — NEVER relative paths like './dist'
+- Seed data ONLY when the table is empty (check COUNT(*) first) — prevents duplicate rows on restart
+- If hasDatabase: The frontend must never be “static-only”. It must call the REST API on mount for every screen that displays DB entities, and must not require a user click/navigation to start loading data.
+- NO process.on('uncaughtException') — let the process manager handle restarts
+- NO setTimeout/setInterval — the server should be stateless between requests
+- All SQL parameters via prepared statements: db.run("INSERT INTO t VALUES (?,?)", [a, b]) — NEVER string concatenation
+- If a table has an "id" column, use INTEGER PRIMARY KEY AUTOINCREMENT
 - REST endpoints: GET /api/:model, POST /api/:model, GET/PUT/DELETE /api/:model/:id
 - PUT endpoint must UPDATE all fields; DELETE must remove the row
-- Serve frontend: app.use(express.static('dist')); app.get('*', (req,res) => res.sendFile('dist/index.html'))
-- PORT = process.env.PORT || 3000; app.listen(PORT) inside startServer()
+- Serve frontend: app.use(express.static(path.join(__dirname, 'dist'))); app.get('*', …)
+- PORT = process.env.PORT || 3000
 
 package.json:
 - Always include: react, react-dom, react-router-dom, @mui/material, @mui/icons-material, @emotion/react, @emotion/styled, @types/react, @types/react-dom, typescript, vite, @vitejs/plugin-react
@@ -231,6 +274,18 @@ PAYMENTS (only when paymentsEnabled is true):
 
 File count: aim for 10-18 files total. Split into logical components (e.g. src/components/BookingForm.tsx, src/pages/Admin.tsx).
 
+═══ ROBUSTNESS RULES (violations cause runtime crashes) ═══
+✓ Every fetch() in the frontend MUST have .catch() or be inside try/catch
+✓ Every route handler in server.js MUST be wrapped in try { … } catch(e) { res.status(500).json({error:e.message}); }
+✓ server.js MUST use async main() pattern — NEVER put app.listen() at top level before DB is ready
+✓ All imports must be real packages from package.json — NEVER import a module that isn't listed as a dependency
+✓ NEVER use require('better-sqlite3') — always use sql.js (pure WASM, no native bindings)
+✓ NEVER use import/export in server.js — it MUST be CommonJS (require/module.exports)
+✓ NEVER use optional chaining (?.) in server.js — not all Node versions support it in CommonJS; use explicit null checks
+✓ package.json "scripts" must have ONLY "build": "vite build" — no "start" script, no "dev" script
+✓ Test every SQL statement mentally: column names must match CREATE TABLE, VALUES count must match columns
+✓ server.js must start and respond to HTTP within 10 seconds — no long-running init, no large file downloads
+
 ═══ ANTI-PATTERNS — NEVER DO THESE ═══
 ✗ Admin, owner, or management panels of any kind — this is a customer-facing app only
 ✗ Status management buttons (confirm booking, change order status, delete record)
@@ -243,6 +298,10 @@ File count: aim for 10-18 files total. Split into logical components (e.g. src/c
 ✗ Hardcoded URLs or ports in frontend code
 ✗ Missing loading/error states for any async data fetch
 ✗ Flat, plain layouts with no visual hierarchy or spacing
+✗ better-sqlite3 or any native Node addon — use sql.js instead
+✗ ES module syntax (import/export) in server.js — use require()
+✗ Top-level await in server.js — use async main() wrapper
+✗ String concatenation in SQL — use parameterized queries
 
 ═══ OUTPUT CONTRACT (violations break the build pipeline) ═══
 - ENTIRE response: ONE JSON object, nothing else
@@ -278,6 +337,26 @@ export const FIX_SYSTEM = `You are an expert React/TypeScript and Node.js debugg
 You will receive build or runtime error logs and the relevant source files.
 Your job is to fix ONLY the broken files.
 
+COMMON server.js CRASH PATTERNS you must look for:
+1. Missing module — check require() lines against package.json dependencies. If a module is missing, either add it to package.json OR replace with an available alternative.
+2. better-sqlite3 — this MUST be replaced with sql.js (pure WASM). Rewrite the entire DB layer using: const initSqlJs = require('sql.js'); async main() pattern.
+3. ES module syntax (import/export) in server.js — rewrite as CommonJS (require/module.exports).
+4. Optional chaining (?.) in CommonJS — replace with explicit null checks.
+5. Top-level await — wrap in async main().catch(…).
+6. SQL errors (column mismatch, missing table) — fix CREATE TABLE and INSERT to have matching columns/values.
+7. Unhandled promise rejection — add .catch() or try/catch.
+8. Port already in use — use process.env.PORT || 3000 (never hardcode).
+9. path.join missing — add const path = require('path'); use path.join(__dirname, 'dist').
+10. Uncaught throw in route handler — wrap every route handler body in try { … } catch(e) { res.status(500).json({error:e.message}); }
+
+When fixing server.js, always return the COMPLETE file (not a partial patch).
+The fixed server.js MUST:
+- Use async main() with .catch() at bottom
+- Wrap every route handler in try/catch
+- Use sql.js (never better-sqlite3)
+- Use CommonJS require()
+- Call persist(db) after writes
+
 Return ONLY a JSON object with only the files that need to change:
 
 {
@@ -303,9 +382,31 @@ Apply the requested change while preserving the existing design quality:
 - Use the same component patterns already in the codebase
 - ALL user-visible strings (labels, messages, placeholders, any new seed data) MUST be in Bulgarian
 
-Return ONLY a single JSON object (no markdown, no fences, no commentary). First character "{", last "}".
+Return ONLY a single JSON object (no markdown, no code fences, no commentary before or after). First character "{", last "}".
 Shape: {"files":{"path":"full new file contents as one JSON string per path"}}
+File bodies MUST be valid JSON strings: escape newlines as \\n, quotes as \\", backslashes as \\\\ — raw line breaks inside a string value break parsing.
 Only include files that changed or are new. Do not regenerate unchanged files.${BG_LANGUAGE_BLOCK}`;
+
+function inferFieldType(field: string): string {
+  const f = field.toLowerCase();
+  if (/url|image|img|photo|pic|avatar|thumbnail|cover|banner|logo|picture|poster/.test(f)) return 'image';
+  if (/price|cost|amount|rating|count|stock|qty|quantity|seats|year|mileage|duration|age|weight/.test(f)) return 'number';
+  if (/date|createdat|updatedat|birthday|scheduledat/.test(f)) return 'date';
+  if (/description|content|notes|bio|body|details|summary|message|text/.test(f)) return 'textarea';
+  if (/link|href|website|profile/.test(f)) return 'url';
+  return 'text';
+}
+
+function buildAdminConfig(appType: string, models: Array<{ name: string; fields: string[] }>): string {
+  const config = {
+    appType,
+    models: models.map((m) => ({
+      name: m.name,
+      fields: m.fields.filter((f) => f.toLowerCase() !== 'id').map((f) => ({ name: f, type: inferFieldType(f) })),
+    })),
+  };
+  return JSON.stringify(config);
+}
 
 export function buildCodeGenPrompt(plan: Record<string, unknown>): string {
   const hasDatabase = plan.hasDatabase === true;
@@ -331,14 +432,31 @@ Wrap app in <ThemeProvider theme={theme}><CssBaseline /> in src/main.tsx.`;
     for (const model of dataModels) {
       prompt += `- ${model.name}: [${model.fields.join(', ')}]\n`;
     }
+    if (appType === 'booking' && !dataModels.some((m) => String(m.name).toLowerCase().includes('slot'))) {
+      prompt += `- takenSlots: [date, time, note]\n`;
+      prompt += `\nBooking-specific requirement: persist taken (unavailable) time slots and expose them via the backend API so the calendar and booking form can read/write them.`;
+    }
     prompt += `
-server.js requirements:
-- CommonJS, express + cors + sql.js (pure WASM, no native bindings — NOT better-sqlite3)
+server.js requirements (MUST follow the exact skeleton from the system prompt):
+- CommonJS (require/module.exports) — NEVER import/export
+- express + cors + sql.js (pure WASM — NEVER better-sqlite3)
+- async main() at top level, main().catch(err => { console.error('Fatal:', err); process.exit(1); }) at bottom
+- Every route handler wrapped in try/catch returning 500 on error
+- persist(db) called after every INSERT/UPDATE/DELETE
+- Seed data ONLY when table is empty (check COUNT(*) first)
+- path.join(__dirname, 'dist') for static serving — never relative './dist'
 - CREATE TABLE IF NOT EXISTS for every model above
-- Seed 5-8 rows per table with REALISTIC data (proper names, sensible prices, real-looking dates)
+- Seed 5-8 rows per table with REALISTIC data (proper Bulgarian names, sensible prices, real-looking dates)
 - Full REST: GET /api/:model, POST /api/:model, GET/PUT/DELETE /api/:model/:id
 - PUT must update all fields; DELETE must remove the row
-- Serve dist/ as static + SPA fallback`;
+- Serve dist/ as static + SPA fallback
+- NO optional chaining (?.) — use explicit null checks
+- REQUIRED: inside main(), before app.listen(), call fs.writeFileSync(require('path').join(__dirname, '__admin_config.json'), JSON.stringify(${buildAdminConfig(appType, dataModels)}));`;
+
+  } else if (hasDatabase && appType === 'booking') {
+    // Booking apps need taken-slots persistence even if the model forgot to include it.
+    prompt += `\n\nBOOKING DATABASE REQUIREMENT:\n- Add a model/table for taken slots (e.g. takenSlots with fields [date, time, note]) and expose CRUD endpoints for it in server.js using the same REST pattern. The calendar and booking form must use it to prevent unavailable selections.`;
+    prompt += `\n- REQUIRED: inside main(), before app.listen(), call fs.writeFileSync(require('path').join(__dirname, '__admin_config.json'), JSON.stringify(${buildAdminConfig(appType, [{ name: 'takenSlots', fields: ['date', 'time', 'note'] }])}));`;
   }
 
   if (paymentsEnabled) {
@@ -351,11 +469,16 @@ server.js requirements:
   return prompt;
 }
 
-export function buildFixPrompt(errorLog: string, files: Record<string, string>): string {
+export function buildFixPrompt(errorLog: string, files: Record<string, string>, failedStep?: 'build' | 'run'): string {
   const fileList = Object.entries(files)
     .map(([p, content]) => `// ${p}\n${content}`)
     .join('\n\n---\n\n');
-  return `Build/runtime error:\n\`\`\`\n${errorLog}\n\`\`\`\n\nCurrent source files:\n\n${fileList}`;
+  const stepHint = failedStep === 'run'
+    ? `\n\nThis is a RUNTIME crash (server.js failed to start or crashed after starting). The fix must produce a fully working server.js that starts and responds to HTTP requests within 10 seconds. Return the COMPLETE server.js file, not a diff.`
+    : failedStep === 'build'
+      ? `\n\nThis is a BUILD error (vite build failed). Fix the TypeScript/import errors in the affected source files.`
+      : '';
+  return `Build/runtime error:\n\`\`\`\n${errorLog}\n\`\`\`${stepHint}\n\nCurrent source files:\n\n${fileList}`;
 }
 
 export function buildIteratorPrompt(

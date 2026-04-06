@@ -11,7 +11,9 @@ import { allowUnpaidProjectDownload } from '../lib/devFlags';
 import { ensureRunning, startPersistentHosting, stopProject, buildProject, runProject } from '../services/appRunner';
 import { encrypt, decrypt } from '../lib/encryption';
 import { projectPath } from '../lib/fileWriter';
+import { deriveAdminToken, writeAdminTokenFile } from '../lib/adminToken';
 import { FREE_ITERATION_LIMIT } from './iterate';
+import { isHostingActive } from '../lib/hostingActive';
 
 const EDIT_TOKEN_TTL_MS = 3_600_000; // 1 hour
 
@@ -69,32 +71,63 @@ import {
   verifyCnamePointsToProject,
 } from '../lib/customDomainHosting';
 
-/**
- * Parse a project's server.js for Express GET routes that look like list endpoints.
- * Matches: app.get('/api/cars', ...) or router.get("/api/items", ...)
- * Returns unique model names, e.g. ['cars', 'items'].
- */
-function detectApiModels(projectId: string): string[] {
-  const serverFile = path.join(projectPath(projectId), 'server.js');
-  if (!fs.existsSync(serverFile)) return [];
+interface AdminField { name: string; type: string; }
+interface AdminModel { name: string; fields: AdminField[] | null; }
+interface AdminConfig { appType: string | null; models: AdminModel[]; }
 
+function inferFieldType(field: string): string {
+  const f = field.toLowerCase();
+  if (/url|image|img|photo|pic|avatar|thumbnail|cover|banner|logo|picture|poster/.test(f)) return 'image';
+  if (/price|cost|amount|rating|count|stock|qty|quantity|seats|year|mileage|duration|age|weight/.test(f)) return 'number';
+  if (/date|createdat|updatedat|birthday|scheduledat/.test(f)) return 'date';
+  if (/description|content|notes|bio|body|details|summary|message|text/.test(f)) return 'textarea';
+  if (/link|href|website|profile/.test(f)) return 'url';
+  return 'text';
+}
+
+/** Read __admin_config.json if present, otherwise fall back to regex-parsing server.js. */
+function getAdminConfig(projectId: string): AdminConfig {
+  const dir = projectPath(projectId);
+
+  // Prefer the structured config written by the generator
+  const configFile = path.join(dir, '__admin_config.json');
+  if (fs.existsSync(configFile)) {
+    try {
+      const raw = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+      return {
+        appType: typeof raw.appType === 'string' ? raw.appType : null,
+        models: Array.isArray(raw.models) ? raw.models : [],
+      };
+    } catch { /* fall through */ }
+  }
+
+  // Legacy fallback: parse server.js for GET /api/<model> routes
+  const serverFile = path.join(dir, 'server.js');
+  if (!fs.existsSync(serverFile)) return { appType: null, models: [] };
   const content = fs.readFileSync(serverFile, 'utf8');
-  // Match GET /api/<model> where <model> has no '/' or ':' (list endpoints only, not /:id detail routes)
   const regex = /(?:app|router)\.get\s*\(\s*['"`]\/api\/([a-zA-Z][a-zA-Z0-9_-]*)['"`]/g;
-  const models: string[] = [];
+  const names: string[] = [];
   let m: RegExpExecArray | null;
   while ((m = regex.exec(content)) !== null) {
-    if (!models.includes(m[1])) models.push(m[1]);
+    if (!names.includes(m[1])) names.push(m[1]);
   }
-  return models;
+  return { appType: null, models: names.map((name) => ({ name, fields: null })) };
 }
 
 function applyContentPatch(projectId: string, original: string, replacement: string): void {
   const projectDir = projectPath(projectId);
   const files = walkSourceFiles(projectDir);
 
+  // Never patch server.js via edit mode (too easy to break runtime JS strings).
+  // If the requested "original" exists only there, we fail with a clear message.
+  const serverFile = path.join(projectDir, 'server.js');
+  const serverContent = fs.existsSync(serverFile) ? fs.readFileSync(serverFile, 'utf8') : null;
+  const serverHasOriginal = Boolean(serverContent && serverContent.includes(original));
+
+  const patchableFiles = files.filter((f) => path.basename(f).toLowerCase() !== 'server.js');
+
   // Pass 1 — exact match
-  for (const file of files) {
+  for (const file of patchableFiles) {
     const content = fs.readFileSync(file, 'utf8');
     if (content.includes(original)) {
       fs.writeFileSync(file, content.replace(original, replacement), 'utf8');
@@ -107,7 +140,7 @@ function applyContentPatch(projectId: string, original: string, replacement: str
   if (norm.length > 0) {
     const escaped = norm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const flexRegex = new RegExp(escaped.replace(/ /g, '\\s+'));
-    for (const file of files) {
+    for (const file of patchableFiles) {
       const content = fs.readFileSync(file, 'utf8');
       const m = flexRegex.exec(content);
       if (m) {
@@ -115,6 +148,14 @@ function applyContentPatch(projectId: string, original: string, replacement: str
         return;
       }
     }
+  }
+
+  if (serverHasOriginal) {
+    throw new AppError(
+      409,
+      'Този текст се намира само в server.js и не може да бъде редактиран в Edit Mode (за да не се чупи бекендът). ' +
+      'Променете съдържанието през Iteration/чат или преместете данните в отделен JSON/контент файл.',
+    );
   }
 
   throw new AppError(404, 'Original text not found in any source file');
@@ -141,6 +182,62 @@ function customDomainPayload(project: {
   };
 }
 
+function firstPartyRootDomain(): string | null {
+  const raw = (process.env.FIRST_PARTY_ROOT_DOMAIN ?? '').trim().toLowerCase();
+  return raw.length > 0 ? raw : null;
+}
+
+function validateSubdomainSlug(raw: string): { ok: true; slug: string } | { ok: false; error: string } {
+  const slug = raw.trim().toLowerCase();
+  if (!slug) return { ok: false, error: 'Въведете име (поддомейн)' };
+  if (slug.length < 3) return { ok: false, error: 'Името трябва да е поне 3 символа' };
+  if (slug.length > 40) return { ok: false, error: 'Името е твърде дълго' };
+  if (!/^[a-z0-9-]+$/.test(slug)) return { ok: false, error: 'Използвайте само латински букви, цифри и тирета' };
+  if (slug.startsWith('-') || slug.endsWith('-')) return { ok: false, error: 'Името не може да започва/завършва с тире' };
+  return { ok: true, slug };
+}
+
+// First-party subdomain (e.g. mysite.website.com) — hosted projects only
+router.put('/:projectId/subdomain', requireAuth, async (req, res, next) => {
+  try {
+    const root = firstPartyRootDomain();
+    if (!root) throw new AppError(400, 'FIRST_PARTY_ROOT_DOMAIN is not configured on the server');
+
+    const projectId = String(req.params.projectId);
+    const { slug: rawSlug } = z.object({ slug: z.string() }).parse(req.body);
+    const parsed = validateSubdomainSlug(rawSlug);
+    if (!parsed.ok) throw new AppError(400, parsed.error);
+
+    const hostname = `${parsed.slug}.${root}`;
+
+    const project = await prisma.project.findFirstOrThrow({
+      where: { id: projectId, session: { userId: req.user.userId } },
+    });
+    if (!isHostingActive(project) || !project.paid) {
+      throw new AppError(403, 'Subdomains are available for hosted projects');
+    }
+
+    const taken = await prisma.project.findFirst({
+      where: { customDomain: hostname, NOT: { id: project.id } },
+      select: { id: true },
+    });
+    if (taken) throw new AppError(409, 'Това име вече е заето');
+
+    const updated = await prisma.project.update({
+      where: { id: project.id },
+      data: {
+        customDomain: hostname,
+        customDomainVerifiedAt: new Date(), // our own domain — no DNS verification needed
+        domainVerificationToken: null,
+      },
+    });
+
+    return res.json(customDomainPayload(updated));
+  } catch (err) {
+    return next(err);
+  }
+});
+
 // BYO custom domain (hosted projects)
 router.get('/:projectId/custom-domain', requireAuth, async (req, res, next) => {
   try {
@@ -148,7 +245,7 @@ router.get('/:projectId/custom-domain', requireAuth, async (req, res, next) => {
     const project = await prisma.project.findFirstOrThrow({
       where: { id: projectId, session: { userId: req.user.userId } },
     });
-    if (!project.hosted || !project.paid) {
+    if (!isHostingActive(project) || !project.paid) {
       throw new AppError(403, 'Custom domains are available for hosted projects');
     }
     return res.json(customDomainPayload(project));
@@ -167,7 +264,7 @@ router.put('/:projectId/custom-domain', requireAuth, async (req, res, next) => {
     const project = await prisma.project.findFirstOrThrow({
       where: { id: projectId, session: { userId: req.user.userId } },
     });
-    if (!project.hosted || !project.paid) {
+    if (!isHostingActive(project) || !project.paid) {
       throw new AppError(403, 'Custom domains are available for hosted projects');
     }
 
@@ -206,7 +303,7 @@ router.post('/:projectId/custom-domain/verify', requireAuth, async (req, res, ne
     const project = await prisma.project.findFirstOrThrow({
       where: { id: projectId, session: { userId: req.user.userId } },
     });
-    if (!project.hosted || !project.paid) {
+    if (!isHostingActive(project) || !project.paid) {
       throw new AppError(403, 'Custom domains are available for hosted projects');
     }
     if (!project.customDomain || !project.domainVerificationToken) {
@@ -248,7 +345,7 @@ router.delete('/:projectId/custom-domain', requireAuth, async (req, res, next) =
     const project = await prisma.project.findFirstOrThrow({
       where: { id: projectId, session: { userId: req.user.userId } },
     });
-    if (!project.hosted || !project.paid) {
+    if (!isHostingActive(project) || !project.paid) {
       throw new AppError(403, 'Custom domains are available for hosted projects');
     }
 
@@ -313,7 +410,7 @@ router.put('/:projectId/env', requireAuth, async (req, res, next) => {
     });
 
     // For hosted full-stack apps: restart with new env vars immediately
-    if (updated.hosted && updated.runtimeEnv) {
+    if (isHostingActive(updated) && updated.runtimeEnv) {
       const envVars = JSON.parse(decrypt(updated.runtimeEnv)) as Record<string, string>;
       startPersistentHosting(projectId, envVars)
         .then(async (result) => {
@@ -370,7 +467,9 @@ router.get('/:projectId', requireAuth, async (req, res, next) => {
       where: { id: project.sessionId },
       include: { plan: { select: { data: true } } },
     });
-    const planNeedsPayments = (session?.plan?.data as Record<string, unknown> | null)?.paymentsEnabled === true;
+    const planData = (session?.plan?.data as Record<string, unknown> | null) ?? null;
+    const planNeedsPayments = planData?.paymentsEnabled === true;
+    const planAppType = planData && typeof planData.appType === 'string' ? planData.appType : null;
 
     return res.json({
       id: project.id,
@@ -379,7 +478,7 @@ router.get('/:projectId', requireAuth, async (req, res, next) => {
       runPort,
       fixAttempts: project.fixAttempts,
       paid: project.paid,
-      hosted: project.hosted,
+      hosted: isHostingActive(project),
       customDomain: project.customDomain,
       customDomainVerifiedAt: project.customDomainVerifiedAt?.toISOString() ?? null,
       /** Server allows ZIP download without payment (ALLOW_UNPAID_PROJECT_DOWNLOAD=true). */
@@ -389,6 +488,7 @@ router.get('/:projectId', requireAuth, async (req, res, next) => {
       freeIterationLimit: FREE_ITERATION_LIMIT,
       paymentsEnabled: project.paymentsEnabled ?? false,
       planNeedsPayments,
+      planAppType,
     });
   } catch (err) {
     return next(err);
@@ -433,15 +533,34 @@ router.post('/:projectId/upload-image', requireAuth, async (req, res, next) => {
   }
 });
 
-// Detect API model names from the project's server.js (e.g. ['cars', 'products'])
+// Return admin config: appType + typed model fields (from __admin_config.json or regex fallback)
 router.get('/:projectId/catalog-models', requireAuth, async (req, res, next) => {
   try {
     const projectId = String(req.params.projectId);
     await prisma.project.findFirstOrThrow({
       where: { id: projectId, session: { userId: req.user.userId } },
     });
-    const models = detectApiModels(projectId);
-    return res.json({ models });
+    const config = getAdminConfig(projectId);
+    return res.json(config);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// Iteration history for the improvements panel
+router.get('/:projectId/iteration-history', requireAuth, async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId);
+    await prisma.project.findFirstOrThrow({
+      where: { id: projectId, session: { userId: req.user.userId } },
+    });
+    const logs = await prisma.iterationLog.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: { id: true, title: true, description: true, createdAt: true },
+    });
+    return res.json(logs);
   } catch (err) {
     return next(err);
   }
@@ -455,6 +574,19 @@ router.get('/:projectId/edit-token', requireAuth, async (req, res, next) => {
       where: { id: projectId, session: { userId: req.user.userId } },
     });
     return res.json({ token: signEditToken(projectId) });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// Stable admin token for X-Admin-Token on catalog / generated-app API writes (app-runner enforces PUT/DELETE)
+router.get('/:projectId/admin-token', requireAuth, async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId);
+    await prisma.project.findFirstOrThrow({
+      where: { id: projectId, session: { userId: req.user.userId } },
+    });
+    return res.json({ token: deriveAdminToken(projectId) });
   } catch (err) {
     return next(err);
   }
@@ -489,17 +621,38 @@ router.patch('/:projectId/content', requireAuth, async (req, res, next) => {
       try {
         await stopProject(projectId);
         const buildResult = await buildProject(projectId);
-        if (buildResult.success) {
-          const runResult = await runProject(projectId);
-          if (runResult.success) {
-            await prisma.project.update({
-              where: { id: projectId },
-              data: { status: 'running', runPort: runResult.port },
-            });
-          }
+        if (!buildResult.success) {
+          await prisma.project.update({
+            where: { id: projectId },
+            data: { status: 'error', errorLog: buildResult.log?.slice(0, 50_000) ?? 'Build failed' },
+          });
+          return;
         }
+
+        const runResult = await runProject(projectId);
+        if (!runResult.success) {
+          await prisma.project.update({
+            where: { id: projectId },
+            data: { status: 'error', errorLog: runResult.log?.slice(0, 50_000) ?? 'Run failed' },
+          });
+          return;
+        }
+
+        await prisma.project.update({
+          where: { id: projectId },
+          data: { status: 'running', runPort: runResult.port },
+        });
       } catch (e) {
         console.error('[content-patch] rebuild failed for', projectId, e);
+        const msg = e instanceof Error ? e.message : String(e);
+        try {
+          await prisma.project.update({
+            where: { id: projectId },
+            data: { status: 'error', errorLog: msg.slice(0, 50_000) },
+          });
+        } catch {
+          /* ignore */
+        }
       }
     })();
 

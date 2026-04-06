@@ -71,9 +71,11 @@ function shouldRetryForPlanBlock(userMessage: string, response: string): boolean
 
 const FORCE_PLAN_APPENDIX = `
 
-CRITICAL: Your previous reply did not include a valid machine-readable plan block, or it was broken.
-You MUST end this message with the internal \`\`\`plan\`\`\` JSON block exactly as specified in the system instructions.
-Use straight ASCII " quotes only inside JSON. Keep your Bulgarian (or other) friendly text above the fence; put ONLY valid JSON inside \`\`\`plan ... \`\`\`.`;
+КРИТИЧНО: Предишният ти отговор НЕ съдържаше валиден машинно-четим \`\`\`plan\`\`\` блок (или беше счупен).
+ЗАДЪЛЖИТЕЛНО: Завърши това съобщение с вътрешния \`\`\`plan\`\`\` JSON блок точно както е описано в системните инструкции.
+
+ЕЗИК: Всички потребителски видими изречения (над блока) трябва да са на БЪЛГАРСКИ език.
+JSON: Вътре в JSON използвай САМО прави ASCII кавички " (не типографски). Вътре в \`\`\`plan ... \`\`\` постави САМО валиден JSON (без markdown, без обяснения).`;
 
 export async function chat(
   sessionId: string,

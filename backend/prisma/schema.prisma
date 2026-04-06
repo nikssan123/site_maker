@@ -24,11 +24,14 @@ model Session {
   user                 User                @relation(fields: [userId], references: [id])
   status               String              @default("planning") // "planning" | "generating" | "running" | "error"
   generationPurchased  Boolean             @default(false)
+  /// Set when €150 pre-generation checkout completes; consumed when first Project row is created for this session.
+  sitePurchaseExtrasPending Boolean        @default(false)
   createdAt            DateTime            @default(now())
   plan                 Plan?
   project              Project?
   messages             Message[]
   generationEvents     GenerationEvent[]
+  planExecutions       PlanExecution[]
 }
 
 model Message {
@@ -47,6 +50,27 @@ model Plan {
   data      Json
   locked    Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  executions PlanExecution[]
+}
+
+model PlanExecution {
+  id        String   @id @default(uuid())
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id])
+
+  planId   String?
+  plan     Plan?     @relation(fields: [planId], references: [id], onDelete: SetNull)
+  planData Json
+
+  /// Mirrors the generate request decision (free/paid/retry)
+  projectPaid Boolean @default(false)
+  isRetry     Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([planId, createdAt])
 }
 
 model Project {
@@ -61,7 +85,11 @@ model Project {
   status                String         @default("generating") // "generating" | "building" | "running" | "error"
   paid                  Boolean        @default(false)
   hosted                Boolean        @default(false)
+  /// Free hosting window (e.g. 1 month after €150 site purchase) when there is no Stripe subscription yet.
+  hostingFreeUntil      DateTime?
   hostingSubscriptionId String?        @unique
+  /// Idempotency: generation pre-pay bundle (credits + free hosting) applied only once per project row.
+  includesSitePurchaseBundle Boolean @default(false)
   customDomain              String?   @unique // BYO hostname e.g. www.brand.com
   customDomainVerifiedAt    DateTime?
   domainVerificationToken   String?
@@ -77,11 +105,13 @@ model Project {
 }
 
 model IterationLog {
-  id        String   @id @default(uuid())
-  projectId String
-  project   Project  @relation(fields: [projectId], references: [id])
-  userId    String
-  createdAt DateTime @default(now())
+  id          String   @id @default(uuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id])
+  userId      String
+  title       String?
+  description String?
+  createdAt   DateTime @default(now())
 }
 
 model GenerationEvent {

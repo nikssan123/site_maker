@@ -19,6 +19,7 @@ import {
   hasPreviewableFiles,
 } from './runner';
 import { EDIT_OVERLAY_SCRIPT } from './editOverlayScript';
+import { assertAdminApiWriteAllowed, normalizeSubPathToUrlPath } from './adminApiGate';
 
 /**
  * Inject the edit-mode overlay script into an HTML page.
@@ -45,6 +46,16 @@ function sendPageViewBeacon(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ projectId, path, referrer, userAgent, ip }),
   }).catch(() => {}); // fire-and-forget
+}
+
+/** HTML navigations only: not API calls, not static assets, not non-GET. */
+function shouldSendPageViewBeacon(method: string, urlPath: string): boolean {
+  if (String(method).toUpperCase() !== 'GET') return false;
+  const noQuery = urlPath.split('?')[0] ?? '/';
+  const p = noQuery.startsWith('/') ? noQuery : `/${noQuery}`;
+  if (/^\/api(\/|$)/i.test(p)) return false;
+  if (/\.(js|css|map|ico|png|jpg|jpeg|gif|svg|woff2?|ttf|eot|json)$/i.test(p)) return false;
+  return true;
 }
 
 /** In-memory port map is lost on restart; dedupe concurrent auto-starts for the same project. */
@@ -181,10 +192,9 @@ function serveStatic(projectId: string, subPath: string, req: express.Request, r
     return;
   }
 
-  // Analytics beacon for HTML navigations only (not assets)
+  // Analytics beacon for HTML navigations only (not assets / API)
   const reqPath = ('/' + subPath).replace(/\/+/g, '/');
-  const isAsset = /\.(js|css|map|ico|png|jpg|jpeg|gif|svg|woff2?|ttf|eot|json)$/i.test(reqPath);
-  if (!isAsset) {
+  if (shouldSendPageViewBeacon(req.method, reqPath)) {
     const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ?? req.socket.remoteAddress;
     sendPageViewBeacon(projectId, reqPath, req.headers.referer, req.headers['user-agent'], ip);
   }
@@ -237,6 +247,9 @@ app.use('/preview/:projectId', async (req, res, next) => {
       res.sendFile(filePath);
       return;
     }
+
+    const pathOnly = normalizeSubPathToUrlPath(subPath);
+    if (!(await assertAdminApiWriteAllowed(projectId, req.method, pathOnly, req, res))) return;
 
     const fullStack = isFullStack(projectId);
     let hasPort = assignedPorts.has(projectId);
@@ -352,10 +365,9 @@ app.use('/preview/:projectId', async (req, res, next) => {
       }
     }
 
-    // Analytics beacon for HTML navigations only (not assets)
+    // Analytics beacon for HTML navigations only (not assets / API)
     const reqPath = req.url?.split('?')[0] ?? '/';
-    const isAsset = /\.(js|css|map|ico|png|jpg|jpeg|gif|svg|woff2?|ttf|eot|json)$/i.test(reqPath);
-    if (!isAsset) {
+    if (shouldSendPageViewBeacon(req.method, reqPath)) {
       const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ?? req.socket.remoteAddress;
       sendPageViewBeacon(projectId, reqPath, req.headers.referer, req.headers['user-agent'], ip);
     }
@@ -463,6 +475,9 @@ app.use('/hosted/', async (req, res, next) => {
     // Reuse the same static-serve + proxy logic as /preview/:projectId
     const subPath = (req.url ?? '/').replace(/^\//, '');
 
+    const pathOnlyHosted = normalizeSubPathToUrlPath(subPath);
+    if (!(await assertAdminApiWriteAllowed(projectId, req.method, pathOnlyHosted, req, res))) return;
+
     if (!isFullStack(projectId) && !assignedPorts.has(projectId)) {
       const distIndex = path.join(BASE_DIR, projectId, 'dist', 'index.html');
       if (fs.existsSync(distIndex)) {
@@ -482,8 +497,7 @@ app.use('/hosted/', async (req, res, next) => {
 
     const port = assignedPorts.get(projectId)!;
     const reqPath = req.url?.split('?')[0] ?? '/';
-    const isAsset = /\.(js|css|map|ico|png|jpg|jpeg|gif|svg|woff2?|ttf|eot|json)$/i.test(reqPath);
-    if (!isAsset) {
+    if (shouldSendPageViewBeacon(req.method, reqPath)) {
       const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ?? req.socket.remoteAddress;
       sendPageViewBeacon(projectId, reqPath, req.headers.referer, req.headers['user-agent'], ip);
     }

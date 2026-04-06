@@ -49,6 +49,21 @@ router.post('/', requireAuth, async (req, res, next) => {
       return;
     }
 
+    // Snapshot the plan used for this execution (audit trail)
+    const plan = await prisma.plan.findUnique({
+      where: { sessionId },
+      select: { id: true, data: true, locked: true },
+    });
+    await prisma.planExecution.create({
+      data: {
+        sessionId,
+        planId: plan?.id ?? null,
+        planData: plan?.data ?? {},
+        projectPaid,
+        isRetry,
+      },
+    });
+
     // Fire and forget — pipeline runs to completion regardless of client connection
     runGenerationPipeline(sessionId, userId, projectPaid).catch((err) => {
       console.error('[generate] unhandled pipeline error', err);

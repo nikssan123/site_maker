@@ -8,11 +8,17 @@ import {
 } from '../lib/prompts';
 import { extractFilesFromCodegenResponse } from '../lib/extractCodegenJson';
 import { writeProjectFiles } from '../lib/fileWriter';
+import { writeAdminTokenFile } from '../lib/adminToken';
 import { installDeps, buildProject, runProject } from './appRunner';
 import { autoFix } from './fixerService';
 import type { Project } from '@prisma/client';
 import { prisma } from '../index';
 import { AppError } from '../middleware/errorHandler';
+import {
+  extendHostingFreeUntil,
+  SITE_PURCHASE_BONUS_ITERATIONS,
+  SITE_PURCHASE_FREE_HOSTING_DAYS,
+} from '../lib/hostingActive';
 import { withTimeout } from '../lib/withTimeout';
 import { publishEvent, clearSessionEvents } from './eventBus';
 import {
@@ -66,6 +72,11 @@ async function runInstallBuildRunTail(
   let project = projectRow;
 
   await writeProjectFiles(project.id, files);
+  try {
+    await writeAdminTokenFile(project.id);
+  } catch (e) {
+    console.error('[generator] writeAdminTokenFile failed:', e);
+  }
 
   await publishEvent(sessionId, { step: 3, label: GEN_STEP_LABELS[3], status: 'running' });
   await publishEvent(sessionId, { type: 'user_progress', message: GEN_WORKING_ON_STEP[3]! });
@@ -420,11 +431,46 @@ async function runGenerationPipelineBody(sessionId: string, paid: boolean): Prom
   await publishEvent(sessionId, { step: 2, label: GEN_STEP_LABELS[2], status: 'running' });
   await publishEvent(sessionId, { type: 'user_progress', message: GEN_WORKING_ON_STEP[2]! });
 
+  const projectExistedBefore = Boolean(await prisma.project.findUnique({ where: { sessionId } }));
+
   let project = await prisma.project.upsert({
     where: { sessionId },
     create: { sessionId, files, status: 'generating' },
     update: { files, status: 'generating', buildLog: null, errorLog: null, fixAttempts: 0, runPort: null },
   });
+
+  // €150 pre-generation purchase: 30 days free hosting + 10 improvement credits (once per project).
+  if (!projectExistedBefore) {
+    const sess = await prisma.session.findUnique({ where: { id: sessionId } });
+    if (sess?.sitePurchaseExtrasPending && !project.includesSitePurchaseBundle) {
+      const hostingFreeUntil = extendHostingFreeUntil(
+        project.hostingFreeUntil,
+        SITE_PURCHASE_FREE_HOSTING_DAYS,
+      );
+      await prisma.$transaction([
+        prisma.project.update({
+          where: { id: project.id },
+          data: {
+            paidIterationCredits: { increment: SITE_PURCHASE_BONUS_ITERATIONS },
+            hostingFreeUntil,
+            hosted: true,
+            includesSitePurchaseBundle: true,
+          },
+        }),
+        prisma.session.update({
+          where: { id: sessionId },
+          data: { sitePurchaseExtrasPending: false },
+        }),
+      ]);
+      project = await prisma.project.findUniqueOrThrow({ where: { id: project.id } });
+    } else if (sess?.sitePurchaseExtrasPending && project.includesSitePurchaseBundle) {
+      await prisma.session.update({
+        where: { id: sessionId },
+        data: { sitePurchaseExtrasPending: false },
+      });
+    }
+  }
+
   await writeProjectFiles(project.id, files);
 
   await publishEvent(sessionId, { step: 2, label: GEN_STEP_LABELS[2], status: 'done' });

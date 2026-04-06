@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box, AppBar, Toolbar, Typography, Button, Tooltip,
   IconButton, Stack, CircularProgress, Paper, Alert,
-  Dialog, DialogTitle, DialogContent, Divider, Snackbar,
+  Dialog, DialogTitle, DialogContent, Divider, Snackbar, Backdrop, Collapse, List, ListItem, ListItemText,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -16,20 +16,29 @@ import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import EditIcon from '@mui/icons-material/Edit';
 import StorefrontIcon from '@mui/icons-material/Storefront';
+import ArticleIcon from '@mui/icons-material/Article';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import HistoryIcon from '@mui/icons-material/History';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
 import PreviewFrame from '../components/PreviewFrame';
 import CatalogPanel from '../components/CatalogPanel';
+import BookingSlotsPanel from '../components/BookingSlotsPanel';
+import BlogPanel from '../components/BlogPanel';
+import DashboardPanel from '../components/DashboardPanel';
 import IterationBar from '../components/IterationBar';
 import ProjectCheckout from '../components/UpgradeGate';
 import PaymentsSetupDialog from '../components/PaymentsSetupDialog';
+import MessageBubble from '../components/MessageBubble';
 
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 import { useProjectStore } from '../store/project';
-import ConnectDomainPanel from '../components/ConnectDomainPanel';
+import HostingPanel from '../components/HostingPanel';
 
 const DRAWER_WIDTH = 400;
 
@@ -99,7 +108,10 @@ export default function PreviewPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [downloadPreparingOpen, setDownloadPreparingOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(true);
-  const [drawerMode, setDrawerMode] = useState<'improvements' | 'catalog'>('improvements');
+  const [drawerMode, setDrawerMode] = useState<'improvements' | 'catalog' | 'booking_slots' | 'blog' | 'dashboard' | 'hosting'>('improvements');
+  const [iterateChat, setIterateChat] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  const [iterationHistory, setIterationHistory] = useState<Array<{ id: string; title: string | null; description: string | null; createdAt: string }>>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [paymentsOpen, setPaymentsOpen] = useState(
     searchParams.get('payments') === '1' ||
     searchParams.get('connected') === 'true' ||
@@ -116,10 +128,13 @@ export default function PreviewPage() {
 
   const [paymentsConfigured, setPaymentsConfigured] = useState(true);
   const [planNeedsPayments, setPlanNeedsPayments] = useState(false);
+  const [planAppType, setPlanAppType] = useState<string | null>(null);
 
   const [editToken, setEditToken] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [editDynamicError, setEditDynamicError] = useState(false);
+  /** For catalog/booking panels: X-Admin-Token on writes to generated /api (app-runner enforces PUT/DELETE). */
+  const [adminApiToken, setAdminApiToken] = useState<string | null>(null);
 
   const loadProject = async () => {
     if (!projectId) return;
@@ -133,17 +148,46 @@ export default function PreviewPage() {
     store.setIterationInfo(p.iterationsTotal ?? 0, p.paidIterationCredits ?? 0, p.freeIterationLimit ?? 2);
     setPaymentsConfigured(p.paymentsEnabled ?? false);
     setPlanNeedsPayments(p.planNeedsPayments ?? false);
+    setPlanAppType(p.planAppType ?? null);
+
+    try {
+      const { token } = await api.getAdminToken(projectId);
+      setAdminApiToken(token);
+    } catch {
+      setAdminApiToken(null);
+    }
   };
 
   useEffect(() => {
-    loadProject().catch(() => {});
-    if (
+    let cancelled = false;
+    const wantsRefresh =
       searchParams.get('paid') === 'true' ||
       searchParams.get('hosted') === 'true' ||
-      searchParams.get('iteration_paid') === 'true'
-    ) {
+      searchParams.get('iteration_paid') === 'true';
+
+    const pollForBillingUpdate = async () => {
+      // Webhooks can take a moment; poll briefly so the UI reflects payment without a manual refresh.
+      // (Also covers cases where the user returns before the CLI-forwarded webhook lands.)
+      for (let i = 0; i < 15 && !cancelled; i++) {
+        await loadProject().catch(() => {});
+        const st = useProjectStore.getState();
+        const okPaid = searchParams.get('paid') !== 'true' || st.projectPaid;
+        const okHosted = searchParams.get('hosted') !== 'true' || st.projectHosted;
+        // Iteration credits aren't stored in the store currently; loadProject refresh is still useful.
+        if (okPaid && okHosted) return;
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    };
+
+    if (wantsRefresh) {
+      pollForBillingUpdate().catch(() => {});
+    } else {
       loadProject().catch(() => {});
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [projectId]);
 
   const enterEditMode = async () => {
@@ -163,7 +207,11 @@ export default function PreviewPage() {
       await new Promise((r) => setTimeout(r, 2000));
       const p = await api.get<any>(`/preview/${id}`);
       if (p.status === 'running') return;
+      if (p.status === 'error') {
+        throw new Error(p.errorLog || t('previewFrame.errorCouldNotStartHint'));
+      }
     }
+    throw new Error(t('previewFrame.errorCouldNotStartHint'));
   };
 
   useEffect(() => {
@@ -194,7 +242,9 @@ export default function PreviewPage() {
         await loadProject();
       } catch (err: any) {
         const msg: string = err.message ?? '';
-        if (msg.toLowerCase().includes('not found')) {
+        const status: number | undefined = err.status;
+        // Dynamic content (catalog) or blocked targets (e.g. server.js) should guide user to Catalog.
+        if (status === 409 || msg.toLowerCase().includes('not found')) {
           setEditDynamicError(true);
         } else {
           alert(msg || t('errors.generic'));
@@ -235,29 +285,48 @@ export default function PreviewPage() {
     }
   };
 
-  const handleBuyIteration = async (pack: boolean) => {
+  const handleBuyIteration = async (quantity: number) => {
     if (!projectId) return;
     try {
-      const { url } = await api.post<{ url: string }>('/billing/iteration-checkout', { projectId, pack });
+      const { url } = await api.post<{ url: string }>('/billing/iteration-checkout', { projectId, quantity });
       window.location.href = url;
     } catch (err: any) {
       alert(err.message);
     }
   };
 
+  const fetchHistory = useCallback(() => {
+    if (!projectId) return;
+    api
+      .get<Array<{ id: string; title: string | null; description: string | null; createdAt: string }>>(
+        `/preview/${projectId}/iteration-history`,
+      )
+      .then(setIterationHistory)
+      .catch(() => {});
+  }, [projectId]);
+
+  // Load iteration history when the improvements drawer is visible (initial mount + switching back from other panels).
+  useEffect(() => {
+    if (!projectId || !drawerOpen || drawerMode !== 'improvements') return;
+    fetchHistory();
+  }, [projectId, drawerOpen, drawerMode, fetchHistory]);
+
   const handleIterate = async (message: string) => {
     if (!store.sessionId) return;
+    const text = message.trim();
+    if (!text) return;
+
+    setIterateChat((prev) => [...prev, { role: 'user', content: text }]);
     setIterating(true);
     useProjectStore.setState({ fixAttempts: [] });
     store.setGenerationFriendlyMessage(t('preview.applyingChanges'));
-
     store.generationSteps.forEach((s) =>
       store.updateStep({ step: s.step, label: s.label, status: 'pending' }),
     );
 
     api.streamEvents(
       '/iterate',
-      { sessionId: store.sessionId, message },
+      { sessionId: store.sessionId, message: text },
       (event: any) => {
         if (event.step) store.updateStep({ step: event.step, label: event.label, status: event.status });
         if (event.type === 'user_progress' && typeof event.message === 'string') {
@@ -268,10 +337,12 @@ export default function PreviewPage() {
           store.setRunPort(event.port);
           setRefreshKey((k) => k + 1);
           loadProject().catch(() => {});
+          fetchHistory();
+          setIterateChat((prev) => [...prev, { role: 'assistant', content: t('preview.changesApplied') }]);
         }
         if (event.type === 'fatal') {
           store.setGenerationFriendlyMessage('');
-          alert(t('preview.iterationFailed', { msg: event.message }));
+          setIterateChat((prev) => [...prev, { role: 'assistant', content: t('preview.iterationFailed', { msg: event.message }) }]);
         }
       },
       () => {
@@ -287,12 +358,36 @@ export default function PreviewPage() {
 
   return (
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
+      <Backdrop
+        open={editSaving}
+        sx={{
+          zIndex: (theme) => theme.zIndex.modal + 2,
+          color: '#fff',
+          backgroundColor: 'rgba(2,6,23,0.72)',
+          backdropFilter: 'blur(6px)',
+        }}
+      >
+        <Stack spacing={1.25} alignItems="center" sx={{ px: 3 }}>
+          <CircularProgress size={42} />
+          <Typography variant="subtitle1" fontWeight={800} textAlign="center">
+            {t('editMode.saving')}
+          </Typography>
+          <Typography variant="body2" color="rgba(255,255,255,0.72)" textAlign="center" sx={{ maxWidth: 420 }}>
+            {t('preview.refresh')} {/* reusing existing string to avoid adding new i18n keys */}
+          </Typography>
+        </Stack>
+      </Backdrop>
 
       {/* ── Top bar ── */}
       <AppBar position="static" color="transparent" elevation={0}
         sx={{ borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
         <Toolbar sx={{ minHeight: '48px !important', gap: 1 }}>
-          <IconButton onClick={() => navigate(store.sessionId ? `/chat/${store.sessionId}` : '/chat')} size="small">
+          <IconButton
+            onClick={() => {
+              navigate(store.sessionId ? `/chat/${store.sessionId}` : '/chat');
+            }}
+            size="small"
+          >
             <ArrowBackIcon fontSize="small" />
           </IconButton>
           <AutoAwesomeIcon color="primary" sx={{ fontSize: 18 }} />
@@ -361,8 +456,15 @@ export default function PreviewPage() {
                 <ActionButton
                   icon={<CloudDoneIcon fontSize="inherit" />}
                   label={t('preview.hosted')}
-                  onClick={() => {}}
-                  active
+                  onClick={() => {
+                    if (drawerOpen && drawerMode === 'hosting') {
+                      setDrawerOpen(false);
+                    } else {
+                      setDrawerMode('hosting');
+                      setDrawerOpen(true);
+                    }
+                  }}
+                  active={drawerOpen && drawerMode === 'hosting'}
                   color="#a855f7"
                 />
               </Box>
@@ -402,26 +504,69 @@ export default function PreviewPage() {
             </Box>
           </Tooltip>
 
-          <Tooltip title={editDynamicError ? t('editMode.useCatalogTooltip') : t('catalog.tooltip')} placement="right">
-            <Box>
-              <ActionButton
-                icon={<StorefrontIcon fontSize="inherit" />}
-                label={t('catalog.label')}
-                onClick={() => {
-                  setEditDynamicError(false);
-                  if (drawerOpen && drawerMode === 'catalog') {
-                    setDrawerOpen(false);
-                  } else {
-                    setDrawerMode('catalog');
-                    setDrawerOpen(true);
-                  }
-                }}
-                active={drawerOpen && drawerMode === 'catalog'}
-                pulsing={editDynamicError}
-                color="#34d399"
-              />
-            </Box>
-          </Tooltip>
+          {planAppType === 'booking' ? (
+            <Tooltip title={t('bookingSlots.tooltip')} placement="right">
+              <Box>
+                <ActionButton
+                  icon={<CalendarMonthIcon fontSize="inherit" />}
+                  label={t('bookingSlots.label')}
+                  onClick={() => {
+                    if (drawerOpen && drawerMode === 'booking_slots') setDrawerOpen(false);
+                    else { setDrawerMode('booking_slots'); setDrawerOpen(true); }
+                  }}
+                  active={drawerOpen && drawerMode === 'booking_slots'}
+                  color="#34d399"
+                />
+              </Box>
+            </Tooltip>
+          ) : planAppType === 'blog' ? (
+            <Tooltip title={t('blog.tooltip')} placement="right">
+              <Box>
+                <ActionButton
+                  icon={<ArticleIcon fontSize="inherit" />}
+                  label={t('blog.label')}
+                  onClick={() => {
+                    if (drawerOpen && drawerMode === 'blog') setDrawerOpen(false);
+                    else { setDrawerMode('blog'); setDrawerOpen(true); }
+                  }}
+                  active={drawerOpen && drawerMode === 'blog'}
+                  color="#34d399"
+                />
+              </Box>
+            </Tooltip>
+          ) : planAppType === 'dashboard' ? (
+            <Tooltip title={t('dashboard.tooltip')} placement="right">
+              <Box>
+                <ActionButton
+                  icon={<DashboardIcon fontSize="inherit" />}
+                  label={t('dashboard.label')}
+                  onClick={() => {
+                    if (drawerOpen && drawerMode === 'dashboard') setDrawerOpen(false);
+                    else { setDrawerMode('dashboard'); setDrawerOpen(true); }
+                  }}
+                  active={drawerOpen && drawerMode === 'dashboard'}
+                  color="#34d399"
+                />
+              </Box>
+            </Tooltip>
+          ) : planAppType === 'portfolio' || planAppType === 'landing_page' || planAppType === 'saas' ? null : (
+            <Tooltip title={editDynamicError ? t('editMode.useCatalogTooltip') : t('catalog.tooltip')} placement="right">
+              <Box>
+                <ActionButton
+                  icon={<StorefrontIcon fontSize="inherit" />}
+                  label={t('catalog.label')}
+                  onClick={() => {
+                    setEditDynamicError(false);
+                    if (drawerOpen && drawerMode === 'catalog') setDrawerOpen(false);
+                    else { setDrawerMode('catalog'); setDrawerOpen(true); }
+                  }}
+                  active={drawerOpen && drawerMode === 'catalog'}
+                  pulsing={editDynamicError}
+                  color="#34d399"
+                />
+              </Box>
+            </Tooltip>
+          )}
 
           <Divider sx={{ my: 0.5 }} />
 
@@ -513,11 +658,29 @@ export default function PreviewPage() {
             <Box sx={{ px: 2, py: 1.25, display: 'flex', alignItems: 'center', gap: 1, borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
               {drawerMode === 'catalog' ? (
                 <StorefrontIcon sx={{ fontSize: 15, color: '#34d399' }} />
+              ) : drawerMode === 'booking_slots' ? (
+                <CalendarMonthIcon sx={{ fontSize: 15, color: '#34d399' }} />
+              ) : drawerMode === 'blog' ? (
+                <ArticleIcon sx={{ fontSize: 15, color: '#34d399' }} />
+              ) : drawerMode === 'dashboard' ? (
+                <DashboardIcon sx={{ fontSize: 15, color: '#34d399' }} />
+              ) : drawerMode === 'hosting' ? (
+                <CloudDoneIcon sx={{ fontSize: 15, color: '#a855f7' }} />
               ) : (
                 <AutoFixHighIcon sx={{ fontSize: 15, color: 'primary.main' }} />
               )}
               <Typography variant="subtitle2" fontWeight={700} sx={{ fontSize: 13, flex: 1 }}>
-                {drawerMode === 'catalog' ? t('catalog.label') : t('iteration.barLabel')}
+                {drawerMode === 'catalog'
+                  ? t('catalog.label')
+                  : drawerMode === 'booking_slots'
+                  ? t('bookingSlots.label')
+                  : drawerMode === 'blog'
+                  ? t('blog.label')
+                  : drawerMode === 'dashboard'
+                  ? t('dashboard.label')
+                  : drawerMode === 'hosting'
+                  ? t('preview.hosted')
+                  : t('iteration.barLabel')}
               </Typography>
               <IconButton size="small" onClick={() => setDrawerOpen(false)} sx={{ mr: -0.5 }}>
                 <ChevronRightIcon fontSize="small" />
@@ -527,7 +690,44 @@ export default function PreviewPage() {
             {/* Catalog mode */}
             {drawerMode === 'catalog' && (
               <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                <CatalogPanel projectId={projectId} runPort={store.runPort ?? null} />
+                <CatalogPanel
+                  projectId={projectId}
+                  runPort={store.runPort ?? null}
+                  adminApiToken={adminApiToken}
+                />
+              </Box>
+            )}
+
+            {/* Booking slots mode */}
+            {drawerMode === 'booking_slots' && (
+              <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', p: 1.5 }}>
+                <BookingSlotsPanel projectId={projectId} adminApiToken={adminApiToken} />
+              </Box>
+            )}
+
+            {/* Blog mode */}
+            {drawerMode === 'blog' && (
+              <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <BlogPanel projectId={projectId} runPort={store.runPort ?? null} />
+              </Box>
+            )}
+
+            {/* Dashboard mode */}
+            {drawerMode === 'dashboard' && (
+              <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <DashboardPanel projectId={projectId} runPort={store.runPort ?? null} />
+              </Box>
+            )}
+
+            {/* Hosting mode */}
+            {drawerMode === 'hosting' && (
+              <Box sx={{ flex: 1, overflow: 'auto' }}>
+                <HostingPanel
+                  projectId={projectId}
+                  hosted={projectHosted}
+                  paid={projectPaid}
+                  onUpdated={() => loadProject().catch(() => {})}
+                />
               </Box>
             )}
 
@@ -542,20 +742,21 @@ export default function PreviewPage() {
                     </Alert>
                   )}
 
-                  {iterating && (
-                    <Box sx={{
-                      display: 'flex', alignItems: 'flex-start', gap: 1.25, px: 1.5, py: 1.25,
-                      background: 'rgba(99,102,241,0.08)', borderRadius: 2, border: '1px solid rgba(99,102,241,0.2)',
-                    }}>
-                      <CircularProgress size={13} sx={{ color: 'primary.main', flexShrink: 0, mt: 0.3 }} />
-                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12, lineHeight: 1.5 }}>
-                        {store.generationFriendlyMessage || t('preview.applyingChanges')}
-                      </Typography>
-                    </Box>
+                  {iterateChat.length === 0 && (
+                    <MessageBubble
+                      role="assistant"
+                      content={t('preview.improvementsHint')}
+                    />
                   )}
+                  {iterateChat.map((m, idx) => (
+                    <MessageBubble key={idx} role={m.role} content={m.content} />
+                  ))}
 
-                  {projectPaid && projectHosted && (
-                    <ConnectDomainPanel projectId={projectId} onUpdated={() => loadProject().catch(() => {})} />
+                  {iterating && (
+                    <MessageBubble
+                      role="assistant"
+                      content={store.generationFriendlyMessage || t('preview.applyingChanges')}
+                    />
                   )}
 
                   {!projectPaid && (
@@ -574,6 +775,78 @@ export default function PreviewPage() {
                         {t('preview.unlockCta')}
                       </Button>
                     </Paper>
+                  )}
+
+                  {/* History section */}
+                  {iterationHistory.length > 0 && (
+                    <Box sx={{ mt: 0.5 }}>
+                      <Box
+                        component="button"
+                        onClick={() => {
+                          if (!historyOpen) fetchHistory();
+                          setHistoryOpen((v) => !v);
+                        }}
+                        sx={{
+                          all: 'unset', display: 'flex', alignItems: 'center', gap: 0.75,
+                          width: '100%', cursor: 'pointer', py: 0.5, px: 0.5, borderRadius: 1,
+                          color: 'text.secondary', '&:hover': { color: 'text.primary' },
+                        }}
+                      >
+                        <HistoryIcon sx={{ fontSize: 14 }} />
+                        <Typography variant="caption" fontWeight={600} sx={{ flex: 1, fontSize: 11 }}>
+                          {t('preview.historyLabel', { n: iterationHistory.length })}
+                        </Typography>
+                        <ExpandMoreIcon sx={{ fontSize: 14, transform: historyOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                      </Box>
+                      <Collapse in={historyOpen}>
+                        <List dense disablePadding sx={{ mt: 0.5 }}>
+                          {iterationHistory.map((entry, i) => (
+                            <Box key={entry.id}>
+                              <ListItem sx={{ px: 0.5, py: 0.75, alignItems: 'flex-start' }}>
+                                <ListItemText
+                                  primary={entry.title ?? t('preview.historyUntitled')}
+                                  secondary={(
+                                    <Box component="span" sx={{ display: 'block' }}>
+                                      <Typography
+                                        component="span"
+                                        variant="caption"
+                                        sx={{ fontSize: 10, color: 'text.disabled', display: 'block' }}
+                                      >
+                                        {new Date(entry.createdAt).toLocaleDateString('bg-BG', {
+                                          day: '2-digit',
+                                          month: 'short',
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                        })}
+                                      </Typography>
+                                      {entry.description ? (
+                                        <Typography
+                                          component="span"
+                                          variant="caption"
+                                          sx={{
+                                            display: 'block',
+                                            mt: 0.35,
+                                            fontSize: 11,
+                                            color: 'text.secondary',
+                                            whiteSpace: 'pre-wrap',
+                                            lineHeight: 1.35,
+                                          }}
+                                        >
+                                          {entry.description}
+                                        </Typography>
+                                      ) : null}
+                                    </Box>
+                                  )}
+                                  primaryTypographyProps={{ variant: 'caption', fontWeight: 600, sx: { lineHeight: 1.3 } }}
+                                  slotProps={{ secondary: { component: 'div' } }}
+                                />
+                              </ListItem>
+                              {i < iterationHistory.length - 1 && <Divider sx={{ opacity: 0.4 }} />}
+                            </Box>
+                          ))}
+                        </List>
+                      </Collapse>
+                    </Box>
                   )}
                 </Box>
 
@@ -631,6 +904,11 @@ export default function PreviewPage() {
       {/* Dynamic-content edit error — points user to Catalog */}
       <Snackbar
         open={editDynamicError}
+        autoHideDuration={15_000}
+        onClose={(_, reason) => {
+          if (reason === 'clickaway') return;
+          setEditDynamicError(false);
+        }}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
         sx={{ mb: 2 }}
       >
@@ -646,7 +924,12 @@ export default function PreviewPage() {
               startIcon={<StorefrontIcon sx={{ fontSize: 15 }} />}
               onClick={() => {
                 setEditDynamicError(false);
-                setDrawerMode('catalog');
+                setDrawerMode(
+                  planAppType === 'booking' ? 'booking_slots'
+                  : planAppType === 'blog' ? 'blog'
+                  : planAppType === 'dashboard' ? 'dashboard'
+                  : 'catalog',
+                );
                 setDrawerOpen(true);
               }}
               sx={{ fontWeight: 700, whiteSpace: 'nowrap', ml: 1 }}
