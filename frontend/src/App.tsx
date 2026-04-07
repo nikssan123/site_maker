@@ -9,6 +9,7 @@ import RegisterPage from './pages/RegisterPage';
 import ChatPage from './pages/ChatPage';
 import PreviewPage from './pages/PreviewPage';
 import FilesPage from './pages/FilesPage';
+import EmailPage from './pages/EmailPage';
 import BillingPage from './pages/BillingPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import ConnectDomainDocsPage from './pages/ConnectDomainDocsPage';
@@ -107,6 +108,7 @@ export default function App() {
           <Route path="/chat/:sessionId?" element={<ChatPage />} />
           <Route path="/preview/:projectId" element={<PreviewPage />} />
           <Route path="/files/:projectId" element={<FilesPage />} />
+          <Route path="/email/:projectId" element={<EmailPage />} />
           <Route path="/analytics/:projectId" element={<AnalyticsPage />} />
           <Route path="/billing" element={<BillingPage />} />
           <Route path="/docs/connect-domain" element={<ConnectDomainDocsPage />} />

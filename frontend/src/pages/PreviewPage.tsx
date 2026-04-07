@@ -659,6 +659,19 @@ export default function PreviewPage() {
             </Tooltip>
           )}
 
+          {projectPaid && (
+            <Tooltip title="Настройки за имейли" placement="right">
+              <Box>
+                <ActionButton
+                  icon={<MailOutlineIcon fontSize="inherit" />}
+                  label="Имейл"
+                  onClick={() => navigate(`/email/${projectId}`)}
+                  color="#34d399"
+                />
+              </Box>
+            </Tooltip>
+          )}
+
           <Divider sx={{ my: 0.5 }} />
 
           <Tooltip title={t('preview.refresh')} placement="right">

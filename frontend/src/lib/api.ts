@@ -165,6 +165,50 @@ export const api = {
     return request<{ ok: boolean }>('DELETE', `/preview/${projectId}/fs/entry?${qs.toString()}`);
   },
 
+  // Email (platform-level, per-project settings)
+  emailDomainsList: (opts?: { projectId?: string }) =>
+    request<Array<{
+      id: string;
+      projectId: string;
+      domain: string;
+      verified: boolean;
+      verifiedAt: string | null;
+      dnsRecords: unknown;
+      createdAt: string;
+    }>>('GET', `/email/domains${opts?.projectId ? `?projectId=${encodeURIComponent(opts.projectId)}` : ''}`),
+  emailDomainCreate: (projectId: string, domain: string) =>
+    request<{ id: string; domain: string; verified: boolean; dnsRecords: unknown }>('POST', `/email/domains`, { projectId, domain }),
+  emailDomainVerify: (domainId: string) =>
+    request<{ verified: boolean }>('POST', `/email/domains/${domainId}/verify`),
+  emailDomainDelete: (domainId: string) =>
+    request<{ ok: boolean }>('DELETE', `/email/domains/${domainId}`),
+
+  emailSettingsGet: (projectId: string) =>
+    request<null | {
+      projectId: string;
+      domainId: string | null;
+      domain: string | null;
+      fromName: string | null;
+      fromEmail: string;
+      verified: boolean;
+      provider: 'resend';
+    }>('GET', `/email/settings/${projectId}`),
+  emailSettingsPut: (projectId: string, body: { fromName?: string; fromEmail: string; domainId?: string | null }) =>
+    request<{ projectId: string; fromName: string | null; fromEmail: string; domainId: string | null; verified: boolean; provider: 'resend' }>(
+      'PUT',
+      `/email/settings/${projectId}`,
+      body,
+    ),
+
+  emailTemplatesGet: (projectId: string) =>
+    request<Array<{ id: string; eventType: string; subject: string; htmlBody: string; updatedAt: string }>>('GET', `/email/templates/${projectId}`),
+  emailTemplatePut: (projectId: string, eventType: string, body: { subject: string; htmlBody: string }) =>
+    request<{ id: string; projectId: string; eventType: string; subject: string; htmlBody: string; updatedAt: string }>(
+      'PUT',
+      `/email/templates/${projectId}/${encodeURIComponent(eventType)}`,
+      body,
+    ),
+
   setHostedSubdomain: (projectId: string, slug: string) =>
     request<{
       customDomain: string | null;

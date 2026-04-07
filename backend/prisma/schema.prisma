@@ -99,6 +99,10 @@ model Project {
   buildEnv              Json?          // { VITE_STRIPE_PUBLISHABLE_KEY: "pk_..." } — baked into build at compile time
   runtimeEnv            String?        // AES-256-GCM encrypted JSON: { STRIPE_SECRET_KEY: "sk_..." } — injected into process env only
   analyticsEvents       AnalyticsPageView[]
+  emailSettings         EmailSettings?
+  emailDomains          EmailDomain[]
+  emailTemplates        EmailTemplate[]
+  emailLogs             EmailLog[]
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
   iterationLogs         IterationLog[]
@@ -135,4 +139,77 @@ model AnalyticsPageView {
   createdAt DateTime @default(now())
 
   @@index([projectId, createdAt])
+}
+
+model EmailDomain {
+  id             String   @id @default(uuid())
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  provider       String   @default("resend")
+  resendDomainId String   @unique
+  domain         String
+  dnsRecords     Json?
+  verified       Boolean  @default(false)
+  verifiedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  settings       EmailSettings[]
+
+  @@unique([projectId, domain])
+  @@index([projectId, verified])
+}
+
+model EmailSettings {
+  id        String   @id @default(uuid())
+  projectId String   @unique
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  provider  String   @default("resend")
+
+  fromName  String?
+  fromEmail String
+
+  domainId String?
+  domain   EmailDomain? @relation(fields: [domainId], references: [id], onDelete: SetNull)
+
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([domainId])
+}
+
+model EmailTemplate {
+  id        String   @id @default(uuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  eventType String
+  subject   String
+  htmlBody  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([projectId, eventType])
+  @@index([projectId, eventType])
+}
+
+model EmailLog {
+  id              String   @id @default(uuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  provider        String   @default("resend")
+  resendMessageId String?
+
+  to              String
+  from            String
+  subject         String
+  status          String   @default("queued") // queued | sent | failed | delivered | bounced | complained | opened
+  error           String?
+
+  createdAt       DateTime @default(now())
+  sentAt          DateTime?
+
+  @@index([projectId, createdAt])
+  @@index([resendMessageId])
 }

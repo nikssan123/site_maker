@@ -263,6 +263,18 @@ KEY RULES FOR server.js ROBUSTNESS:
 - Serve frontend: app.use(express.static(path.join(__dirname, 'dist'))); app.get('*', …)
 - PORT = process.env.PORT || 3000
 
+EMAIL EVENTS (required for apps with contact forms or bookings):
+- The generated server.js MUST trigger platform email events on key actions by calling the internal platform endpoint:
+  POST (process.env.BACKEND_INTERNAL_URL + '/api/internal/project-email')
+- The request body MUST be JSON:
+  { projectId: process.env.PROJECT_ID, eventType: 'form.submitted'|'booking.created', data: { ... } }
+- This call MUST be fire-and-forget and MUST NOT break the user request:
+  fetch(...).catch(() => {})
+- Trigger after successful writes:
+  - After creating an inquiry via POST /api/inquiries -> eventType 'form.submitted' with data { name, email, message }
+  - After creating a booking via POST /api/bookings -> eventType 'booking.created' with data { name/customerName, email/customerEmail, date, time, note/notes }
+- Do NOT include any Resend API key or email sending logic in the generated app; the platform handles email delivery.
+
 package.json:
 - Always include: react, react-dom, react-router-dom, @mui/material, @mui/icons-material, @emotion/react, @emotion/styled, @types/react, @types/react-dom, typescript, vite, @vitejs/plugin-react
 - For booking/calendar apps also include: @mui/x-date-pickers, @mui/x-data-grid, dayjs

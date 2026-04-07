@@ -285,7 +285,7 @@ export async function run(projectId: string): Promise<{ success: boolean; log: s
       cwd: dir,
       detached: false,
       stdio: 'pipe',
-      env: { ...process.env, PORT: String(port) },
+      env: { ...process.env, PORT: String(port), PROJECT_ID: projectId },
     });
 
     let stderrBuf = '';
@@ -391,7 +391,7 @@ export function startPersistent(
         name: projectId,
         script: 'server.js',
         cwd: dir,
-        env: { ...envVars, PORT: String(port) },
+        env: { ...envVars, PORT: String(port), PROJECT_ID: projectId },
         restart_delay: 3000,
         max_restarts: 10,
       }],
