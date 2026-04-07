@@ -16,6 +16,8 @@ Guidelines:
 Identify silently (never ask technically):
 - Does it need to store or manage records (products, bookings, customers, posts, orders, etc.)? → hasDatabase: true
 - List dataModels with sensible fields. Keep models simple and practical.
+- If it has a contact form that should be saved and later reviewed (inquiries/messages), it MUST use hasDatabase: true and include a data model:
+  { "name": "inquiries", "fields": ["name", "email", "message", "createdAt"] }
 
 Once you have a clear picture (usually after 1–4 exchanges), append the internal plan block at the very end of your message — ALWAYS, without exception.
 The block is machine-readable and hidden from the user. Do NOT mention or explain it. Just include it, exactly in this format:
@@ -408,6 +410,18 @@ function buildAdminConfig(appType: string, models: Array<{ name: string; fields:
   return JSON.stringify(config);
 }
 
+function planHasContactForm(plan: Record<string, unknown>): boolean {
+  const desc = typeof plan.description === 'string' ? plan.description : '';
+  const pages = Array.isArray(plan.pages) ? (plan.pages as unknown[]) : [];
+  const features = Array.isArray(plan.features) ? (plan.features as unknown[]) : [];
+  const hay = [
+    desc,
+    ...pages.filter((x) => typeof x === 'string'),
+    ...features.filter((x) => typeof x === 'string'),
+  ].join(' ').toLowerCase();
+  return /(contact|inquiry|inquiries|message|messages|контакт|запит|запитван)/i.test(hay);
+}
+
 export function buildCodeGenPrompt(plan: Record<string, unknown>): string {
   const hasDatabase = plan.hasDatabase === true;
   const paymentsEnabled = plan.paymentsEnabled === true;
@@ -431,6 +445,10 @@ Wrap app in <ThemeProvider theme={theme}><CssBaseline /> in src/main.tsx.`;
     prompt += `\n\nDATABASE MODELS:\n`;
     for (const model of dataModels) {
       prompt += `- ${model.name}: [${model.fields.join(', ')}]\n`;
+    }
+    if (planHasContactForm(plan) && !dataModels.some((m) => String(m.name).toLowerCase() === 'inquiries')) {
+      prompt += `- inquiries: [name, email, message, createdAt]\n`;
+      prompt += `\nContact-form requirement: implement a consistent inquiries API. The contact form must POST to /api/inquiries and the app must be able to GET /api/inquiries (list) using the same REST pattern as other models. createdAt must be set server-side.`;
     }
     if (appType === 'booking' && !dataModels.some((m) => String(m.name).toLowerCase().includes('slot'))) {
       prompt += `- takenSlots: [date, time, note]\n`;

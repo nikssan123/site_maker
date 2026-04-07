@@ -17,6 +17,7 @@ import BarChartIcon from '@mui/icons-material/BarChart';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import EditIcon from '@mui/icons-material/Edit';
 import StorefrontIcon from '@mui/icons-material/Storefront';
@@ -28,6 +29,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PreviewFrame from '../components/PreviewFrame';
 import CatalogPanel from '../components/CatalogPanel';
 import BookingSlotsPanel from '../components/BookingSlotsPanel';
+import InquiriesPanel from '../components/InquiriesPanel';
 import BlogPanel from '../components/BlogPanel';
 import DashboardPanel from '../components/DashboardPanel';
 import IterationBar from '../components/IterationBar';
@@ -108,7 +110,7 @@ export default function PreviewPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [downloadPreparingOpen, setDownloadPreparingOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(true);
-  const [drawerMode, setDrawerMode] = useState<'improvements' | 'catalog' | 'booking_slots' | 'blog' | 'dashboard' | 'hosting'>('improvements');
+  const [drawerMode, setDrawerMode] = useState<'improvements' | 'catalog' | 'booking_slots' | 'inquiries' | 'blog' | 'dashboard' | 'hosting'>('improvements');
   const [iterateChat, setIterateChat] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
   const [iterationHistory, setIterationHistory] = useState<Array<{ id: string; title: string | null; description: string | null; createdAt: string }>>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -129,6 +131,7 @@ export default function PreviewPage() {
   const [paymentsConfigured, setPaymentsConfigured] = useState(true);
   const [planNeedsPayments, setPlanNeedsPayments] = useState(false);
   const [planAppType, setPlanAppType] = useState<string | null>(null);
+  const [planHasContactForm, setPlanHasContactForm] = useState(false);
 
   const [editToken, setEditToken] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
@@ -149,6 +152,7 @@ export default function PreviewPage() {
     setPaymentsConfigured(p.paymentsEnabled ?? false);
     setPlanNeedsPayments(p.planNeedsPayments ?? false);
     setPlanAppType(p.planAppType ?? null);
+    setPlanHasContactForm(p.planHasContactForm === true);
 
     try {
       const { token } = await api.getAdminToken(projectId);
@@ -549,6 +553,21 @@ export default function PreviewPage() {
                 />
               </Box>
             </Tooltip>
+          ) : planHasContactForm ? (
+            <Tooltip title={t('inquiries.tooltip')} placement="right">
+              <Box>
+                <ActionButton
+                  icon={<MailOutlineIcon fontSize="inherit" />}
+                  label={t('inquiries.label')}
+                  onClick={() => {
+                    if (drawerOpen && drawerMode === 'inquiries') setDrawerOpen(false);
+                    else { setDrawerMode('inquiries'); setDrawerOpen(true); }
+                  }}
+                  active={drawerOpen && drawerMode === 'inquiries'}
+                  color="#34d399"
+                />
+              </Box>
+            </Tooltip>
           ) : planAppType === 'portfolio' || planAppType === 'landing_page' || planAppType === 'saas' ? null : (
             <Tooltip title={editDynamicError ? t('editMode.useCatalogTooltip') : t('catalog.tooltip')} placement="right">
               <Box>
@@ -660,6 +679,8 @@ export default function PreviewPage() {
                 <StorefrontIcon sx={{ fontSize: 15, color: '#34d399' }} />
               ) : drawerMode === 'booking_slots' ? (
                 <CalendarMonthIcon sx={{ fontSize: 15, color: '#34d399' }} />
+              ) : drawerMode === 'inquiries' ? (
+                <MailOutlineIcon sx={{ fontSize: 15, color: '#34d399' }} />
               ) : drawerMode === 'blog' ? (
                 <ArticleIcon sx={{ fontSize: 15, color: '#34d399' }} />
               ) : drawerMode === 'dashboard' ? (
@@ -674,6 +695,8 @@ export default function PreviewPage() {
                   ? t('catalog.label')
                   : drawerMode === 'booking_slots'
                   ? t('bookingSlots.label')
+                  : drawerMode === 'inquiries'
+                  ? t('inquiries.label')
                   : drawerMode === 'blog'
                   ? t('blog.label')
                   : drawerMode === 'dashboard'
@@ -702,6 +725,13 @@ export default function PreviewPage() {
             {drawerMode === 'booking_slots' && (
               <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', p: 1.5 }}>
                 <BookingSlotsPanel projectId={projectId} adminApiToken={adminApiToken} />
+              </Box>
+            )}
+
+            {/* Inquiries mode */}
+            {drawerMode === 'inquiries' && (
+              <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', p: 1.5 }}>
+                <InquiriesPanel projectId={projectId} />
               </Box>
             )}
 

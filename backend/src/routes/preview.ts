@@ -470,6 +470,13 @@ router.get('/:projectId', requireAuth, async (req, res, next) => {
     const planData = (session?.plan?.data as Record<string, unknown> | null) ?? null;
     const planNeedsPayments = planData?.paymentsEnabled === true;
     const planAppType = planData && typeof planData.appType === 'string' ? planData.appType : null;
+    const planHasContactForm = (() => {
+      const desc = planData && typeof planData.description === 'string' ? planData.description : '';
+      const pages = planData && Array.isArray(planData.pages) ? planData.pages : [];
+      const features = planData && Array.isArray(planData.features) ? planData.features : [];
+      const hay = [desc, ...pages, ...features].filter((x) => typeof x === 'string').join(' ').toLowerCase();
+      return /(contact|inquiry|inquiries|message|messages|контакт|запит|запитван)/i.test(hay);
+    })();
 
     return res.json({
       id: project.id,
@@ -489,6 +496,7 @@ router.get('/:projectId', requireAuth, async (req, res, next) => {
       paymentsEnabled: project.paymentsEnabled ?? false,
       planNeedsPayments,
       planAppType,
+      planHasContactForm,
     });
   } catch (err) {
     return next(err);

@@ -27,8 +27,8 @@ class ClaudeProvider implements AIProvider {
     apiKey: process.env.ANTHROPIC_API_KEY,
     timeout: ANTHROPIC_TIMEOUT_MS,
   });
-  /** Override with `CLAUDE_CODE_MODEL` if your account uses a different id. Default: latest Sonnet (see Anthropic models docs). */
-  private model = process.env.CLAUDE_CODE_MODEL ?? 'claude-sonnet-4-6';
+  /** Override with `CLAUDE_CODE_MODEL` if your account uses a different id. Default: Opus (see Anthropic models docs). */
+  private model = process.env.CLAUDE_CODE_MODEL ?? 'claude-opus-4-6';
 
   async complete(messages: ChatMessage[], system: string, options?: CompleteOptions): Promise<string> {
     const maxTokens = options?.maxTokens ?? parseInt(process.env.CLAUDE_MAX_OUTPUT_TOKENS ?? '8192', 10);
@@ -109,7 +109,7 @@ class OpenAIProvider implements AIProvider {
 // GPT-4o for conversational planning — fast and cost-effective
 const chatClient = new OpenAIProvider();
 
-// Claude Sonnet for code generation, fixing, and iteration — better at producing working code
+// Claude Opus for code generation, fixing, and iteration — higher quality by default
 const codeClient = new ClaudeProvider();
 
 export function getChatClient(): AIProvider {
