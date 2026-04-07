@@ -43,6 +43,10 @@ export async function clarifyIteration(
 
   const planData = session.plan.data as Record<string, unknown>;
   const projectFiles = Object.keys((session.project.files as Record<string, string>) ?? {});
+  // We only want to cap *clarifying questions*, not any assistant message (e.g. summaries, confirmations).
+  const alreadyAskedAQuestion = conversation.some(
+    (m) => m.role === 'assistant' && /[?？]\s*$/.test(m.content.trim()),
+  );
 
   const system = `
 Ти си старши full‑stack инженер и продуктов човек. Потребителят иска да направи "подобрение" на вече генерираното приложение.
@@ -58,6 +62,7 @@ export async function clarifyIteration(
 - НИКОГА не споменавай файлове, компоненти или технически термини пред потребителя.
 - Задавай само 1 кратък въпрос наведнъж.
 - Ако заявката е достатъчно ясна (напр. "смени цвета на бутона в хедъра"), отговори веднага с ready: true.
+- Ако вече си задал поне 1 въпрос в този разговор, НЕ задавай повече въпроси. Върни ready: true и направи разумни допускания.
 
 Правила за спецификацията (spec):
 - Пиши на английски, за Claude Sonnet, който ще изпълни задачата.
@@ -75,14 +80,89 @@ export async function clarifyIteration(
   const data = parsed ? RESULT_SCHEMA.safeParse(parsed) : null;
 
   if (!data?.success) {
-    // Fallback: ask a safe generic question.
-    return { kind: 'question', message: 'Къде точно в приложението да е промяната (коя страница/екран) и какво трябва да се случва?' };
+    // Fallback: one question max; otherwise proceed with best-effort spec.
+    if (!alreadyAskedAQuestion) {
+      return {
+        kind: 'question',
+        message: 'Къде точно в приложението да е промяната (коя страница/екран) и какво трябва да се случва?',
+      };
+    }
+    const lastUser = [...conversation].reverse().find((m) => m.role === 'user')?.content?.trim() ?? '';
+    const scoped = await scopeIteration({
+      plan: planData,
+      filePaths: projectFiles,
+      refinedSpec: lastUser || 'Apply the requested change using best judgement.',
+      maxFiles: 8,
+    });
+    const fallbackSpec =
+      `Assumptions: Use best judgement; do not ask more questions.\n` +
+      `- Implement the requested change described by the user.\n` +
+      `- Keep existing styles and flows unless explicitly requested.\n` +
+      `- Prefer minimal edits; update only the necessary files.\n` +
+      `- Ensure build passes and UI remains consistent.\n`;
+    return {
+      kind: 'ready',
+      summary: 'Ок — ще го направя по най-разумния начин на база описанието ти.',
+      spec: `${fallbackSpec}\nTarget files (edit only as needed):\n${scoped.targetFiles.map((f) => `- ${f}`).join('\n')}`,
+      targetFiles: scoped.targetFiles,
+      nonGoals: scoped.nonGoalsBg,
+    };
   }
 
   const v = data.data;
   if (!v.ready) {
     const q = (v.question ?? '').trim();
-    return { kind: 'question', message: q || 'Можеш ли да уточниш какво точно трябва да се промени и къде?' };
+    if (!alreadyAskedAQuestion) {
+      return { kind: 'question', message: q || 'Можеш ли да уточниш какво точно трябва да се промени и къде?' };
+    }
+
+    // Hard stop: do not get stuck in clarification loops. Re-ask the model to produce a ready spec now.
+    const forceSystem = `${system}\n\nIMPORTANT: You have already asked a question in this conversation. Return ready:true now (no more questions).`;
+    try {
+      const forcedRaw = await ai.complete(conversation, forceSystem, { maxTokens: 500 });
+      const forcedParsed = safeParseJson(forcedRaw);
+      const forcedData = forcedParsed ? RESULT_SCHEMA.safeParse(forcedParsed) : null;
+      if (forcedData?.success && forcedData.data.ready && (forcedData.data.spec ?? '').trim()) {
+        const summary = (forcedData.data.summary ?? '').trim();
+        const spec = (forcedData.data.spec ?? '').trim();
+        const scoped = await scopeIteration({
+          plan: planData,
+          filePaths: projectFiles,
+          refinedSpec: spec,
+          maxFiles: 8,
+        });
+        return {
+          kind: 'ready',
+          summary: summary || scoped.summaryBg || 'Ок — имам яснота какво да направя.',
+          spec,
+          targetFiles: scoped.targetFiles,
+          nonGoals: scoped.nonGoalsBg,
+        };
+      }
+    } catch {
+      /* ignore */
+    }
+
+    const lastUser = [...conversation].reverse().find((m) => m.role === 'user')?.content?.trim() ?? '';
+    const scoped = await scopeIteration({
+      plan: planData,
+      filePaths: projectFiles,
+      refinedSpec: lastUser || 'Apply the requested change using best judgement.',
+      maxFiles: 8,
+    });
+    const fallbackSpec =
+      `Assumptions: User did not provide more details; proceed with best judgement.\n` +
+      `- Implement the requested change.\n` +
+      `- Keep scope minimal; avoid broad refactors.\n` +
+      `- Preserve existing UX and styling unless asked.\n` +
+      `- Ensure build passes.\n`;
+    return {
+      kind: 'ready',
+      summary: 'Ок — продължавам с промяната по най-доброто тълкуване на заявката.',
+      spec: `${fallbackSpec}\nTarget files (edit only as needed):\n${scoped.targetFiles.map((f) => `- ${f}`).join('\n')}`,
+      targetFiles: scoped.targetFiles,
+      nonGoals: scoped.nonGoalsBg,
+    };
   }
 
   const summary = (v.summary ?? '').trim();
