@@ -30,12 +30,13 @@ router.post('/clarify', requireAuth, async (req, res, next) => {
 
 router.post('/', requireAuth, async (req, res, next) => {
   try {
-    const { sessionId, message, spec, targetFiles } = z
+    const { sessionId, message, spec, targetFiles, explorerContextNotes } = z
       .object({
         sessionId: z.string(),
         message: z.string().min(1),
         spec: z.string().min(1).optional(),
         targetFiles: z.array(z.string().min(1)).max(12).optional(),
+        explorerContextNotes: z.string().max(50_000).optional(),
       })
       .parse(req.body);
 
@@ -71,7 +72,7 @@ router.post('/', requireAuth, async (req, res, next) => {
     });
 
     // Fire and forget — pipeline runs to completion regardless of client connection
-    runIteration(sessionId, userId, message, { spec, targetFiles, logId: log.id }).catch((err) => {
+    runIteration(sessionId, userId, message, { spec, targetFiles, explorerContextNotes, logId: log.id }).catch((err) => {
       console.error('[iterate] unhandled pipeline error', err);
     });
 

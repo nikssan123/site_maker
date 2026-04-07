@@ -3,10 +3,11 @@ import { prisma } from '../index';
 import { AppError } from '../middleware/errorHandler';
 import { getChatClient, ChatMessage } from './aiClient';
 import { scopeIteration } from './iterateScopeService';
+import { exploreIterationFiles } from './iterateExploreService';
 
 export type IterateClarifyResult =
   | { kind: 'question'; message: string }
-  | { kind: 'ready'; summary: string; spec: string; targetFiles: string[]; nonGoals: string[] };
+  | { kind: 'ready'; summary: string; spec: string; targetFiles: string[]; nonGoals: string[]; explorerContextNotes?: string };
 
 const RESULT_SCHEMA = z.object({
   ready: z.boolean(),
@@ -97,12 +98,32 @@ export async function clarifyIteration(
     maxFiles: 8,
   });
 
+  // Optional extra exploration step (Cursor-like): open a few files and refine the target list.
+  // This does NOT change what we show the user (still a file list), it only improves context for Claude later.
+  let explorerTargetFiles: string[] | null = null;
+  let explorerContextNotes: string | null = null;
+  try {
+    const explored = await exploreIterationFiles({
+      plan: planData,
+      refinedSpec: spec,
+      filePaths: projectFiles,
+      fileContents: (session.project.files as Record<string, string>) ?? {},
+      maxOpens: 6,
+      maxTurns: 4,
+    });
+    explorerTargetFiles = explored.targetFiles;
+    explorerContextNotes = explored.contextNotes;
+  } catch {
+    /* ignore exploration failures */
+  }
+
   return {
     kind: 'ready',
     summary: summary || scoped.summaryBg || 'Ок — имам яснота какво да направя.',
     spec,
-    targetFiles: scoped.targetFiles,
+    targetFiles: explorerTargetFiles && explorerTargetFiles.length > 0 ? explorerTargetFiles : scoped.targetFiles,
     nonGoals: scoped.nonGoalsBg,
+    ...(explorerContextNotes ? { explorerContextNotes } : {}),
   };
 }
 

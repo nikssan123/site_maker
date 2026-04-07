@@ -48,7 +48,7 @@ export async function runIteration(
   sessionId: string,
   userId: string,
   changeRequest: string,
-  opts?: { spec?: string; targetFiles?: string[]; logId?: string },
+  opts?: { spec?: string; targetFiles?: string[]; explorerContextNotes?: string; logId?: string },
 ): Promise<void> {
   await clearSessionEvents(sessionId);
 
@@ -139,7 +139,8 @@ Rules:
 
   // Phase 2: Claude executes the refined spec
   const ai = getCodeClient();
-  const prompt = buildIteratorPrompt(planData, subsetFiles, refinedSpec);
+  const extra = (opts?.explorerContextNotes ?? '').trim();
+  const prompt = buildIteratorPrompt(planData, subsetFiles, refinedSpec, extra ? { explorerContextNotes: extra } : undefined);
   const iterMaxTokens = parseInt(process.env.CLAUDE_MAX_OUTPUT_TOKENS ?? '8192', 10);
   let idx = 0;
   const hintTimer = setInterval(() => {

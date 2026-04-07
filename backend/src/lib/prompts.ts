@@ -512,9 +512,14 @@ export function buildIteratorPrompt(
   plan: object,
   files: Record<string, string>,
   changeRequest: string,
+  opts?: { explorerContextNotes?: string },
 ): string {
   const fileList = Object.entries(files)
     .map(([p, content]) => `// ${p}\n${content}`)
     .join('\n\n---\n\n');
-  return `Plan:\n${JSON.stringify(plan, null, 2)}\n\nChange request: "${changeRequest}"\n\nCurrent files (SCOPED SUBSET):\n\n${fileList}\n\nHard constraints:\n- Keep UI/layout stable; do not restyle unrelated areas.\n- No surprise features; implement only what is requested.\n- Keep all existing Bulgarian user-visible strings Bulgarian; any new user-visible strings must be Bulgarian.\n- Prefer minimal diffs; avoid broad refactors.\n\nЛокализация: запази и допълни потребителските текстове на български език.`;
+  const notesRaw = (opts?.explorerContextNotes ?? '').trim();
+  const notes = notesRaw.length > 12000 ? `${notesRaw.slice(0, 12000)}\n\n…(truncated)…` : notesRaw;
+  return `Plan:\n${JSON.stringify(plan, null, 2)}\n\nChange request: "${changeRequest}"\n\n` +
+    (notes ? `Extra exploration context (internal):\n${notes}\n\n` : '') +
+    `Current files (SCOPED SUBSET):\n\n${fileList}\n\nHard constraints:\n- Keep UI/layout stable; do not restyle unrelated areas.\n- No surprise features; implement only what is requested.\n- Keep all existing Bulgarian user-visible strings Bulgarian; any new user-visible strings must be Bulgarian.\n- Prefer minimal diffs; avoid broad refactors.\n\nЛокализация: запази и допълни потребителските текстове на български език.`;
 }

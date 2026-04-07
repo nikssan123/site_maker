@@ -113,7 +113,7 @@ export default function PreviewPage() {
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [drawerMode, setDrawerMode] = useState<'improvements' | 'catalog' | 'booking_slots' | 'inquiries' | 'blog' | 'dashboard' | 'hosting'>('improvements');
   const [iterateChat, setIterateChat] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
-  const [pendingIterate, setPendingIterate] = useState<null | { spec: string; targetFiles: string[] }>(null);
+  const [pendingIterate, setPendingIterate] = useState<null | { spec: string; targetFiles: string[]; explorerContextNotes?: string }>(null);
   const [iterationHistory, setIterationHistory] = useState<Array<{ id: string; title: string | null; description: string | null; createdAt: string }>>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [paymentsOpen, setPaymentsOpen] = useState(
@@ -340,6 +340,7 @@ export default function PreviewPage() {
           message: pendingIterate.spec,
           spec: pendingIterate.spec,
           targetFiles: pendingIterate.targetFiles,
+          explorerContextNotes: pendingIterate.explorerContextNotes,
         },
         (event: any) => {
           if (event.step) store.updateStep({ step: event.step, label: event.label, status: event.status });
@@ -372,7 +373,7 @@ export default function PreviewPage() {
     try {
       const res = await api.post<
         | { kind: 'question'; message: string }
-        | { kind: 'ready'; summary: string; spec: string; targetFiles: string[]; nonGoals: string[] }
+        | { kind: 'ready'; summary: string; spec: string; targetFiles: string[]; nonGoals: string[]; explorerContextNotes?: string }
       >(
         '/iterate/clarify',
         { sessionId: store.sessionId, messages: [...iterateChat, { role: 'user', content: text }] },
@@ -392,7 +393,7 @@ export default function PreviewPage() {
         `Ако е ок, напиши \"да\" и ще приложа промяната.`;
 
       setIterateChat((prev) => [...prev, { role: 'assistant', content: msg }]);
-      setPendingIterate({ spec: res.spec, targetFiles: res.targetFiles ?? [] });
+      setPendingIterate({ spec: res.spec, targetFiles: res.targetFiles ?? [], explorerContextNotes: res.explorerContextNotes });
       return;
     } catch {
       setIterateChat((prev) => [...prev, { role: 'assistant', content: 'Можеш ли да уточниш какво точно да се промени и къде? (Ще задам 1 кратък въпрос и после ще го приложа.)' }]);
