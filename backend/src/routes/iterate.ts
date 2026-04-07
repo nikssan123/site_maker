@@ -66,9 +66,15 @@ router.post('/', requireAuth, async (req, res, next) => {
       );
     }
 
-    // Credit deduction happens synchronously before the fire-and-forget launch
+    // Title = first line of user-facing message (not the internal English spec)
+    const titleLine =
+      message
+        .split('\n')
+        .map((l) => l.trim())
+        .find((l) => l.length > 0) ?? message;
+
     const log = await prisma.iterationLog.create({
-      data: { projectId: project.id, userId, title: message.slice(0, 120) },
+      data: { projectId: project.id, userId, title: titleLine.slice(0, 120) },
     });
 
     // Fire and forget — pipeline runs to completion regardless of client connection

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { getChatClient } from './aiClient';
+import { getIterateAssistClient } from './aiClient';
 
 export type IterateScopeResult = {
   summaryBg: string;
@@ -48,7 +48,7 @@ Task:
 
 Output ONLY valid JSON (no markdown), shape:
 {
-  "summaryBg": "<1-2 sentences in Bulgarian describing what will be changed>",
+  "summaryBg": "<Bulgarian, 1–2 short sentences: what the site visitor will see or do after the change — concrete, no file paths, no jargon>",
   "targetFiles": ["<existing file path>", ...],
   "nonGoalsBg": ["<Bulgarian short non-goal>", ...]
 }
@@ -65,8 +65,8 @@ Rules:
     refinedSpec: params.refinedSpec,
   });
 
-  const ai = getChatClient();
-  const raw = await ai.complete([{ role: 'user', content: user }], system, { maxTokens: 450 });
+  const ai = getIterateAssistClient();
+  const raw = await ai.complete([{ role: 'user', content: user }], system, { maxTokens: 900 });
   const parsed = safeParseJson(raw);
   const res = parsed ? SCOPE_SCHEMA.safeParse(parsed) : null;
   if (!res?.success) {

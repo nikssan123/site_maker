@@ -102,12 +102,17 @@ Rules:
     }
   }
 
-  // Save description to the iteration log now that we have the refined spec
+  // Human-facing text from the client (summary + plan bullets), not the English technical spec
   if (opts?.logId) {
-    prisma.iterationLog.update({
-      where: { id: opts.logId },
-      data: { description: refinedSpec.slice(0, 500) } as any,
-    }).catch(() => {});
+    const desc = changeRequest.trim().slice(0, 4000);
+    if (desc) {
+      prisma.iterationLog
+        .update({
+          where: { id: opts.logId },
+          data: { description: desc },
+        })
+        .catch(() => {});
+    }
   }
 
   // Determine which existing files to provide as context (scoped subset).

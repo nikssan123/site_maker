@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { getChatClient } from './aiClient';
+import { getIterateAssistClient } from './aiClient';
 
 export type IterateExploreResult = {
   targetFiles: string[];
@@ -99,7 +99,7 @@ Rules:
 - Do not include node_modules, dist, or lockfiles.
 `;
 
-  const ai = getChatClient();
+  const ai = getIterateAssistClient();
   const state: ToolState = { opened: [], denied: [] };
   let suggestedTargets: string[] | null = null;
 
@@ -118,7 +118,7 @@ Rules:
       state.opened.length ? `\nOpened file contents:\n${openedBodies}` : '',
     ].filter(Boolean).join('\n');
 
-    const raw = await ai.complete([{ role: 'user', content: user }], system, { maxTokens: 450 });
+    const raw = await ai.complete([{ role: 'user', content: user }], system, { maxTokens: 800 });
     const parsed = safeParseJson(raw);
     const data = parsed ? ACTION_SCHEMA.safeParse(parsed) : null;
     if (!data?.success) break;

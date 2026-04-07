@@ -1,20 +1,35 @@
 import { z } from 'zod';
 import { prisma } from '../index';
 import { AppError } from '../middleware/errorHandler';
-import { getChatClient, ChatMessage } from './aiClient';
+import { getIterateAssistClient, ChatMessage } from './aiClient';
 import { scopeIteration } from './iterateScopeService';
 import { exploreIterationFiles } from './iterateExploreService';
 
 export type IterateClarifyResult =
   | { kind: 'question'; message: string }
-  | { kind: 'ready'; summary: string; spec: string; targetFiles: string[]; nonGoals: string[]; explorerContextNotes?: string };
+  | {
+      kind: 'ready';
+      summary: string;
+      /** Short Bulgarian lines for the user plan card (what changes, in plain language). */
+      planBulletsBg: string[];
+      spec: string;
+      targetFiles: string[];
+      nonGoals: string[];
+      explorerContextNotes?: string;
+    };
 
 const RESULT_SCHEMA = z.object({
   ready: z.boolean(),
   question: z.string().optional(),
   summary: z.string().optional(),
+  /** 3–6 bullets: Bulgarian, user-visible outcomes only (no file paths, no English). */
+  planBulletsBg: z.array(z.string().min(1)).optional(),
   spec: z.string().optional(),
 });
+
+const CLARIFY_MAX_FILES = 10;
+const CLARIFY_MAX_PER_FILE = 8000;
+const CLARIFY_MAX_TOTAL = 48000;
 
 function safeParseJson(raw: string): unknown | null {
   const cleaned = raw
@@ -27,6 +42,112 @@ function safeParseJson(raw: string): unknown | null {
   } catch {
     return null;
   }
+}
+
+function pickPathsForClarifyContext(paths: string[], maxFiles: number): string[] {
+  const ordered: string[] = [];
+  const used = new Set<string>();
+  const pushMatch = (pred: (p: string) => boolean) => {
+    for (const p of paths) {
+      if (ordered.length >= maxFiles) return;
+      if (!used.has(p) && pred(p)) {
+        used.add(p);
+        ordered.push(p);
+      }
+    }
+  };
+
+  const skip = (p: string) =>
+    p.includes('node_modules') || p.startsWith('dist/') || /\.lock$/i.test(p);
+
+  const usable = paths.filter((p) => !skip(p));
+  pushMatch((p) => p === 'server.js' || p.endsWith('/server.js'));
+  pushMatch((p) => /(^|\/)src\/App\.(tsx|jsx)$/.test(p));
+  pushMatch((p) => /(^|\/)src\/main\.(tsx|jsx)$/.test(p));
+  pushMatch((p) => /(^|\/)src\/(index|router)\.(tsx|jsx|ts|js)$/.test(p));
+  pushMatch((p) => /(^|\/)src\/theme/.test(p));
+  pushMatch((p) => /(^|\/)src\/pages\//.test(p));
+  pushMatch((p) => /(^|\/)src\/components\//.test(p));
+  for (const p of usable) {
+    if (ordered.length >= maxFiles) break;
+    if (!used.has(p)) {
+      used.add(p);
+      ordered.push(p);
+    }
+  }
+  return ordered.slice(0, maxFiles);
+}
+
+function buildClarifyFileContext(fileContents: Record<string, string>, paths: string[]): string {
+  const picked = pickPathsForClarifyContext(paths, CLARIFY_MAX_FILES);
+  let budget = CLARIFY_MAX_TOTAL;
+  const parts: string[] = [];
+  for (const p of picked) {
+    const raw = fileContents[p];
+    if (typeof raw !== 'string') continue;
+    const clipped =
+      raw.length > CLARIFY_MAX_PER_FILE
+        ? `${raw.slice(0, CLARIFY_MAX_PER_FILE)}\n\n/* ... truncated ... */\n`
+        : raw;
+    const block = `=== ${p} ===\n${clipped}`;
+    if (block.length > budget) {
+      if (budget < 400) break;
+      parts.push(`${block.slice(0, budget - 120)}\n\n/* ... truncated ... */\n`);
+      break;
+    }
+    parts.push(block);
+    budget -= block.length + 2;
+  }
+  return parts.join('\n\n');
+}
+
+function lastUserContent(conversation: ChatMessage[]): string {
+  return [...conversation].reverse().find((m) => m.role === 'user')?.content?.trim() ?? '';
+}
+
+function isBoilerplateBullet(s: string): boolean {
+  const x = s.toLowerCase();
+  return (
+    x.includes('implement the requested') ||
+    x.includes('keep existing styles') ||
+    x.includes('prefer minimal edits') ||
+    x.includes('ensure build passes') ||
+    x.includes('update only the necessary') ||
+    x.includes('ui remains consistent') ||
+    x.includes('assumptions:') ||
+    x.includes('use best judgement') ||
+    x.includes('do not ask more questions') ||
+    x.includes('запазваме стила') ||
+    x.includes('минимални промени') ||
+    x.includes('без да чупим останалата функционалност')
+  );
+}
+
+/** Fallback when the model omits planBulletsBg: split summary into readable lines. */
+function friendlyPlanBulletsFromSummary(text: string): string[] {
+  const t = text.replace(/\s+/g, ' ').trim();
+  if (!t) return [];
+  const bySentence = t
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 10);
+  if (bySentence.length >= 2) return bySentence.slice(0, 8);
+  const byComma = t
+    .split(/[,;]\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 10);
+  if (byComma.length >= 2) return byComma.slice(0, 8);
+  return [t];
+}
+
+function normalizePlanBulletsBg(raw: string[] | undefined, summary: string, summaryAlt?: string): string[] {
+  const fromModel = (raw ?? []).map((s) => s.trim()).filter(Boolean).filter((s) => !isBoilerplateBullet(s));
+  if (fromModel.length >= 1) return fromModel.slice(0, 8);
+  const fromSummary = friendlyPlanBulletsFromSummary(summary);
+  if (fromSummary.length >= 1) return fromSummary;
+  const alt = (summaryAlt ?? '').trim();
+  if (alt) return friendlyPlanBulletsFromSummary(alt);
+  return [];
 }
 
 export async function clarifyIteration(
@@ -43,83 +164,124 @@ export async function clarifyIteration(
 
   const planData = session.plan.data as Record<string, unknown>;
   const projectFiles = Object.keys((session.project.files as Record<string, string>) ?? {});
-  // We only want to cap *clarifying questions*, not any assistant message (e.g. summaries, confirmations).
-  const alreadyAskedAQuestion = conversation.some(
-    (m) => m.role === 'assistant' && /[?？]\s*$/.test(m.content.trim()),
-  );
+  const fileRecord = (session.project.files as Record<string, string>) ?? {};
+  const priorAssistantTurns = conversation.filter((m) => m.role === 'assistant').length;
+  const fileContext = buildClarifyFileContext(fileRecord, projectFiles);
+
+  const mandatoryNoMoreQuestions =
+    priorAssistantTurns >= 1
+      ? `
+ЗАДЪЛЖИТЕЛНО за този ход:
+- В този разговор вече има поне едно съобщение от асистента към потребителя.
+- Върни САМО валиден JSON с "ready": true, "summary", "planBulletsBg" и "spec".
+- Забранено е "ready": false или поле "question".
+- Направи разумни допускания; включи пълна техническа spec на английски с точни пътища към файлове от проекта.
+`
+      : '';
 
   const system = `
 Ти си старши full‑stack инженер и продуктов човек. Потребителят иска да направи "подобрение" на вече генерираното приложение.
 
-ВЪТРЕШЕН КОНТЕКСТ (само за теб — не го споменавай пред потребителя):
-- План: ${JSON.stringify(planData)}
-- Файлове в проекта: ${projectFiles.join(', ')}
+ВЪТРЕШЕН КОНТЕКСТ (не го цитирай дословно в полетата summary/question за потребителя):
+- План (JSON): ${JSON.stringify(planData)}
+- Налични пътища (за spec): ${projectFiles.join(', ')}
 
-Цел: изясни изискванията на продуктово ниво, после генерирай техническа спецификация за инженер.
+СЪДЪРЖАНИЕ НА ИЗБРАНИ ФАЙЛОВЕ (за разбиране на кода; в summary/question НЕ споменавай пътища, имена на файлове, .tsx/.jsx, "src/"):
+${fileContext || '(няма налично съдържание)'}
 
-Правила за въпросите (question):
-- Питай само за ПРОДУКТОВО поведение: "Какво да се случи след клик?", "Само за влезли потребители ли?", "Какъв текст?"
-- НИКОГА не споменавай файлове, компоненти или технически термини пред потребителя.
-- Задавай само 1 кратък въпрос наведнъж.
-- Ако заявката е достатъчно ясна (напр. "смени цвета на бутона в хедъра"), отговори веднага с ready: true.
-- Ако вече си задал поне 1 въпрос в този разговор, НЕ задавай повече въпроси. Върни ready: true и направи разумни допускания.
+Цел: почти винаги директно готова spec; само при крайна неяснота — един кратък продуктов въпрос (и само ако още няма съобщение от асистента в този thread).
 
-Правила за спецификацията (spec):
-- Пиши на английски, за Claude Sonnet, който ще изпълни задачата.
-- Включи точни имена на файлове от списъка по-горе.
-- 4-8 конкретни bullets — какво точно да се промени.
+Правила за потребителския текст (summary и question):
+- Пиши на български, без технически жаргон, без имена на файлове и без пътища.
+
+Правила за planBulletsBg (само при ready: true):
+- Масив от 3–6 кратки реда на български: какво точно ще се промени за крайния потребител на сайта/приложението.
+- Всеки ред = конкретно видимо действие или резултат (напр. „Бутонът „Купи“ в хедъра става зелен и по-широк“).
+- Забранени са общи фрази от типа „ще приложим заявката“, „минимални промени“, „запазваме стила“ — вместо това опиши РЕЗУЛТАТА.
+- Без английски, без пътища, без имена на файлове, без код.
+
+Правила за въпроси:
+- Ако вече има поне едно assistant съобщение в историята на разговора, НЕ задавай въпрос — винаги ready: true (виж ЗАДЪЛЖИТЕЛНО по-долу ако е приложимо).
+- Иначе: най-много един въпрос за целия чат; питай само за продуктово поведение.
+- При ясни заявки ("смени цвета на бутона", "добави поле") — веднага ready: true с разумни допускания.
+
+Правила за spec (английски, за кодовия модел):
+- 4–8 конкретни bullets; включи точни пътища от проекта където е нужно.
+- Минимален обхват; без големи рефакторинги.
 
 ВЪРНИ САМО JSON (без markdown):
-1) Ако НЕ е готово: { "ready": false, "question": "<въпрос на български, без технически детайли>" }
-2) Ако Е готово:    { "ready": true, "summary": "<1-2 изречения на български за потребителя>", "spec": "<технически bullets на английски с имена на файлове>" }
+1) Ако НЕ е готово и още няма assistant съобщение в този thread: { "ready": false, "question": "<български, без технически детайли>" }
+2) Ако е готово: { "ready": true, "summary": "<1–2 изречения на български>", "planBulletsBg": ["<конкретна промяна>", "..."], "spec": "<технически bullets на английски>" }
+${mandatoryNoMoreQuestions}
 `;
 
-  const ai = getChatClient();
-  const raw = await ai.complete(conversation, system, { maxTokens: 400 });
+  const ai = getIterateAssistClient();
+  const raw = await ai.complete(conversation, system, { maxTokens: priorAssistantTurns >= 1 ? 1800 : 1400 });
   const parsed = safeParseJson(raw);
   const data = parsed ? RESULT_SCHEMA.safeParse(parsed) : null;
 
-  if (!data?.success) {
-    // Fallback: one question max; otherwise proceed with best-effort spec.
-    if (!alreadyAskedAQuestion) {
-      return {
-        kind: 'question',
-        message: 'Къде точно в приложението да е промяната (коя страница/екран) и какво трябва да се случва?',
-      };
-    }
-    const lastUser = [...conversation].reverse().find((m) => m.role === 'user')?.content?.trim() ?? '';
+  async function readyFromScopeFallback(
+    summary: string,
+    refinedSpec: string,
+    specPrefix: string,
+    userMessageBg?: string,
+  ): Promise<IterateClarifyResult> {
     const scoped = await scopeIteration({
       plan: planData,
       filePaths: projectFiles,
-      refinedSpec: lastUser || 'Apply the requested change using best judgement.',
+      refinedSpec,
       maxFiles: 8,
     });
-    const fallbackSpec =
-      `Assumptions: Use best judgement; do not ask more questions.\n` +
-      `- Implement the requested change described by the user.\n` +
-      `- Keep existing styles and flows unless explicitly requested.\n` +
-      `- Prefer minimal edits; update only the necessary files.\n` +
-      `- Ensure build passes and UI remains consistent.\n`;
+    const spec =
+      `${specPrefix}\nTarget files (edit only as needed):\n${scoped.targetFiles.map((f) => `- ${f}`).join('\n')}`;
+    const alt = [scoped.summaryBg, userMessageBg].filter(Boolean).join(' ').trim();
+    let planBulletsBg = normalizePlanBulletsBg(undefined, summary, alt || undefined);
+    if (planBulletsBg.length === 0) {
+      planBulletsBg = [summary || scoped.summaryBg || 'Ще приложа описаната от теб промяна в приложението.'];
+    }
     return {
       kind: 'ready',
-      summary: 'Ок — ще го направя по най-разумния начин на база описанието ти.',
-      spec: `${fallbackSpec}\nTarget files (edit only as needed):\n${scoped.targetFiles.map((f) => `- ${f}`).join('\n')}`,
+      summary,
+      planBulletsBg,
+      spec,
       targetFiles: scoped.targetFiles,
       nonGoals: scoped.nonGoalsBg,
     };
   }
 
+  if (!data?.success) {
+    if (priorAssistantTurns >= 1) {
+      const lastUser = lastUserContent(conversation);
+      return readyFromScopeFallback(
+        'Ок — ще го направя по най-разумния начин на база описанието ти.',
+        lastUser || 'Apply the requested change using best judgement.',
+        `Assumptions: Use best judgement; do not ask more questions.\n` +
+          `- Implement the requested change described by the user.\n` +
+          `- Keep existing styles and flows unless explicitly requested.\n` +
+          `- Prefer minimal edits; update only the necessary files.\n` +
+          `- Ensure build passes and UI remains consistent.\n`,
+        lastUser || undefined,
+      );
+    }
+    return {
+      kind: 'question',
+      message: 'Къде точно в приложението да е промяната (коя страница/екран) и какво трябва да се случва?',
+    };
+  }
+
   const v = data.data;
   if (!v.ready) {
-    const q = (v.question ?? '').trim();
-    if (!alreadyAskedAQuestion) {
-      return { kind: 'question', message: q || 'Можеш ли да уточниш какво точно трябва да се промени и къде?' };
+    if (priorAssistantTurns === 0) {
+      const q = (v.question ?? '').trim();
+      return {
+        kind: 'question',
+        message: q || 'Можеш ли да уточниш какво точно трябва да се промени и къде?',
+      };
     }
 
-    // Hard stop: do not get stuck in clarification loops. Re-ask the model to produce a ready spec now.
-    const forceSystem = `${system}\n\nIMPORTANT: You have already asked a question in this conversation. Return ready:true now (no more questions).`;
+    const forceSystem = `${system}\n\nIMPORTANT: You MUST return ready:true with summary, planBulletsBg (3–6 concrete Bulgarian bullets for the end user), and spec. No questions.`;
     try {
-      const forcedRaw = await ai.complete(conversation, forceSystem, { maxTokens: 500 });
+      const forcedRaw = await ai.complete(conversation, forceSystem, { maxTokens: 2000 });
       const forcedParsed = safeParseJson(forcedRaw);
       const forcedData = forcedParsed ? RESULT_SCHEMA.safeParse(forcedParsed) : null;
       if (forcedData?.success && forcedData.data.ready && (forcedData.data.spec ?? '').trim()) {
@@ -131,9 +293,13 @@ export async function clarifyIteration(
           refinedSpec: spec,
           maxFiles: 8,
         });
+        const sum = summary || scoped.summaryBg || 'Ок — имам яснота какво да направя.';
+        let planBulletsBg = normalizePlanBulletsBg(forcedData.data.planBulletsBg, sum, scoped.summaryBg);
+        if (planBulletsBg.length === 0) planBulletsBg = [sum];
         return {
           kind: 'ready',
-          summary: summary || scoped.summaryBg || 'Ок — имам яснота какво да направя.',
+          summary: sum,
+          planBulletsBg,
           spec,
           targetFiles: scoped.targetFiles,
           nonGoals: scoped.nonGoalsBg,
@@ -143,32 +309,37 @@ export async function clarifyIteration(
       /* ignore */
     }
 
-    const lastUser = [...conversation].reverse().find((m) => m.role === 'user')?.content?.trim() ?? '';
-    const scoped = await scopeIteration({
-      plan: planData,
-      filePaths: projectFiles,
-      refinedSpec: lastUser || 'Apply the requested change using best judgement.',
-      maxFiles: 8,
-    });
-    const fallbackSpec =
+    const lastUser = lastUserContent(conversation);
+    return readyFromScopeFallback(
+      'Ок — продължавам с промяната по най-доброто тълкуване на заявката.',
+      lastUser || 'Apply the requested change using best judgement.',
       `Assumptions: User did not provide more details; proceed with best judgement.\n` +
-      `- Implement the requested change.\n` +
-      `- Keep scope minimal; avoid broad refactors.\n` +
-      `- Preserve existing UX and styling unless asked.\n` +
-      `- Ensure build passes.\n`;
-    return {
-      kind: 'ready',
-      summary: 'Ок — продължавам с промяната по най-доброто тълкуване на заявката.',
-      spec: `${fallbackSpec}\nTarget files (edit only as needed):\n${scoped.targetFiles.map((f) => `- ${f}`).join('\n')}`,
-      targetFiles: scoped.targetFiles,
-      nonGoals: scoped.nonGoalsBg,
-    };
+        `- Implement the requested change.\n` +
+        `- Keep scope minimal; avoid broad refactors.\n` +
+        `- Preserve existing UX and styling unless asked.\n` +
+        `- Ensure build passes.\n`,
+      lastUser || undefined,
+    );
   }
 
   const summary = (v.summary ?? '').trim();
   const spec = (v.spec ?? '').trim();
   if (!spec) {
-    return { kind: 'question', message: 'Ок — можеш ли да уточниш още малко (какво точно поведение/правила), за да го направя точно?' };
+    if (priorAssistantTurns >= 1) {
+      const lastUser = lastUserContent(conversation);
+      return readyFromScopeFallback(
+        summary || 'Ок — имам яснота какво да направя.',
+        lastUser || 'Apply the requested change using best judgement.',
+        `Assumptions: Proceed from user message; minimal change.\n` +
+          `- Implement what the user asked.\n` +
+          `- Keep scope small.\n`,
+        lastUser || undefined,
+      );
+    }
+    return {
+      kind: 'question',
+      message: 'Ок — можеш ли да уточниш още малко (какво точно поведение/правила), за да го направя точно?',
+    };
   }
 
   const scoped = await scopeIteration({
@@ -178,8 +349,6 @@ export async function clarifyIteration(
     maxFiles: 8,
   });
 
-  // Optional extra exploration step (Cursor-like): open a few files and refine the target list.
-  // This does NOT change what we show the user (still a file list), it only improves context for Claude later.
   let explorerTargetFiles: string[] | null = null;
   let explorerContextNotes: string | null = null;
   try {
@@ -187,7 +356,7 @@ export async function clarifyIteration(
       plan: planData,
       refinedSpec: spec,
       filePaths: projectFiles,
-      fileContents: (session.project.files as Record<string, string>) ?? {},
+      fileContents: fileRecord,
       maxOpens: 6,
       maxTurns: 4,
     });
@@ -197,13 +366,17 @@ export async function clarifyIteration(
     /* ignore exploration failures */
   }
 
+  const sum = summary || scoped.summaryBg || 'Ок — имам яснота какво да направя.';
+  let planBulletsBg = normalizePlanBulletsBg(v.planBulletsBg, sum, scoped.summaryBg);
+  if (planBulletsBg.length === 0) planBulletsBg = [sum];
+
   return {
     kind: 'ready',
-    summary: summary || scoped.summaryBg || 'Ок — имам яснота какво да направя.',
+    summary: sum,
+    planBulletsBg,
     spec,
     targetFiles: explorerTargetFiles && explorerTargetFiles.length > 0 ? explorerTargetFiles : scoped.targetFiles,
     nonGoals: scoped.nonGoalsBg,
     ...(explorerContextNotes ? { explorerContextNotes } : {}),
   };
 }
-

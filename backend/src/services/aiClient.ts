@@ -72,7 +72,11 @@ class OpenAIProvider implements AIProvider {
     apiKey: process.env.OPENAI_API_KEY,
     timeout: parseInt(process.env.OPENAI_TIMEOUT_MS ?? '600000', 10),
   });
-  private model = 'gpt-4o';
+  private model: string;
+
+  constructor(model?: string) {
+    this.model = model ?? 'gpt-4o';
+  }
 
   async complete(messages: ChatMessage[], system: string, options?: CompleteOptions): Promise<string> {
     const maxTokens = options?.maxTokens ?? parseInt(process.env.OPENAI_MAX_OUTPUT_TOKENS ?? '8192', 10);
@@ -109,11 +113,24 @@ class OpenAIProvider implements AIProvider {
 // GPT-4o for conversational planning — fast and cost-effective
 const chatClient = new OpenAIProvider();
 
+/**
+ * Stronger OpenAI model for iteration clarify / scope / file exploration.
+ * Override with OPENAI_ITERATE_MODEL (e.g. gpt-4.1, gpt-4o).
+ */
+const iterateAssistClient = new OpenAIProvider(
+  process.env.OPENAI_ITERATE_MODEL?.trim() || 'gpt-4.1',
+);
+
 // Claude Opus for code generation, fixing, and iteration — higher quality by default
 const codeClient = new ClaudeProvider();
 
 export function getChatClient(): AIProvider {
   return chatClient;
+}
+
+/** OpenAI calls used only in the improvement pipeline (clarify, scope, explore). */
+export function getIterateAssistClient(): AIProvider {
+  return iterateAssistClient;
 }
 
 export function getCodeClient(): AIProvider {

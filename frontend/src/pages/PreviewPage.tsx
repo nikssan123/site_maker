@@ -37,6 +37,7 @@ import IterationBar from '../components/IterationBar';
 import ProjectCheckout from '../components/UpgradeGate';
 import PaymentsSetupDialog from '../components/PaymentsSetupDialog';
 import MessageBubble from '../components/MessageBubble';
+import IterationPlanCard from '../components/IterationPlanCard';
 
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
@@ -44,6 +45,34 @@ import { useProjectStore } from '../store/project';
 import HostingPanel from '../components/HostingPanel';
 
 const DRAWER_WIDTH = 400;
+
+/** What we store in iteration history / session — not the English codegen spec. */
+function buildUserFacingIterationLogMessage(
+  summary: string,
+  planBulletsBg: string[],
+  specFallback: string,
+): string {
+  const lines = [summary.trim(), ...planBulletsBg.map((b) => b.trim()).filter(Boolean)].filter(
+    (s) => s.length > 0,
+  );
+  const text = lines.join('\n');
+  if (text.length > 0) return text.slice(0, 4000);
+  return specFallback.trim().slice(0, 800);
+}
+
+/** Older logs stored the raw internal spec in title/description — hide in the UI. */
+function looksLikeInternalIterationSpec(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  return (
+    /^assumptions:/i.test(t) ||
+    /target files \(edit only/i.test(t) ||
+    /implement the requested change described by the user/i.test(t) ||
+    /keep existing styles and flows unless explicitly requested/i.test(t) ||
+    /prefer minimal edits/i.test(t) ||
+    /ensure build passes and ui remains consistent/i.test(t)
+  );
+}
 
 interface ActionButtonProps {
   icon: React.ReactNode;
@@ -113,7 +142,13 @@ export default function PreviewPage() {
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [drawerMode, setDrawerMode] = useState<'improvements' | 'catalog' | 'booking_slots' | 'inquiries' | 'blog' | 'dashboard' | 'hosting'>('improvements');
   const [iterateChat, setIterateChat] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
-  const [pendingIterate, setPendingIterate] = useState<null | { spec: string; targetFiles: string[]; explorerContextNotes?: string }>(null);
+  const [pendingIterate, setPendingIterate] = useState<null | {
+    summary: string;
+    planBulletsBg: string[];
+    spec: string;
+    targetFiles: string[];
+    explorerContextNotes?: string;
+  }>(null);
   const [iterationHistory, setIterationHistory] = useState<Array<{ id: string; title: string | null; description: string | null; createdAt: string }>>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [paymentsOpen, setPaymentsOpen] = useState(
@@ -317,63 +352,85 @@ export default function PreviewPage() {
     fetchHistory();
   }, [projectId, drawerOpen, drawerMode, fetchHistory]);
 
+  const confirmIterationPlan = () => {
+    if (!store.sessionId || !pendingIterate) return;
+    if (!store.projectPaid && !store.allowUnpaidDownload) {
+      setCheckoutReason('');
+      setCheckoutOpen(true);
+      return;
+    }
+    const snapshot = pendingIterate;
+    setIterating(true);
+    useProjectStore.setState({ fixAttempts: [] });
+    store.setGenerationFriendlyMessage(t('preview.applyingChanges'));
+    store.generationSteps.forEach((s) =>
+      store.updateStep({ step: s.step, label: s.label, status: 'pending' }),
+    );
+
+    const userFacingMessage = buildUserFacingIterationLogMessage(
+      snapshot.summary,
+      snapshot.planBulletsBg,
+      snapshot.spec,
+    );
+
+    api.streamEvents(
+      '/iterate',
+      {
+        sessionId: store.sessionId,
+        message: userFacingMessage,
+        spec: snapshot.spec,
+        targetFiles: snapshot.targetFiles,
+        explorerContextNotes: snapshot.explorerContextNotes,
+      },
+      (event: any) => {
+        if (event.step) store.updateStep({ step: event.step, label: event.label, status: event.status });
+        if (event.type === 'user_progress' && typeof event.message === 'string') {
+          store.setGenerationFriendlyMessage(event.message);
+        }
+        if (event.type === 'fix_attempt') store.addFixAttempt({ attempt: event.attempt, error: event.error });
+        if (event.type === 'preview_updated') {
+          store.setRunPort(event.port);
+          setRefreshKey((k) => k + 1);
+          loadProject().catch(() => {});
+          fetchHistory();
+          setIterateChat((prev) => [...prev, { role: 'assistant', content: t('preview.changesApplied') }]);
+        }
+        if (event.type === 'fatal') {
+          store.setGenerationFriendlyMessage('');
+          setIterateChat((prev) => [...prev, { role: 'assistant', content: t('preview.iterationFailed', { msg: event.message }) }]);
+        }
+      },
+      () => {
+        store.setGenerationFriendlyMessage('');
+        setIterating(false);
+        setPendingIterate(null);
+      },
+    );
+  };
+
   const handleIterate = async (message: string) => {
     if (!store.sessionId) return;
     const text = message.trim();
     if (!text) return;
 
-    setIterateChat((prev) => [...prev, { role: 'user', content: text }]);
-
-    // If we already have a prepared scoped spec, a short confirmation applies it.
-    if (pendingIterate && /^(да|ок|окей|okay|ok|yes|y|приложи|давай|действай)\b/i.test(text)) {
-      setIterating(true);
-      useProjectStore.setState({ fixAttempts: [] });
-      store.setGenerationFriendlyMessage(t('preview.applyingChanges'));
-      store.generationSteps.forEach((s) =>
-        store.updateStep({ step: s.step, label: s.label, status: 'pending' }),
-      );
-
-      api.streamEvents(
-        '/iterate',
-        {
-          sessionId: store.sessionId,
-          message: pendingIterate.spec,
-          spec: pendingIterate.spec,
-          targetFiles: pendingIterate.targetFiles,
-          explorerContextNotes: pendingIterate.explorerContextNotes,
-        },
-        (event: any) => {
-          if (event.step) store.updateStep({ step: event.step, label: event.label, status: event.status });
-          if (event.type === 'user_progress' && typeof event.message === 'string') {
-            store.setGenerationFriendlyMessage(event.message);
-          }
-          if (event.type === 'fix_attempt') store.addFixAttempt({ attempt: event.attempt, error: event.error });
-          if (event.type === 'preview_updated') {
-            store.setRunPort(event.port);
-            setRefreshKey((k) => k + 1);
-            loadProject().catch(() => {});
-            fetchHistory();
-            setIterateChat((prev) => [...prev, { role: 'assistant', content: t('preview.changesApplied') }]);
-          }
-          if (event.type === 'fatal') {
-            store.setGenerationFriendlyMessage('');
-            setIterateChat((prev) => [...prev, { role: 'assistant', content: t('preview.iterationFailed', { msg: event.message }) }]);
-          }
-        },
-        () => {
-          store.setGenerationFriendlyMessage('');
-          setIterating(false);
-          setPendingIterate(null);
-        },
-      );
-      return;
+    if (pendingIterate) {
+      setPendingIterate(null);
     }
 
-    // Otherwise: clarify first, then present scope + ask for confirmation.
+    setIterateChat((prev) => [...prev, { role: 'user', content: text }]);
+
     try {
       const res = await api.post<
         | { kind: 'question'; message: string }
-        | { kind: 'ready'; summary: string; spec: string; targetFiles: string[]; nonGoals: string[]; explorerContextNotes?: string }
+        | {
+            kind: 'ready';
+            summary: string;
+            planBulletsBg: string[];
+            spec: string;
+            targetFiles: string[];
+            nonGoals: string[];
+            explorerContextNotes?: string;
+          }
       >(
         '/iterate/clarify',
         { sessionId: store.sessionId, messages: [...iterateChat, { role: 'user', content: text }] },
@@ -384,16 +441,23 @@ export default function PreviewPage() {
         return;
       }
 
-      const files = (res.targetFiles ?? []).map((f) => `- ${f}`).join('\n');
-      const nonGoals = (res.nonGoals ?? []).map((s) => `- ${s}`).join('\n');
-      const msg =
-        `${res.summary}\n\n` +
-        `Ще пипна само тези файлове:\n${files || '- (няма)'}\n\n` +
-        (nonGoals ? `Няма да правя:\n${nonGoals}\n\n` : '') +
-        `Ако е ок, напиши \"да\" и ще приложа промяната.`;
+      const summaryText = res.summary ?? '';
+      const fromApi = Array.isArray(res.planBulletsBg) ? res.planBulletsBg.filter((s) => s.trim()) : [];
+      const planBulletsBg =
+        fromApi.length > 0
+          ? fromApi
+          : summaryText
+              .split(/(?<=[.!?])\s+/)
+              .map((s) => s.trim())
+              .filter((s) => s.length > 12);
 
-      setIterateChat((prev) => [...prev, { role: 'assistant', content: msg }]);
-      setPendingIterate({ spec: res.spec, targetFiles: res.targetFiles ?? [], explorerContextNotes: res.explorerContextNotes });
+      setPendingIterate({
+        summary: summaryText,
+        planBulletsBg,
+        spec: res.spec,
+        targetFiles: res.targetFiles ?? [],
+        explorerContextNotes: res.explorerContextNotes,
+      });
       return;
     } catch {
       setIterateChat((prev) => [...prev, { role: 'assistant', content: 'Можеш ли да уточниш какво точно да се промени и къде? (Ще задам 1 кратък въпрос и после ще го приложа.)' }]);
@@ -853,6 +917,17 @@ export default function PreviewPage() {
                     <MessageBubble key={idx} role={m.role} content={m.content} />
                   ))}
 
+                  {pendingIterate && (
+                    <IterationPlanCard
+                      summary={pendingIterate.summary}
+                      planBulletsBg={pendingIterate.planBulletsBg}
+                      loading={iterating}
+                      showUnlockHint={!projectPaid && !allowUnpaidDownload}
+                      onConfirm={confirmIterationPlan}
+                      onEdit={() => setPendingIterate(null)}
+                    />
+                  )}
+
                   {iterating && (
                     <MessageBubble
                       role="assistant"
@@ -901,11 +976,19 @@ export default function PreviewPage() {
                       </Box>
                       <Collapse in={historyOpen}>
                         <List dense disablePadding sx={{ mt: 0.5 }}>
-                          {iterationHistory.map((entry, i) => (
+                          {iterationHistory.map((entry, i) => {
+                            const titleRaw = entry.title?.trim() ?? '';
+                            const descRaw = entry.description?.trim() ?? '';
+                            const titleBad = titleRaw && looksLikeInternalIterationSpec(titleRaw);
+                            const descBad = descRaw && looksLikeInternalIterationSpec(descRaw);
+                            const displayTitle =
+                              titleBad || !titleRaw ? t('preview.historyUntitled') : titleRaw;
+                            const displayDesc = !descBad && descRaw ? descRaw : null;
+                            return (
                             <Box key={entry.id}>
                               <ListItem sx={{ px: 0.5, py: 0.75, alignItems: 'flex-start' }}>
                                 <ListItemText
-                                  primary={entry.title ?? t('preview.historyUntitled')}
+                                  primary={displayTitle}
                                   secondary={(
                                     <Box component="span" sx={{ display: 'block' }}>
                                       <Typography
@@ -920,7 +1003,7 @@ export default function PreviewPage() {
                                           minute: '2-digit',
                                         })}
                                       </Typography>
-                                      {entry.description ? (
+                                      {displayDesc ? (
                                         <Typography
                                           component="span"
                                           variant="caption"
@@ -933,7 +1016,7 @@ export default function PreviewPage() {
                                             lineHeight: 1.35,
                                           }}
                                         >
-                                          {entry.description}
+                                          {displayDesc}
                                         </Typography>
                                       ) : null}
                                     </Box>
@@ -944,7 +1027,8 @@ export default function PreviewPage() {
                               </ListItem>
                               {i < iterationHistory.length - 1 && <Divider sx={{ opacity: 0.4 }} />}
                             </Box>
-                          ))}
+                            );
+                          })}
                         </List>
                       </Collapse>
                     </Box>
