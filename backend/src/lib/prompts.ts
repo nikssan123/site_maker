@@ -203,6 +203,9 @@ FRONTEND (always):
   - NEVER use window.location.pathname / location.href / hard-coded path strings to decide what page you're on or when to load data.
   - Use React Router hooks (useLocation, useParams, useMatch) to determine the active route.
   - Any "load on homepage" logic must work regardless of BASE_URL being "/" or "/preview-app/<id>/". Do not gate fetches on pathname === "/".
+  - MUST include a catch-all route so the app never renders an empty main area on an unknown path:
+    - <Route path="*" element={<Navigate to="/" replace />} /> (or render the Home page directly)
+    - Do NOT leave the main content blank on first load.
 
 BACKEND (only when hasDatabase is true):
 - server.js at project root, CommonJS (require())
