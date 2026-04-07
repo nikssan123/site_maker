@@ -10,9 +10,6 @@ import {
 import { alpha, keyframes } from '@mui/material/styles';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import CloudIcon from '@mui/icons-material/Cloud';
-import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import type { FC, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -45,7 +42,7 @@ export type PricingTableProps = {
   reveal?: PricingRevealOptions;
 };
 
-type PlanTone = 'generate' | 'host' | 'iterate';
+type PlanTone = 'generate' | 'host';
 
 const PricingTable: FC<PricingTableProps> = ({ reveal }) => {
   const { t } = useTranslation();
@@ -60,47 +57,32 @@ const PricingTable: FC<PricingTableProps> = ({ reveal }) => {
     description: string;
     features: string[];
   }> = [
-      {
-        tone: 'generate',
-        icon: <RocketLaunchIcon sx={{ fontSize: 26, color: 'primary.light' }} />,
-        title: t('pricing.generateTitle'),
-        price: t('pricing.generatePrice'),
-        period: t('pricing.generatePeriod'),
-        description: t('pricing.generateDesc'),
-        features: [
-          t('pricing.featMultiPage'),
-          t('pricing.featPreview'),
-          t('pricing.featZip')
-        ],
-      },
-      {
-        tone: 'host',
-        featured: true,
-        icon: <CloudIcon sx={{ fontSize: 26, color: 'secondary.light' }} />,
-        title: t('pricing.hostTitle'),
-        price: t('pricing.hostPrice'),
-        period: t('pricing.hostPeriod'),
-        description: t('pricing.hostDesc'),
-        features: [
-          t('pricing.featHosting'),
-          t('pricing.featPublicUrl'),
-          t('pricing.featCancel'),
-        ],
-      },
-      {
-        tone: 'iterate',
-        icon: <ChatBubbleOutlineIcon sx={{ fontSize: 26, color: '#a5b4fc' }} />,
-        title: t('pricing.iterateTitle'),
-        price: t('pricing.iteratePrice'),
-        period: t('pricing.iteratePeriod'),
-        description: t('pricing.iterateDesc'),
-        features: [
-          t('pricing.featIterateChat'),
-          t('pricing.featIterateCredits'),
-          t('pricing.featIterateBundle'),
-        ],
-      },
-    ];
+    {
+      tone: 'generate',
+      icon: <RocketLaunchIcon sx={{ fontSize: 26, color: 'primary.light' }} />,
+      title: t('pricing.generateTitle'),
+      price: t('pricing.generatePrice'),
+      period: t('pricing.generatePeriod'),
+      description: t('pricing.generateDesc'),
+      features: [t('pricing.featGenerate1'), t('pricing.featGenerate2'), t('pricing.featGenerate3')],
+    },
+    {
+      tone: 'host',
+      featured: true,
+      icon: <CloudIcon sx={{ fontSize: 26, color: 'secondary.light' }} />,
+      title: t('pricing.hostTitle'),
+      price: t('pricing.hostPrice'),
+      period: t('pricing.hostPeriod'),
+      description: t('pricing.hostDesc'),
+      features: [
+        t('pricing.featHost1'),
+        t('pricing.featHost2'),
+        t('pricing.featHost3'),
+        t('pricing.featHost4'),
+        t('pricing.featHost5'),
+      ],
+    },
+  ];
 
   const accentForTone = (tone: PlanTone, featured: boolean) => {
     if (tone === 'host' && featured) {
@@ -113,27 +95,17 @@ const PricingTable: FC<PricingTableProps> = ({ reveal }) => {
         boxShadow: `0 20px 56px ${alpha('#10b981', 0.12)}, 0 0 0 1px ${alpha('#fff', 0.06)} inset`,
       };
     }
-    if (tone === 'generate') {
-      return {
-        border: `1px solid ${alpha('#fff', 0.08)}`,
-        borderTop: '3px solid',
-        borderTopColor: 'primary.main',
-        bgcolor: alpha('#6366f1', 0.04),
-        boxShadow: `0 16px 48px rgba(0,0,0,0.28)`,
-      };
-    }
     return {
       border: `1px solid ${alpha('#fff', 0.08)}`,
       borderTop: '3px solid',
-      borderTopColor: '#818cf8',
-      bgcolor: alpha('#818cf8', 0.05),
+      borderTopColor: 'primary.main',
+      bgcolor: alpha('#6366f1', 0.04),
       boxShadow: `0 16px 48px rgba(0,0,0,0.28)`,
     };
   };
 
   const checkColor = (tone: PlanTone) => {
     if (tone === 'host') return 'secondary.light' as const;
-    if (tone === 'iterate') return '#a5b4fc';
     return 'primary.light' as const;
   };
 
@@ -157,18 +129,26 @@ const PricingTable: FC<PricingTableProps> = ({ reveal }) => {
       >
         {t('pricing.subtitle')}
       </Typography>
-      <Stack direction="row" justifyContent="center" gap={1} mb={5} sx={pricingRevealSx(reveal, 0.12)}>
-        <Chip icon={<VisibilityIcon />} label={t('pricing.chipFree')} size="small" variant="outlined" />
+      <Stack
+        direction="row"
+        justifyContent="center"
+        gap={1}
+        flexWrap="wrap"
+        mb={5}
+        sx={pricingRevealSx(reveal, 0.12)}
+      >
+        <Chip label={t('pricing.chipFree')} size="small" color="primary" variant="outlined" sx={{ fontWeight: 600 }} />
+        <Chip label={t('pricing.chipPlan')} size="small" color="secondary" variant="outlined" sx={{ fontWeight: 600 }} />
       </Stack>
 
       <Grid
         container
         spacing={3}
         justifyContent="center"
-        sx={{ maxWidth: { xs: '100%', md: 1180 }, mx: 'auto', px: { xs: 0, sm: 1 } }}
+        sx={{ maxWidth: { xs: '100%', md: 960 }, mx: 'auto', px: { xs: 0, sm: 1 } }}
       >
         {items.map((item, i) => (
-          <Grid item xs={12} md={4} key={item.title}>
+          <Grid item xs={12} md={6} key={item.title}>
             <Paper
               elevation={0}
               sx={{
@@ -218,16 +198,12 @@ const PricingTable: FC<PricingTableProps> = ({ reveal }) => {
                   bgcolor:
                     item.tone === 'host'
                       ? alpha('#10b981', 0.12)
-                      : item.tone === 'iterate'
-                        ? alpha('#818cf8', 0.15)
-                        : alpha('#6366f1', 0.12),
+                      : alpha('#6366f1', 0.12),
                   border: '1px solid',
                   borderColor:
                     item.tone === 'host'
                       ? alpha('#10b981', 0.35)
-                      : item.tone === 'iterate'
-                        ? alpha('#818cf8', 0.35)
-                        : alpha('#6366f1', 0.3),
+                      : alpha('#6366f1', 0.3),
                 }}
               >
                 {item.icon}
@@ -275,12 +251,9 @@ const PricingTable: FC<PricingTableProps> = ({ reveal }) => {
       </Grid>
 
       <Box textAlign="center" mt={4} sx={pricingRevealSx(reveal, 0.45)}>
-        <Stack direction="row" justifyContent="center" gap={1} alignItems="center" flexWrap="wrap">
-          <AutoFixHighIcon fontSize="small" color="action" />
-          <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 520 }}>
-            {t('pricing.footnote')}
-          </Typography>
-        </Stack>
+        <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 560, mx: 'auto', lineHeight: 1.65 }}>
+          {t('pricing.footnote')}
+        </Typography>
       </Box>
     </Box>
   );

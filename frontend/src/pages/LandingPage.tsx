@@ -13,14 +13,14 @@ import {
 import { keyframes } from '@mui/material/styles';
 import { Link as RouterLink } from 'react-router-dom';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
-import PsychologyIcon from '@mui/icons-material/Psychology';
-import BoltIcon from '@mui/icons-material/Bolt';
-import SyncAltIcon from '@mui/icons-material/SyncAlt';
-import EventAvailableIcon from '@mui/icons-material/EventAvailable';
-import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
-import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
-import WebAssetOutlinedIcon from '@mui/icons-material/WebAssetOutlined';
-import DynamicFormOutlinedIcon from '@mui/icons-material/DynamicFormOutlined';
+import PublicIcon from '@mui/icons-material/Public';
+import PaymentIcon from '@mui/icons-material/Payment';
+import GroupsIcon from '@mui/icons-material/Groups';
+import MailOutlineIcon from '@mui/icons-material/MailOutline';
+import RestaurantIcon from '@mui/icons-material/Restaurant';
+import SpaIcon from '@mui/icons-material/Spa';
+import StorefrontIcon from '@mui/icons-material/Storefront';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { useTranslation } from 'react-i18next';
 import PricingTable from '../components/PricingTable';
 import { useAuthStore } from '../store/auth';
@@ -38,16 +38,6 @@ const orbDrift = keyframes`
 const subtlePulse = keyframes`
   0%, 100% { opacity: 0.35; }
   50% { opacity: 0.55; }
-`;
-
-const gradientFlow = keyframes`
-  0% { background-position: 0% 50%; }
-  100% { background-position: 200% 50%; }
-`;
-
-const softFloat = keyframes`
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
 `;
 
 const REVEAL_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
@@ -100,8 +90,9 @@ export default function LandingPage({ scrollTo }: Props) {
   const token = useAuthStore((s) => s.token);
   const [reduceMotion, setReduceMotion] = useState(false);
   const [heroRef, heroInView] = useRevealOnce(reduceMotion);
-  const [featuresRef, featuresInView] = useRevealOnce(reduceMotion);
-  const [siteTypesRef, siteTypesInView] = useRevealOnce(reduceMotion);
+  const [whatRef, whatInView] = useRevealOnce(reduceMotion);
+  const [examplesRef, examplesInView] = useRevealOnce(reduceMotion);
+  const [trustRef, trustInView] = useRevealOnce(reduceMotion);
   const [howRef, howInView] = useRevealOnce(reduceMotion);
   const [ctaRef, ctaInView] = useRevealOnce(reduceMotion);
   const [pricingRef, pricingInView] = useRevealOnce(reduceMotion);
@@ -120,10 +111,27 @@ export default function LandingPage({ scrollTo }: Props) {
     }
   }, [scrollTo]);
 
-  const features = [
-    { Icon: PsychologyIcon, title: t('landing.feat1Title'), desc: t('landing.feat1Desc') },
-    { Icon: BoltIcon, title: t('landing.feat2Title'), desc: t('landing.feat2Desc') },
-    { Icon: SyncAltIcon, title: t('landing.feat3Title'), desc: t('landing.feat3Desc') },
+  const whatYouGetBlocks = [
+    {
+      Icon: PublicIcon,
+      title: t('landing.whatGet1Title'),
+      bullets: [t('landing.whatGet1a'), t('landing.whatGet1b'), t('landing.whatGet1c')],
+    },
+    {
+      Icon: PaymentIcon,
+      title: t('landing.whatGet2Title'),
+      bullets: [t('landing.whatGet2a'), t('landing.whatGet2b')],
+    },
+    {
+      Icon: GroupsIcon,
+      title: t('landing.whatGet3Title'),
+      bullets: [t('landing.whatGet3a'), t('landing.whatGet3b')],
+    },
+    {
+      Icon: MailOutlineIcon,
+      title: t('landing.whatGet4Title'),
+      bullets: [t('landing.whatGet4a'), t('landing.whatGet4b')],
+    },
   ];
 
   const steps = [
@@ -132,16 +140,24 @@ export default function LandingPage({ scrollTo }: Props) {
     { n: '3', title: t('landing.how3Title'), desc: t('landing.how3Desc') },
   ];
 
-  const siteTypes = [
-    { Icon: EventAvailableIcon, label: t('landing.siteTypeBooking') },
-    { Icon: ShoppingBagOutlinedIcon, label: t('landing.siteTypeShop') },
-    { Icon: ArticleOutlinedIcon, label: t('landing.siteTypeBlog') },
-    { Icon: WebAssetOutlinedIcon, label: t('landing.siteTypeLanding') },
-    { Icon: DynamicFormOutlinedIcon, label: t('landing.siteTypeContact') },
+  const trustItems = [
+    t('landing.trust1'),
+    t('landing.trust2'),
+    t('landing.trust3'),
+    t('landing.trust4'),
+    t('landing.trust5'),
   ];
 
+  const exampleCards = [
+    { Icon: RestaurantIcon, title: t('landing.exampleRestaurantTitle'), desc: t('landing.exampleRestaurantDesc') },
+    { Icon: SpaIcon, title: t('landing.exampleSalonTitle'), desc: t('landing.exampleSalonDesc') },
+    { Icon: StorefrontIcon, title: t('landing.exampleShopTitle'), desc: t('landing.exampleShopDesc') },
+  ];
+
+  const primaryTo = token ? '/chat' : '/register';
+
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', position: 'relative', overflowX: 'hidden' }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', position: 'relative', overflowX: 'hidden', pb: { xs: 11, md: 10 } }}>
       {/* Ambient background */}
       <Box
         aria-hidden
@@ -171,22 +187,6 @@ export default function LandingPage({ scrollTo }: Props) {
           filter: 'blur(40px)',
           zIndex: 0,
           ...(reduceMotion ? {} : { animation: `${orbDrift} 18s ease-in-out infinite` }),
-        }}
-      />
-      <Box
-        aria-hidden
-        sx={{
-          pointerEvents: 'none',
-          position: 'fixed',
-          bottom: '20%',
-          left: '-15%',
-          width: { xs: 240, md: 360 },
-          height: { xs: 240, md: 360 },
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(16, 185, 129, 0.12) 0%, transparent 70%)',
-          filter: 'blur(48px)',
-          zIndex: 0,
-          ...(reduceMotion ? {} : { animation: `${orbDrift} 22s ease-in-out infinite reverse` }),
         }}
       />
       <Box
@@ -240,7 +240,7 @@ export default function LandingPage({ scrollTo }: Props) {
               {t('landing.pricingNav')}
             </Button>
             {token ? (
-              <Button variant="contained" component={RouterLink} to="/chat" size="small" sx={{ px: 2 }}>
+              <Button variant="contained" component={RouterLink} to="/chat" size="small" sx={{ px: 2, fontWeight: 700 }}>
                 {t('landing.goToApp')}
               </Button>
             ) : (
@@ -248,7 +248,7 @@ export default function LandingPage({ scrollTo }: Props) {
                 <Button component={RouterLink} to="/login" color="inherit" size="small" sx={{ fontWeight: 600 }}>
                   {t('auth.signIn')}
                 </Button>
-                <Button variant="contained" component={RouterLink} to="/register" size="small" sx={{ px: 2 }}>
+                <Button variant="contained" component={RouterLink} to="/register" size="small" sx={{ px: 2, fontWeight: 700 }}>
                   {t('landing.getStartedFree')}
                 </Button>
               </>
@@ -261,363 +261,289 @@ export default function LandingPage({ scrollTo }: Props) {
         {/* Hero */}
         <Box ref={heroRef}>
           <Container maxWidth="lg" sx={{ pt: { xs: 8, md: 12 }, pb: { xs: 8, md: 10 } }}>
-            <Box sx={{ textAlign: 'center', maxWidth: 820, mx: 'auto' }}>
-            <Box sx={revealStagger(reduceMotion, heroInView, 0)}>
-              <Chip
-                label={t('landing.chipAi')}
-                size="small"
-                sx={{
-                  mb: 3,
-                  fontWeight: 600,
-                  border: '1px solid rgba(99, 102, 241, 0.35)',
-                  bgcolor: 'rgba(99, 102, 241, 0.08)',
-                  '& .MuiChip-label': { px: 1.5 },
-                }}
-              />
-            </Box>
-            <Typography
-              variant="h1"
-              sx={{
-                ...revealStagger(reduceMotion, heroInView, 0.06),
-                fontWeight: 800,
-                letterSpacing: '-0.03em',
-                lineHeight: 1.08,
-                fontSize: { xs: '2.1rem', sm: '2.75rem', md: '3.35rem' },
-                mb: 2.5,
-                background: 'linear-gradient(180deg, #f8fafc 0%, #cbd5e1 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-              }}
-            >
-              {t('landing.heroTitle')}
-            </Typography>
-            <Typography
-              variant="h6"
-              color="text.secondary"
-              sx={{
-                ...revealStagger(reduceMotion, heroInView, 0.12),
-                fontWeight: 400,
-                lineHeight: 1.65,
-                fontSize: { xs: '1rem', md: '1.125rem' },
-                maxWidth: 640,
-                mx: 'auto',
-                mb: 3,
-              }}
-            >
-              {t('landing.heroSubtitle')}
-            </Typography>
-            <Typography
-              variant="caption"
-              sx={{
-                ...revealStagger(reduceMotion, heroInView, 0.15),
-                display: 'block',
-                color: 'text.disabled',
-                letterSpacing: '0.12em',
-                textTransform: 'uppercase',
-                fontWeight: 700,
-                mb: 3,
-              }}
-            >
-              {t('landing.trustStack')}
-            </Typography>
-            <Stack
-              direction={{ xs: 'column', sm: 'row' }}
-              gap={1.5}
-              justifyContent="center"
-              sx={{ ...revealStagger(reduceMotion, heroInView, 0.18) }}
-            >
-              <Button
-                variant="contained"
-                size="large"
-                component={RouterLink}
-                to={token ? '/chat' : '/register'}
-                sx={{
-                  px: 4,
-                  py: 1.35,
-                  fontSize: '1rem',
-                  borderRadius: 2,
-                  boxShadow: '0 8px 32px rgba(99, 102, 241, 0.35)',
-                  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                  '&:hover': {
-                    transform: reduceMotion ? undefined : 'translateY(-2px)',
-                    boxShadow: '0 12px 40px rgba(99, 102, 241, 0.45)',
-                  },
-                }}
-              >
-                {t('landing.ctaBuild')}
-              </Button>
-              <Button
-                variant="outlined"
-                size="large"
-                href="#pricing"
-                sx={{
-                  px: 4,
-                  py: 1.35,
-                  fontSize: '1rem',
-                  borderRadius: 2,
-                  borderColor: 'rgba(255,255,255,0.15)',
-                  color: 'text.primary',
-                  transition: 'transform 0.2s ease, border-color 0.2s ease, bgcolor 0.2s ease',
-                  '&:hover': {
-                    borderColor: 'rgba(255,255,255,0.28)',
-                    bgcolor: 'rgba(255,255,255,0.04)',
-                    transform: reduceMotion ? undefined : 'translateY(-2px)',
-                  },
-                }}
-              >
-                {t('landing.ctaPricing')}
-              </Button>
-            </Stack>
-          </Box>
-        </Container>
-        </Box>
-
-        {/* Features */}
-        <Box ref={featuresRef}>
-          <Container maxWidth="lg" sx={{ py: { xs: 6, md: 8 } }}>
-          <Stack
-            direction={{ xs: 'column', md: 'row' }}
-            gap={3}
-            sx={{ alignItems: 'stretch' }}
-          >
-            {features.map(({ Icon, title, desc }, i) => (
-              <Paper
-                key={title}
-                elevation={0}
-                sx={{
-                  flex: 1,
-                  p: 3,
-                  borderRadius: 3,
-                  bgcolor: 'rgba(26, 26, 26, 0.65)',
-                  border: '1px solid rgba(255,255,255,0.06)',
-                  backdropFilter: 'blur(8px)',
-                  ...revealStagger(reduceMotion, featuresInView, 0.05 + i * 0.09),
-                  transition: 'transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease',
-                  '&:hover': reduceMotion
-                    ? {}
-                    : {
-                        transform: 'translateY(-6px)',
-                        borderColor: 'rgba(99, 102, 241, 0.25)',
-                        boxShadow: '0 20px 48px rgba(0,0,0,0.35)',
-                      },
-                }}
-              >
-                <Box
+            <Box sx={{ textAlign: 'center', maxWidth: 860, mx: 'auto' }}>
+              <Box sx={revealStagger(reduceMotion, heroInView, 0)}>
+                <Chip
+                  label={t('landing.chipService')}
+                  size="small"
                   sx={{
-                    width: 48,
-                    height: 48,
+                    mb: 3,
+                    fontWeight: 600,
+                    border: '1px solid rgba(16, 185, 129, 0.35)',
+                    bgcolor: 'rgba(16, 185, 129, 0.08)',
+                    '& .MuiChip-label': { px: 1.5 },
+                  }}
+                />
+              </Box>
+              <Typography
+                variant="h1"
+                sx={{
+                  ...revealStagger(reduceMotion, heroInView, 0.06),
+                  fontWeight: 800,
+                  letterSpacing: '-0.03em',
+                  lineHeight: 1.08,
+                  fontSize: { xs: '1.95rem', sm: '2.5rem', md: '3.1rem' },
+                  mb: 2.5,
+                  background: 'linear-gradient(180deg, #f8fafc 0%, #cbd5e1 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                }}
+              >
+                {t('landing.heroTitle')}
+              </Typography>
+              <Typography
+                variant="h6"
+                color="text.secondary"
+                sx={{
+                  ...revealStagger(reduceMotion, heroInView, 0.12),
+                  fontWeight: 400,
+                  lineHeight: 1.65,
+                  fontSize: { xs: '1rem', md: '1.125rem' },
+                  maxWidth: 640,
+                  mx: 'auto',
+                  mb: 4,
+                }}
+              >
+                {t('landing.heroSubtitle')}
+              </Typography>
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                gap={1.5}
+                justifyContent="center"
+                alignItems="center"
+                sx={{ ...revealStagger(reduceMotion, heroInView, 0.18) }}
+              >
+                <Button
+                  variant="contained"
+                  size="large"
+                  component={RouterLink}
+                  to={primaryTo}
+                  sx={{
+                    px: { xs: 3, sm: 5 },
+                    py: 1.75,
+                    fontSize: '1.05rem',
+                    fontWeight: 800,
+                    minWidth: { sm: 280 },
                     borderRadius: 2,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    mb: 2,
-                    bgcolor: 'rgba(99, 102, 241, 0.12)',
-                    border: '1px solid rgba(99, 102, 241, 0.2)',
+                    boxShadow: '0 8px 32px rgba(99, 102, 241, 0.35)',
+                    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                    '&:hover': {
+                      transform: reduceMotion ? undefined : 'translateY(-2px)',
+                      boxShadow: '0 12px 40px rgba(99, 102, 241, 0.45)',
+                    },
                   }}
                 >
-                  <Icon sx={{ fontSize: 26, color: 'primary.light' }} />
-                </Box>
-                <Typography variant="h6" fontWeight={800} sx={{ mb: 1, fontSize: '1.1rem' }}>
-                  {title}
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.65 }}>
-                  {desc}
-                </Typography>
-              </Paper>
-            ))}
-          </Stack>
-        </Container>
+                  {t('landing.ctaBuild')}
+                </Button>
+                <Button
+                  variant="outlined"
+                  size="large"
+                  href="#examples"
+                  sx={{
+                    px: { xs: 3, sm: 4 },
+                    py: 1.75,
+                    fontSize: '1.05rem',
+                    fontWeight: 700,
+                    minWidth: { sm: 200 },
+                    borderRadius: 2,
+                    borderColor: 'rgba(255,255,255,0.2)',
+                    color: 'text.primary',
+                    '&:hover': {
+                      borderColor: 'rgba(255,255,255,0.35)',
+                      bgcolor: 'rgba(255,255,255,0.04)',
+                    },
+                  }}
+                >
+                  {t('landing.ctaExample')}
+                </Button>
+              </Stack>
+            </Box>
+          </Container>
         </Box>
 
-        {/* Site types & control panels */}
+        {/* What you get */}
+        <Box ref={whatRef} sx={{ py: { xs: 6, md: 8 }, borderTop: '1px solid', borderColor: 'rgba(255,255,255,0.06)' }}>
+          <Container maxWidth="lg">
+            <Typography
+              variant="h4"
+              component="h2"
+              fontWeight={800}
+              textAlign="center"
+              sx={{
+                mb: 4,
+                letterSpacing: '-0.02em',
+                ...revealStagger(reduceMotion, whatInView, 0),
+              }}
+            >
+              {t('landing.whatYouGetTitle')}
+            </Typography>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' },
+                gap: 3,
+              }}
+            >
+              {whatYouGetBlocks.map(({ Icon, title, bullets }, i) => (
+                <Paper
+                  key={title}
+                  elevation={0}
+                  sx={{
+                    p: 3,
+                    borderRadius: 3,
+                    bgcolor: 'rgba(26, 26, 26, 0.65)',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                    backdropFilter: 'blur(8px)',
+                    ...revealStagger(reduceMotion, whatInView, 0.06 + i * 0.08),
+                    transition: 'border-color 0.25s ease, box-shadow 0.25s ease',
+                    '&:hover': {
+                      borderColor: 'rgba(99, 102, 241, 0.25)',
+                      boxShadow: '0 16px 40px rgba(0,0,0,0.3)',
+                    },
+                  }}
+                >
+                  <Box
+                    sx={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      mb: 2,
+                      bgcolor: 'rgba(99, 102, 241, 0.12)',
+                      border: '1px solid rgba(99, 102, 241, 0.2)',
+                    }}
+                  >
+                    <Icon sx={{ fontSize: 26, color: 'primary.light' }} />
+                  </Box>
+                  <Typography variant="h6" fontWeight={800} sx={{ mb: 1.5, fontSize: '1.1rem' }}>
+                    {title}
+                  </Typography>
+                  <Stack component="ul" sx={{ m: 0, pl: 2.25, color: 'text.secondary' }} gap={0.75}>
+                    {bullets.map((b) => (
+                      <Typography key={b} component="li" variant="body2" sx={{ lineHeight: 1.65 }}>
+                        {b}
+                      </Typography>
+                    ))}
+                  </Stack>
+                </Paper>
+              ))}
+            </Box>
+          </Container>
+        </Box>
+
+        {/* Example sites */}
         <Box
+          id="examples"
           component="section"
-          ref={siteTypesRef}
-          aria-labelledby="landing-site-types-heading"
+          ref={examplesRef}
+          aria-labelledby="landing-examples-heading"
           sx={{ py: { xs: 7, md: 9 }, borderTop: '1px solid', borderColor: 'rgba(255,255,255,0.06)' }}
         >
           <Container maxWidth="lg">
+            <Typography
+              id="landing-examples-heading"
+              variant="h4"
+              component="h2"
+              fontWeight={800}
+              textAlign="center"
+              sx={{ mb: 1.5, letterSpacing: '-0.02em', ...revealStagger(reduceMotion, examplesInView, 0) }}
+            >
+              {t('landing.examplesTitle')}
+            </Typography>
+            <Typography
+              variant="body1"
+              color="text.secondary"
+              textAlign="center"
+              sx={{ mb: 4, maxWidth: 560, mx: 'auto', ...revealStagger(reduceMotion, examplesInView, 0.08) }}
+            >
+              {t('landing.examplesSubtitle')}
+            </Typography>
             <Box
               sx={{
-                position: 'relative',
-                borderRadius: 4,
-                p: { xs: 3, sm: 4, md: 5 },
-                overflow: 'hidden',
-                background:
-                  'linear-gradient(165deg, rgba(99, 102, 241, 0.07) 0%, rgba(26, 26, 26, 0.92) 42%, rgba(16, 185, 129, 0.05) 100%)',
-                border: '1px solid rgba(255,255,255,0.07)',
-                boxShadow: '0 24px 80px rgba(0,0,0,0.35)',
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
+                gap: 3,
               }}
             >
-              <Box
-                aria-hidden
-                sx={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: 3,
-                  background: 'linear-gradient(90deg, transparent, rgba(99,102,241,0.9), rgba(16,185,129,0.85), rgba(99,102,241,0.9), transparent)',
-                  backgroundSize: '200% 100%',
-                  ...(reduceMotion ? {} : { animation: `${gradientFlow} 5s linear infinite` }),
-                }}
-              />
-              <Box
-                aria-hidden
-                sx={{
-                  position: 'absolute',
-                  top: '12%',
-                  right: '-8%',
-                  width: 200,
-                  height: 200,
-                  borderRadius: '50%',
-                  background: 'radial-gradient(circle, rgba(99, 102, 241, 0.2) 0%, transparent 70%)',
-                  filter: 'blur(32px)',
-                  pointerEvents: 'none',
-                }}
-              />
-
-              <Stack alignItems="center" sx={{ position: 'relative', mb: 4 }}>
-                <Chip
-                  label={t('landing.siteTypesChip')}
-                  size="small"
+              {exampleCards.map(({ Icon, title, desc }, i) => (
+                <Paper
+                  key={title}
+                  elevation={0}
                   sx={{
-                    mb: 2,
-                    fontWeight: 700,
-                    letterSpacing: '0.04em',
-                    textTransform: 'uppercase',
-                    fontSize: '0.7rem',
-                    height: 28,
-                    border: '1px solid rgba(99, 102, 241, 0.4)',
-                    bgcolor: 'rgba(99, 102, 241, 0.1)',
-                    ...revealStagger(reduceMotion, siteTypesInView, 0),
-                  }}
-                />
-                <Typography
-                  id="landing-site-types-heading"
-                  variant="h4"
-                  component="h2"
-                  fontWeight={800}
-                  textAlign="center"
-                  sx={{
-                    letterSpacing: '-0.03em',
-                    lineHeight: 1.15,
-                    fontSize: { xs: '1.65rem', sm: '2rem', md: '2.25rem' },
-                    mb: 1.25,
-                    background: 'linear-gradient(120deg, #f1f5f9 0%, #a5b4fc 45%, #6ee7b7 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text',
-                    ...revealStagger(reduceMotion, siteTypesInView, 0.06),
+                    p: 3,
+                    borderRadius: 3,
+                    textAlign: 'center',
+                    bgcolor: 'rgba(12, 12, 12, 0.55)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    ...revealStagger(reduceMotion, examplesInView, 0.14 + i * 0.1),
+                    transition: 'transform 0.25s ease, border-color 0.25s ease',
+                    '&:hover': reduceMotion
+                      ? { borderColor: 'rgba(99, 102, 241, 0.35)' }
+                      : {
+                          transform: 'translateY(-6px)',
+                          borderColor: 'rgba(99, 102, 241, 0.4)',
+                        },
                   }}
                 >
-                  {t('landing.siteTypesTitle')}
-                </Typography>
-                <Typography
-                  variant="subtitle1"
-                  textAlign="center"
-                  sx={{
-                    fontWeight: 600,
-                    color: 'text.secondary',
-                    fontSize: { xs: '0.95rem', sm: '1.05rem' },
-                    maxWidth: 420,
-                    ...revealStagger(reduceMotion, siteTypesInView, 0.12),
-                  }}
-                >
-                  {t('landing.siteTypesSubtitle')}
-                </Typography>
-              </Stack>
-
-              <Box
-                sx={{
-                  display: 'grid',
-                  gridTemplateColumns: {
-                    xs: 'repeat(2, minmax(0, 1fr))',
-                    sm: 'repeat(3, minmax(0, 1fr))',
-                    md: 'repeat(5, minmax(0, 1fr))',
-                  },
-                  gap: { xs: 1.5, md: 2 },
-                  position: 'relative',
-                }}
-              >
-                {siteTypes.map(({ Icon, label }, i) => (
-                  <Paper
-                    key={label}
-                    elevation={0}
+                  <Box
                     sx={{
-                      position: 'relative',
-                      p: 2,
-                      minHeight: { xs: 112, md: 128 },
+                      width: 56,
+                      height: 56,
+                      borderRadius: '50%',
+                      mx: 'auto',
+                      mb: 2,
                       display: 'flex',
-                      flexDirection: 'column',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      textAlign: 'center',
-                      gap: 1.25,
-                      borderRadius: 3,
-                      bgcolor: 'rgba(12, 12, 12, 0.55)',
-                      border: '1px solid rgba(255,255,255,0.08)',
-                      backdropFilter: 'blur(10px)',
-                      transition:
-                        'transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.25s ease, box-shadow 0.35s ease',
-                      ...revealStagger(reduceMotion, siteTypesInView, 0.18 + i * 0.07),
-                      '&:hover': reduceMotion
-                        ? {
-                            borderColor: 'rgba(99, 102, 241, 0.45)',
-                          }
-                        : {
-                            transform: 'translateY(-8px) scale(1.02)',
-                            borderColor: 'rgba(99, 102, 241, 0.5)',
-                            boxShadow: '0 16px 40px rgba(99, 102, 241, 0.18)',
-                            '& .site-type-icon-wrap': {
-                              animationPlayState: 'paused',
-                              bgcolor: 'rgba(99, 102, 241, 0.22)',
-                              borderColor: 'rgba(129, 140, 248, 0.55)',
-                            },
-                            '& .site-type-icon': {
-                              transform: 'scale(1.12) rotate(-4deg)',
-                              color: 'primary.light',
-                            },
-                          },
+                      bgcolor: 'rgba(99, 102, 241, 0.12)',
+                      border: '1px solid rgba(99, 102, 241, 0.25)',
                     }}
                   >
-                    <Box
-                      className="site-type-icon-wrap"
-                      sx={{
-                        width: 52,
-                        height: 52,
-                        borderRadius: '50%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        bgcolor: 'rgba(99, 102, 241, 0.1)',
-                        border: '1px solid rgba(99, 102, 241, 0.25)',
-                        transition: 'background-color 0.3s ease, border-color 0.3s ease',
-                        ...(!reduceMotion
-                          ? {
-                              animation: `${softFloat} 5s ease-in-out infinite`,
-                              animationDelay: `${i * 0.45}s`,
-                            }
-                          : {}),
-                      }}
-                    >
-                      <Icon
-                        className="site-type-icon"
-                        sx={{
-                          fontSize: 26,
-                          color: 'primary.light',
-                          transition: 'transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), color 0.25s ease',
-                        }}
-                      />
-                    </Box>
-                    <Typography variant="body2" fontWeight={800} sx={{ lineHeight: 1.35, fontSize: '0.82rem' }}>
-                      {label}
-                    </Typography>
-                  </Paper>
-                ))}
-              </Box>
+                    <Icon sx={{ fontSize: 28, color: 'primary.light' }} />
+                  </Box>
+                  <Typography variant="h6" fontWeight={800} sx={{ mb: 1 }}>
+                    {title}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.65 }}>
+                    {desc}
+                  </Typography>
+                </Paper>
+              ))}
             </Box>
+          </Container>
+        </Box>
+
+        {/* Trust */}
+        <Box ref={trustRef} sx={{ py: { xs: 6, md: 8 }, borderTop: '1px solid', borderColor: 'rgba(255,255,255,0.06)' }}>
+          <Container maxWidth="md">
+            <Typography
+              variant="h4"
+              component="h2"
+              fontWeight={800}
+              textAlign="center"
+              sx={{ mb: 4, letterSpacing: '-0.02em', ...revealStagger(reduceMotion, trustInView, 0) }}
+            >
+              {t('landing.trustTitle')}
+            </Typography>
+            <Stack gap={2}>
+              {trustItems.map((line, i) => (
+                <Stack
+                  key={line}
+                  direction="row"
+                  alignItems="center"
+                  gap={2}
+                  sx={{ ...revealStagger(reduceMotion, trustInView, 0.08 + i * 0.06) }}
+                >
+                  <CheckCircleOutlineIcon sx={{ color: 'secondary.light', flexShrink: 0 }} />
+                  <Typography variant="body1" fontWeight={600} sx={{ lineHeight: 1.5 }}>
+                    {line}
+                  </Typography>
+                </Stack>
+              ))}
+            </Stack>
           </Container>
         </Box>
 
@@ -626,6 +552,7 @@ export default function LandingPage({ scrollTo }: Props) {
           <Container maxWidth="lg">
             <Typography
               variant="h4"
+              component="h2"
               fontWeight={800}
               textAlign="center"
               sx={{
@@ -701,7 +628,7 @@ export default function LandingPage({ scrollTo }: Props) {
               color="text.secondary"
               sx={{
                 mb: 3,
-                maxWidth: 520,
+                maxWidth: 560,
                 mx: 'auto',
                 lineHeight: 1.65,
                 ...revealStagger(reduceMotion, ctaInView, 0.08),
@@ -713,8 +640,15 @@ export default function LandingPage({ scrollTo }: Props) {
               variant="contained"
               size="large"
               component={RouterLink}
-              to={token ? '/chat' : '/register'}
-              sx={{ px: 4, py: 1.25, borderRadius: 2, ...revealStagger(reduceMotion, ctaInView, 0.16) }}
+              to={primaryTo}
+              sx={{
+                px: 5,
+                py: 1.75,
+                fontSize: '1.05rem',
+                fontWeight: 800,
+                borderRadius: 2,
+                ...revealStagger(reduceMotion, ctaInView, 0.16),
+              }}
             >
               {t('landing.ctaBuild')}
             </Button>
@@ -735,6 +669,44 @@ export default function LandingPage({ scrollTo }: Props) {
           <Typography variant="body2" color="text.disabled">
             {t('landing.footer', { year: new Date().getFullYear() })}
           </Typography>
+        </Box>
+      </Box>
+
+      {/* Sticky CTA — full width on phone, floating bar on larger screens */}
+      <Box
+        sx={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 20,
+          p: { xs: 2, md: 2 },
+          pb: 'max(16px, env(safe-area-inset-bottom))',
+          background: {
+            xs: 'linear-gradient(to top, rgba(10,10,12,0.96) 55%, transparent)',
+            md: 'transparent',
+          },
+          pointerEvents: 'none',
+          '& > *': { pointerEvents: 'auto' },
+        }}
+      >
+        <Box sx={{ maxWidth: 480, mx: 'auto' }}>
+          <Button
+            variant="contained"
+            fullWidth
+            size="large"
+            component={RouterLink}
+            to={primaryTo}
+            sx={{
+              py: { xs: 1.5, md: 1.35 },
+              fontWeight: 800,
+              fontSize: { xs: '1rem', md: '0.95rem' },
+              borderRadius: 2,
+              boxShadow: { md: '0 12px 40px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.06)' },
+            }}
+          >
+            {t('landing.stickyCta')}
+          </Button>
         </Box>
       </Box>
     </Box>
