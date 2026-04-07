@@ -40,8 +40,10 @@ import NoteAddIcon from '@mui/icons-material/NoteAdd';
 import SaveIcon from '@mui/icons-material/Save';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
-import Editor from '@monaco-editor/react';
+import Editor, { BeforeMount } from '@monaco-editor/react';
 import { api } from '../lib/api';
 
 type FsNode =
@@ -100,6 +102,35 @@ function flattenTree(nodes: FsNode[], acc: FsNode[] = []): FsNode[] {
   return acc;
 }
 
+const configureMonaco: BeforeMount = (monaco) => {
+  // Monaco runs entirely in the browser and does not have access to this project's real node_modules.
+  // That means semantic type-checking will fail to resolve external packages (e.g. @mui/*) and show noisy errors.
+  // We keep syntax checking, but disable semantic/module-resolution diagnostics.
+  monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+    noSemanticValidation: true,
+    noSyntaxValidation: false,
+  });
+  monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+    noSemanticValidation: true,
+    noSyntaxValidation: false,
+  });
+
+  // Reasonable TS/TSX defaults so the editor still feels correct for React code.
+  monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
+    jsx: monaco.languages.typescript.JsxEmit.ReactJSX,
+    jsxFactory: 'React.createElement',
+    jsxFragmentFactory: 'React.Fragment',
+    target: monaco.languages.typescript.ScriptTarget.ES2020,
+    module: monaco.languages.typescript.ModuleKind.ESNext,
+    moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+    allowNonTsExtensions: true,
+    allowJs: true,
+    esModuleInterop: true,
+    isolatedModules: true,
+    skipLibCheck: true,
+  });
+};
+
 export default function FilesPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
@@ -126,6 +157,8 @@ export default function FilesPage() {
   const [promptValue, setPromptValue] = useState('');
   const [promptHint, setPromptHint] = useState<string | null>(null);
   const [promptAction, setPromptAction] = useState<null | ((value: string) => Promise<void>)>(null);
+
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => new Set(['src']));
 
   const isServerJs = useMemo(() => {
     const p = (selectedPath ?? '').toLowerCase();
@@ -373,7 +406,21 @@ export default function FilesPage() {
               </Box>
             ) : (
               <List dense disablePadding>
-                <TreeList nodes={tree} selectedPath={selectedPath} onOpenFile={openFile} onSelect={setSelectedPath} />
+                <TreeList
+                  nodes={tree}
+                  selectedPath={selectedPath}
+                  expandedDirs={expandedDirs}
+                  onToggleDir={(dir) => {
+                    setExpandedDirs((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(dir)) next.delete(dir);
+                      else next.add(dir);
+                      return next;
+                    });
+                  }}
+                  onOpenFile={openFile}
+                  onSelect={setSelectedPath}
+                />
               </List>
             )}
           </Box>
@@ -482,6 +529,8 @@ export default function FilesPage() {
                 height="100%"
                 language={extToLanguage(selectedPath)}
                 theme="vs-dark"
+                path={selectedPath}
+                beforeMount={configureMonaco}
                 value={content}
                 onChange={(v) => {
                   setContent(v ?? '');
@@ -545,6 +594,8 @@ export default function FilesPage() {
 function TreeList(props: {
   nodes: FsNode[];
   selectedPath: string | null;
+  expandedDirs: Set<string>;
+  onToggleDir: (path: string) => void;
   onOpenFile: (path: string) => void;
   onSelect: (path: string) => void;
   level?: number;
@@ -554,14 +605,19 @@ function TreeList(props: {
     <>
       {props.nodes.map((n) => {
         const selected = props.selectedPath === n.path;
+        const expanded = n.type === 'dir' ? props.expandedDirs.has(n.path) : false;
         return (
           <Box key={`${n.type}:${n.path}`}>
             <ListItemButton
               selected={selected}
               sx={{ pl: 1 + level * 2 }}
               onClick={() => {
-                if (n.type === 'file') props.onOpenFile(n.path);
-                else props.onSelect(n.path);
+                if (n.type === 'file') {
+                  props.onOpenFile(n.path);
+                } else {
+                  props.onToggleDir(n.path);
+                  props.onSelect(n.path);
+                }
               }}
             >
               <ListItemIcon sx={{ minWidth: 28 }}>
@@ -571,11 +627,16 @@ function TreeList(props: {
                 primary={n.name}
                 primaryTypographyProps={{ variant: 'body2', sx: { fontSize: 12.5 } }}
               />
+              {n.type === 'dir' ? (
+                expanded ? <ExpandMoreIcon sx={{ fontSize: 18, color: 'text.disabled' }} /> : <ChevronRightIcon sx={{ fontSize: 18, color: 'text.disabled' }} />
+              ) : null}
             </ListItemButton>
-            {n.type === 'dir' && n.children?.length ? (
+            {n.type === 'dir' && expanded && n.children?.length ? (
               <TreeList
                 nodes={n.children}
                 selectedPath={props.selectedPath}
+                expandedDirs={props.expandedDirs}
+                onToggleDir={props.onToggleDir}
                 onOpenFile={props.onOpenFile}
                 onSelect={props.onSelect}
                 level={level + 1}
