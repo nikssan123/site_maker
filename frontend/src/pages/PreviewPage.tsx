@@ -112,6 +112,7 @@ export default function PreviewPage() {
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [drawerMode, setDrawerMode] = useState<'improvements' | 'catalog' | 'booking_slots' | 'inquiries' | 'blog' | 'dashboard' | 'hosting'>('improvements');
   const [iterateChat, setIterateChat] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  const [pendingIterate, setPendingIterate] = useState<null | { spec: string; targetFiles: string[] }>(null);
   const [iterationHistory, setIterationHistory] = useState<Array<{ id: string; title: string | null; description: string | null; createdAt: string }>>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [paymentsOpen, setPaymentsOpen] = useState(
@@ -321,39 +322,81 @@ export default function PreviewPage() {
     if (!text) return;
 
     setIterateChat((prev) => [...prev, { role: 'user', content: text }]);
-    setIterating(true);
-    useProjectStore.setState({ fixAttempts: [] });
-    store.setGenerationFriendlyMessage(t('preview.applyingChanges'));
-    store.generationSteps.forEach((s) =>
-      store.updateStep({ step: s.step, label: s.label, status: 'pending' }),
-    );
 
-    api.streamEvents(
-      '/iterate',
-      { sessionId: store.sessionId, message: text },
-      (event: any) => {
-        if (event.step) store.updateStep({ step: event.step, label: event.label, status: event.status });
-        if (event.type === 'user_progress' && typeof event.message === 'string') {
-          store.setGenerationFriendlyMessage(event.message);
-        }
-        if (event.type === 'fix_attempt') store.addFixAttempt({ attempt: event.attempt, error: event.error });
-        if (event.type === 'preview_updated') {
-          store.setRunPort(event.port);
-          setRefreshKey((k) => k + 1);
-          loadProject().catch(() => {});
-          fetchHistory();
-          setIterateChat((prev) => [...prev, { role: 'assistant', content: t('preview.changesApplied') }]);
-        }
-        if (event.type === 'fatal') {
+    // If we already have a prepared scoped spec, a short confirmation applies it.
+    if (pendingIterate && /^(да|ок|окей|okay|ok|yes|y|приложи|давай|действай)\b/i.test(text)) {
+      setIterating(true);
+      useProjectStore.setState({ fixAttempts: [] });
+      store.setGenerationFriendlyMessage(t('preview.applyingChanges'));
+      store.generationSteps.forEach((s) =>
+        store.updateStep({ step: s.step, label: s.label, status: 'pending' }),
+      );
+
+      api.streamEvents(
+        '/iterate',
+        {
+          sessionId: store.sessionId,
+          message: pendingIterate.spec,
+          spec: pendingIterate.spec,
+          targetFiles: pendingIterate.targetFiles,
+        },
+        (event: any) => {
+          if (event.step) store.updateStep({ step: event.step, label: event.label, status: event.status });
+          if (event.type === 'user_progress' && typeof event.message === 'string') {
+            store.setGenerationFriendlyMessage(event.message);
+          }
+          if (event.type === 'fix_attempt') store.addFixAttempt({ attempt: event.attempt, error: event.error });
+          if (event.type === 'preview_updated') {
+            store.setRunPort(event.port);
+            setRefreshKey((k) => k + 1);
+            loadProject().catch(() => {});
+            fetchHistory();
+            setIterateChat((prev) => [...prev, { role: 'assistant', content: t('preview.changesApplied') }]);
+          }
+          if (event.type === 'fatal') {
+            store.setGenerationFriendlyMessage('');
+            setIterateChat((prev) => [...prev, { role: 'assistant', content: t('preview.iterationFailed', { msg: event.message }) }]);
+          }
+        },
+        () => {
           store.setGenerationFriendlyMessage('');
-          setIterateChat((prev) => [...prev, { role: 'assistant', content: t('preview.iterationFailed', { msg: event.message }) }]);
-        }
-      },
-      () => {
-        store.setGenerationFriendlyMessage('');
-        setIterating(false);
-      },
-    );
+          setIterating(false);
+          setPendingIterate(null);
+        },
+      );
+      return;
+    }
+
+    // Otherwise: clarify first, then present scope + ask for confirmation.
+    try {
+      const res = await api.post<
+        | { kind: 'question'; message: string }
+        | { kind: 'ready'; summary: string; spec: string; targetFiles: string[]; nonGoals: string[] }
+      >(
+        '/iterate/clarify',
+        { sessionId: store.sessionId, messages: [...iterateChat, { role: 'user', content: text }] },
+      );
+
+      if (res.kind === 'question') {
+        setIterateChat((prev) => [...prev, { role: 'assistant', content: res.message }]);
+        return;
+      }
+
+      const files = (res.targetFiles ?? []).map((f) => `- ${f}`).join('\n');
+      const nonGoals = (res.nonGoals ?? []).map((s) => `- ${s}`).join('\n');
+      const msg =
+        `${res.summary}\n\n` +
+        `Ще пипна само тези файлове:\n${files || '- (няма)'}\n\n` +
+        (nonGoals ? `Няма да правя:\n${nonGoals}\n\n` : '') +
+        `Ако е ок, напиши \"да\" и ще приложа промяната.`;
+
+      setIterateChat((prev) => [...prev, { role: 'assistant', content: msg }]);
+      setPendingIterate({ spec: res.spec, targetFiles: res.targetFiles ?? [] });
+      return;
+    } catch {
+      setIterateChat((prev) => [...prev, { role: 'assistant', content: 'Можеш ли да уточниш какво точно да се промени и къде? (Ще задам 1 кратък въпрос и после ще го приложа.)' }]);
+      return;
+    }
   };
 
   if (!projectId) return null;

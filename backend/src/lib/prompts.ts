@@ -383,6 +383,12 @@ Apply the requested change while preserving the existing design quality:
 - Do not regress loading states, empty states, or error handling already present
 - Use the same component patterns already in the codebase
 - ALL user-visible strings (labels, messages, placeholders, any new seed data) MUST be in Bulgarian
+- Do NOT introduce new features unless explicitly asked. If the request is ambiguous, prefer asking for clarification (do not guess).
+- Keep layout stable: do not change global spacing/type scale or restructure pages unless explicitly required.
+- Do NOT translate existing Bulgarian user-visible strings to English. New user-visible strings must be Bulgarian and consistent in tone.
+- Prefer minimal diffs: change the smallest number of files/lines needed. Avoid renames, large refactors, or reformatting.
+- If you need to touch global files (src/theme.ts, src/App.tsx, src/main.tsx), do it only when the change request explicitly requires it.
+- When in doubt about design, preserve the existing component patterns and spacing; do not \"upgrade\" visuals across the app.
 
 Return ONLY a single JSON object (no markdown, no code fences, no commentary before or after). First character "{", last "}".
 Shape: {"files":{"path":"full new file contents as one JSON string per path"}}
@@ -507,5 +513,5 @@ export function buildIteratorPrompt(
   const fileList = Object.entries(files)
     .map(([p, content]) => `// ${p}\n${content}`)
     .join('\n\n---\n\n');
-  return `Plan:\n${JSON.stringify(plan, null, 2)}\n\nChange request: "${changeRequest}"\n\nCurrent files:\n\n${fileList}\n\nЛокализация: запази и допълни потребителските текстове на български език.`;
+  return `Plan:\n${JSON.stringify(plan, null, 2)}\n\nChange request: "${changeRequest}"\n\nCurrent files (SCOPED SUBSET):\n\n${fileList}\n\nHard constraints:\n- Keep UI/layout stable; do not restyle unrelated areas.\n- No surprise features; implement only what is requested.\n- Keep all existing Bulgarian user-visible strings Bulgarian; any new user-visible strings must be Bulgarian.\n- Prefer minimal diffs; avoid broad refactors.\n\nЛокализация: запази и допълни потребителските текстове на български език.`;
 }

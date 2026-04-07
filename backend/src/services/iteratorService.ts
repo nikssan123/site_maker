@@ -26,11 +26,29 @@ import {
   GEN_JSON_REPAIR_INITIAL,
 } from '../lib/generationFriendly';
 
+function isSafeExtraFile(p: string): boolean {
+  return (
+    /^src\/(components|lib|pages)\/.+\.(ts|tsx)$/.test(p) ||
+    /^src\/styles\/.+\.(ts|tsx)$/.test(p) ||
+    /^src\/theme\.ts$/.test(p)
+  );
+}
+
+function isHighRiskGlobalFile(p: string): boolean {
+  return (
+    p === 'src/theme.ts' ||
+    p === 'src/App.tsx' ||
+    p === 'src/main.tsx' ||
+    p === 'vite.config.ts' ||
+    p === 'index.html'
+  );
+}
+
 export async function runIteration(
   sessionId: string,
   userId: string,
   changeRequest: string,
-  opts?: { spec?: string; logId?: string },
+  opts?: { spec?: string; targetFiles?: string[]; logId?: string },
 ): Promise<void> {
   await clearSessionEvents(sessionId);
 
@@ -45,6 +63,7 @@ export async function runIteration(
   const project = session.project;
   const planData = session.plan.data as Record<string, unknown>;
   const currentFiles = project.files as Record<string, string>;
+  const allFilePaths = Object.keys(currentFiles);
 
   await stopProject(project.id);
 
@@ -87,13 +106,40 @@ Rules:
   if (opts?.logId) {
     prisma.iterationLog.update({
       where: { id: opts.logId },
-      data: { description: refinedSpec.slice(0, 500) },
+      data: { description: refinedSpec.slice(0, 500) } as any,
     }).catch(() => {});
+  }
+
+  // Determine which existing files to provide as context (scoped subset).
+  let scopedFiles: string[] | null = null;
+  if (opts?.targetFiles && Array.isArray(opts.targetFiles) && opts.targetFiles.length > 0) {
+    const allowed = new Set(allFilePaths);
+    scopedFiles = Array.from(new Set(opts.targetFiles)).filter((p) => allowed.has(p)).slice(0, 8);
+  }
+
+  if (!scopedFiles || scopedFiles.length === 0) {
+    try {
+      const { scopeIteration } = await import('./iterateScopeService');
+      const scoped = await scopeIteration({
+        plan: planData,
+        filePaths: allFilePaths,
+        refinedSpec,
+        maxFiles: 8,
+      });
+      scopedFiles = scoped.targetFiles;
+    } catch {
+      scopedFiles = allFilePaths.slice(0, 6);
+    }
+  }
+
+  const subsetFiles: Record<string, string> = {};
+  for (const p of scopedFiles) {
+    if (typeof currentFiles[p] === 'string') subsetFiles[p] = currentFiles[p]!;
   }
 
   // Phase 2: Claude executes the refined spec
   const ai = getCodeClient();
-  const prompt = buildIteratorPrompt(planData, currentFiles, refinedSpec);
+  const prompt = buildIteratorPrompt(planData, subsetFiles, refinedSpec);
   const iterMaxTokens = parseInt(process.env.CLAUDE_MAX_OUTPUT_TOKENS ?? '8192', 10);
   let idx = 0;
   const hintTimer = setInterval(() => {
@@ -156,6 +202,33 @@ Rules:
     await publishEvent(sessionId, {
       type: 'fatal',
       message: 'ИИ върна невалиден отговор (очаква се JSON {"files":{...}})',
+    });
+    return;
+  }
+
+  // Safety: prevent broad/unscoped changes to reduce layout/copy regressions.
+  const changedPaths = Object.keys(changedFiles).sort();
+  const allowed = new Set(scopedFiles);
+  const illegal = changedPaths.filter((p) => !allowed.has(p) && !isSafeExtraFile(p));
+  const MAX_CHANGED = 10;
+  if (changedPaths.length > MAX_CHANGED || illegal.length > 0) {
+    await publishEvent(sessionId, {
+      type: 'fatal',
+      message:
+        'Промяната изглежда твърде широка или засяга неподходящи файлове. ' +
+        'Моля, уточнете по-точно какво да се промени и къде, за да го приложим без да развалим дизайна.',
+    });
+    return;
+  }
+
+  // Extra guardrail: block edits to high-risk global files unless they were explicitly in the scoped set.
+  const riskyTouched = changedPaths.filter((p) => isHighRiskGlobalFile(p) && !allowed.has(p));
+  if (riskyTouched.length > 0) {
+    await publishEvent(sessionId, {
+      type: 'fatal',
+      message:
+        'Промяната засяга глобални файлове (тема/основен вход), което е рисково и често разваля дизайна. ' +
+        'Моля, уточнете какво точно трябва да се промени глобално, или ограничете промяната до конкретен екран.',
     });
     return;
   }

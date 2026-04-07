@@ -2,10 +2,11 @@ import { z } from 'zod';
 import { prisma } from '../index';
 import { AppError } from '../middleware/errorHandler';
 import { getChatClient, ChatMessage } from './aiClient';
+import { scopeIteration } from './iterateScopeService';
 
 export type IterateClarifyResult =
   | { kind: 'question'; message: string }
-  | { kind: 'ready'; summary: string; spec: string };
+  | { kind: 'ready'; summary: string; spec: string; targetFiles: string[]; nonGoals: string[] };
 
 const RESULT_SCHEMA = z.object({
   ready: z.boolean(),
@@ -88,10 +89,20 @@ export async function clarifyIteration(
   if (!spec) {
     return { kind: 'question', message: 'Ок — можеш ли да уточниш още малко (какво точно поведение/правила), за да го направя точно?' };
   }
+
+  const scoped = await scopeIteration({
+    plan: planData,
+    filePaths: projectFiles,
+    refinedSpec: spec,
+    maxFiles: 8,
+  });
+
   return {
     kind: 'ready',
-    summary: summary || 'Ок — имам яснота какво да направя.',
+    summary: summary || scoped.summaryBg || 'Ок — имам яснота какво да направя.',
     spec,
+    targetFiles: scoped.targetFiles,
+    nonGoals: scoped.nonGoalsBg,
   };
 }
 
