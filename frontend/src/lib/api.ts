@@ -140,6 +140,31 @@ export const api = {
   patchContent: (projectId: string, body: { token: string; original: string; replacement: string }) =>
     request<{ ok: boolean }>('PATCH', `/preview/${projectId}/content`, body),
 
+  // Filesystem editor (paid projects)
+  fsTree: (projectId: string, dir?: string) =>
+    request<{ dir: string; children: unknown[] }>('GET', `/preview/${projectId}/fs/tree${dir ? `?dir=${encodeURIComponent(dir)}` : ''}`),
+  fsReadFile: (projectId: string, path: string) =>
+    request<{
+      path: string;
+      encoding: 'utf8' | 'binary';
+      size: number;
+      content?: string;
+      kind?: 'image';
+      mime?: string;
+      dataUrl?: string;
+    }>('GET', `/preview/${projectId}/fs/file?path=${encodeURIComponent(path)}`),
+  fsWriteFile: (projectId: string, body: { path: string; content: string; highRiskAck?: boolean }) =>
+    request<{ ok: boolean }>('PUT', `/preview/${projectId}/fs/file`, body),
+  fsMkdir: (projectId: string, path: string) =>
+    request<{ ok: boolean }>('POST', `/preview/${projectId}/fs/mkdir`, { path }),
+  fsRename: (projectId: string, from: string, to: string) =>
+    request<{ ok: boolean }>('POST', `/preview/${projectId}/fs/rename`, { from, to }),
+  fsDelete: (projectId: string, path: string, opts?: { recursive?: boolean }) => {
+    const qs = new URLSearchParams({ path });
+    if (opts?.recursive) qs.set('recursive', 'true');
+    return request<{ ok: boolean }>('DELETE', `/preview/${projectId}/fs/entry?${qs.toString()}`);
+  },
+
   setHostedSubdomain: (projectId: string, slug: string) =>
     request<{
       customDomain: string | null;

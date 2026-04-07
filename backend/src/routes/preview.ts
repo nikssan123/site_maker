@@ -17,6 +17,175 @@ import { isHostingActive } from '../lib/hostingActive';
 
 const EDIT_TOKEN_TTL_MS = 3_600_000; // 1 hour
 
+const FS_SKIP_DIRS = new Set(['node_modules', 'dist', '.git', '.vite', 'coverage', '.pnpm', '.next', '.cache']);
+const FS_MAX_LIST_ENTRIES = 5000;
+const FS_MAX_TEXT_BYTES = 1_500_000; // ~1.5MB
+const FS_MAX_READ_BYTES = 3_000_000; // ~3MB hard cap even for binary detection
+const FS_MAX_IMAGE_PREVIEW_BYTES = 1_500_000; // base64 preview cap (~1.5MB raw)
+
+type FsTreeNode =
+  | { type: 'dir'; name: string; path: string; children: FsTreeNode[] }
+  | { type: 'file'; name: string; path: string; size: number };
+
+function normalizeFsPath(raw: string): string {
+  const p = String(raw ?? '').replace(/\\/g, '/').trim();
+  if (!p) return '';
+  return p.replace(/^\/+/, '');
+}
+
+function resolveProjectSafePath(projectId: string, relativePath: string): { projectDir: string; absPath: string; rel: string } {
+  const projectDir = projectPath(projectId);
+  const rel = normalizeFsPath(relativePath);
+  if (!rel) throw new AppError(400, 'Missing path');
+  if (rel.includes('\0')) throw new AppError(400, 'Invalid path');
+  // prevent weird Windows drive/UNC paths sneaking in
+  if (/^[a-zA-Z]:\//.test(rel) || rel.startsWith('//')) throw new AppError(400, 'Invalid path');
+
+  const absPath = path.resolve(path.join(projectDir, rel));
+  const relative = path.relative(projectDir, absPath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new AppError(400, 'Bad request');
+  }
+  return { projectDir, absPath, rel };
+}
+
+function isWithinSkippedDir(relPath: string): boolean {
+  const parts = normalizeFsPath(relPath).split('/').filter(Boolean);
+  return parts.some((p) => FS_SKIP_DIRS.has(p));
+}
+
+function isProbablyBinary(buf: Buffer): boolean {
+  // Quick heuristic: NUL byte or high ratio of non-text bytes in first chunk.
+  const n = Math.min(buf.length, 8192);
+  if (n === 0) return false;
+  let weird = 0;
+  for (let i = 0; i < n; i++) {
+    const b = buf[i];
+    if (b === 0) return true;
+    // allow common whitespace + printable ASCII; treat other control chars as weird
+    if (b < 9 || (b > 13 && b < 32)) weird++;
+  }
+  return weird / n > 0.02;
+}
+
+function imageMimeFromPath(relPath: string): string | null {
+  const p = relPath.toLowerCase();
+  if (p.endsWith('.png')) return 'image/png';
+  if (p.endsWith('.jpg') || p.endsWith('.jpeg')) return 'image/jpeg';
+  if (p.endsWith('.gif')) return 'image/gif';
+  if (p.endsWith('.webp')) return 'image/webp';
+  if (p.endsWith('.svg')) return 'image/svg+xml';
+  if (p.endsWith('.ico')) return 'image/x-icon';
+  if (p.endsWith('.avif')) return 'image/avif';
+  return null;
+}
+
+function ensureParentDir(absPath: string): void {
+  const dir = path.dirname(absPath);
+  fs.mkdirSync(dir, { recursive: true });
+}
+
+async function triggerRebuildAsync(projectId: string, logPrefix: string): Promise<void> {
+  await prisma.project.update({
+    where: { id: projectId },
+    data: { status: 'building' },
+  });
+
+  (async () => {
+    try {
+      await stopProject(projectId);
+      const buildResult = await buildProject(projectId);
+      if (!buildResult.success) {
+        await prisma.project.update({
+          where: { id: projectId },
+          data: { status: 'error', errorLog: buildResult.log?.slice(0, 50_000) ?? 'Build failed' },
+        });
+        return;
+      }
+
+      const runResult = await runProject(projectId);
+      if (!runResult.success) {
+        await prisma.project.update({
+          where: { id: projectId },
+          data: { status: 'error', errorLog: runResult.log?.slice(0, 50_000) ?? 'Run failed' },
+        });
+        return;
+      }
+
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { status: 'running', runPort: runResult.port },
+      });
+    } catch (e) {
+      console.error(`[${logPrefix}] rebuild failed for`, projectId, e);
+      const msg = e instanceof Error ? e.message : String(e);
+      try {
+        await prisma.project.update({
+          where: { id: projectId },
+          data: { status: 'error', errorLog: msg.slice(0, 50_000) },
+        });
+      } catch {
+        /* ignore */
+      }
+    }
+  })();
+}
+
+function listFsTree(projectId: string, relDir: string): FsTreeNode[] {
+  const { projectDir, absPath, rel } = resolveProjectSafePath(projectId, relDir || '.');
+  const baseDir = absPath;
+  if (!fs.existsSync(baseDir)) throw new AppError(404, 'Not found');
+  if (!fs.statSync(baseDir).isDirectory()) throw new AppError(400, 'Path is not a directory');
+
+  let entriesCount = 0;
+
+  const walk = (dirAbs: string, dirRel: string): FsTreeNode[] => {
+    if (entriesCount >= FS_MAX_LIST_ENTRIES) return [];
+    const children: FsTreeNode[] = [];
+    const names = fs.readdirSync(dirAbs, { withFileTypes: true });
+
+    for (const ent of names) {
+      if (entriesCount >= FS_MAX_LIST_ENTRIES) break;
+      if (FS_SKIP_DIRS.has(ent.name)) continue;
+      const childAbs = path.join(dirAbs, ent.name);
+      const childRel = normalizeFsPath(path.join(dirRel, ent.name));
+      if (isWithinSkippedDir(childRel)) continue;
+
+      if (ent.isDirectory()) {
+        entriesCount++;
+        children.push({
+          type: 'dir',
+          name: ent.name,
+          path: childRel,
+          children: walk(childAbs, childRel),
+        });
+      } else if (ent.isFile()) {
+        entriesCount++;
+        const st = fs.statSync(childAbs);
+        children.push({
+          type: 'file',
+          name: ent.name,
+          path: childRel,
+          size: st.size,
+        });
+      }
+    }
+
+    children.sort((a, b) => {
+      if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    return children;
+  };
+
+  // Normalize rel: '.' => ''
+  const normRel = rel === '.' ? '' : rel;
+  const ok = path.relative(projectDir, baseDir);
+  if (ok.startsWith('..')) throw new AppError(400, 'Bad request');
+
+  return walk(baseDir, normRel);
+}
+
 function signEditToken(projectId: string): string {
   const expires = Date.now() + EDIT_TOKEN_TTL_MS;
   const payload = `${projectId}:${expires}`;
@@ -566,7 +735,6 @@ router.get('/:projectId/iteration-history', requireAuth, async (req, res, next) 
       where: { projectId },
       orderBy: { createdAt: 'desc' },
       take: 50,
-      select: { id: true, title: true, description: true, createdAt: true },
     });
     return res.json(logs);
   } catch (err) {
@@ -618,52 +786,175 @@ router.patch('/:projectId/content', requireAuth, async (req, res, next) => {
 
     applyContentPatch(projectId, original, replacement);
 
-    // Mark as building so the frontend knows to poll
-    await prisma.project.update({
-      where: { id: project.id },
-      data: { status: 'building' },
+    await triggerRebuildAsync(project.id, 'content-patch');
+
+    return res.json({ ok: true });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Unlocked project filesystem API (paid projects only)
+
+router.get('/:projectId/fs/tree', requireAuth, async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId);
+    const dir = typeof req.query.dir === 'string' ? req.query.dir : '';
+    const project = await prisma.project.findFirstOrThrow({
+      where: { id: projectId, session: { userId: req.user.userId } },
     });
+    if (!project.paid) throw new AppError(402, 'Purchase this project to edit files', 'payment_required');
 
-    // Rebuild in background; frontend polls GET /api/preview/:id until status === 'running'
-    (async () => {
-      try {
-        await stopProject(projectId);
-        const buildResult = await buildProject(projectId);
-        if (!buildResult.success) {
-          await prisma.project.update({
-            where: { id: projectId },
-            data: { status: 'error', errorLog: buildResult.log?.slice(0, 50_000) ?? 'Build failed' },
-          });
-          return;
-        }
+    const children = listFsTree(projectId, dir || '.');
+    return res.json({ dir: normalizeFsPath(dir), children });
+  } catch (err) {
+    return next(err);
+  }
+});
 
-        const runResult = await runProject(projectId);
-        if (!runResult.success) {
-          await prisma.project.update({
-            where: { id: projectId },
-            data: { status: 'error', errorLog: runResult.log?.slice(0, 50_000) ?? 'Run failed' },
-          });
-          return;
-        }
+router.get('/:projectId/fs/file', requireAuth, async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId);
+    const filePath = typeof req.query.path === 'string' ? req.query.path : '';
+    const project = await prisma.project.findFirstOrThrow({
+      where: { id: projectId, session: { userId: req.user.userId } },
+    });
+    if (!project.paid) throw new AppError(402, 'Purchase this project to edit files', 'payment_required');
 
-        await prisma.project.update({
-          where: { id: projectId },
-          data: { status: 'running', runPort: runResult.port },
-        });
-      } catch (e) {
-        console.error('[content-patch] rebuild failed for', projectId, e);
-        const msg = e instanceof Error ? e.message : String(e);
-        try {
-          await prisma.project.update({
-            where: { id: projectId },
-            data: { status: 'error', errorLog: msg.slice(0, 50_000) },
-          });
-        } catch {
-          /* ignore */
-        }
+    if (isWithinSkippedDir(filePath)) throw new AppError(403, 'This path is not accessible');
+    const { absPath, rel } = resolveProjectSafePath(projectId, filePath);
+    if (!fs.existsSync(absPath)) throw new AppError(404, 'Not found');
+    const st = fs.statSync(absPath);
+    if (!st.isFile()) throw new AppError(400, 'Not a file');
+    if (st.size > FS_MAX_READ_BYTES) throw new AppError(413, 'File is too large to open in editor');
+
+    const buf = fs.readFileSync(absPath);
+    const imgMime = imageMimeFromPath(rel);
+    if (imgMime) {
+      if (buf.length > FS_MAX_IMAGE_PREVIEW_BYTES) {
+        return res.json({ path: rel, encoding: 'binary', kind: 'image', mime: imgMime, size: st.size });
       }
-    })();
+      const b64 = buf.toString('base64');
+      const dataUrl = `data:${imgMime};base64,${b64}`;
+      return res.json({ path: rel, encoding: 'binary', kind: 'image', mime: imgMime, size: st.size, dataUrl });
+    }
+    const binary = isProbablyBinary(buf);
+    if (binary) {
+      return res.json({ path: rel, encoding: 'binary', size: st.size });
+    }
+    if (buf.length > FS_MAX_TEXT_BYTES) throw new AppError(413, 'File is too large to edit safely');
+    const content = buf.toString('utf8');
+    return res.json({ path: rel, encoding: 'utf8', size: st.size, content });
+  } catch (err) {
+    return next(err);
+  }
+});
 
+router.put('/:projectId/fs/file', requireAuth, async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId);
+    const { path: filePath, content, highRiskAck } = z.object({
+      path: z.string().min(1),
+      content: z.string(),
+      highRiskAck: z.boolean().optional(),
+    }).parse(req.body);
+
+    const project = await prisma.project.findFirstOrThrow({
+      where: { id: projectId, session: { userId: req.user.userId } },
+    });
+    if (!project.paid) throw new AppError(402, 'Purchase this project to edit files', 'payment_required');
+
+    if (isWithinSkippedDir(filePath)) throw new AppError(403, 'This path is not accessible');
+
+    const rel = normalizeFsPath(filePath);
+    const isServer = rel.toLowerCase().endsWith('server.js') || path.basename(rel).toLowerCase() === 'server.js';
+    if (isServer && highRiskAck !== true) {
+      throw new AppError(
+        400,
+        'Editing server.js is high risk and can break the preview/back-end. Confirm the high-risk checkbox to proceed.',
+      );
+    }
+
+    const { absPath } = resolveProjectSafePath(projectId, rel);
+    ensureParentDir(absPath);
+    if (content.length > FS_MAX_TEXT_BYTES * 2) throw new AppError(413, 'File is too large to save');
+    fs.writeFileSync(absPath, content, 'utf8');
+
+    await triggerRebuildAsync(project.id, 'fs-write');
+    return res.json({ ok: true });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/:projectId/fs/mkdir', requireAuth, async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId);
+    const { path: dirPath } = z.object({ path: z.string().min(1) }).parse(req.body);
+    const project = await prisma.project.findFirstOrThrow({
+      where: { id: projectId, session: { userId: req.user.userId } },
+    });
+    if (!project.paid) throw new AppError(402, 'Purchase this project to edit files', 'payment_required');
+    if (isWithinSkippedDir(dirPath)) throw new AppError(403, 'This path is not accessible');
+
+    const { absPath } = resolveProjectSafePath(projectId, dirPath);
+    fs.mkdirSync(absPath, { recursive: true });
+    await triggerRebuildAsync(project.id, 'fs-mkdir');
+    return res.json({ ok: true });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/:projectId/fs/rename', requireAuth, async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId);
+    const { from, to } = z.object({ from: z.string().min(1), to: z.string().min(1) }).parse(req.body);
+    const project = await prisma.project.findFirstOrThrow({
+      where: { id: projectId, session: { userId: req.user.userId } },
+    });
+    if (!project.paid) throw new AppError(402, 'Purchase this project to edit files', 'payment_required');
+    if (isWithinSkippedDir(from) || isWithinSkippedDir(to)) throw new AppError(403, 'This path is not accessible');
+
+    const src = resolveProjectSafePath(projectId, from).absPath;
+    const dst = resolveProjectSafePath(projectId, to).absPath;
+    if (!fs.existsSync(src)) throw new AppError(404, 'Not found');
+    ensureParentDir(dst);
+    fs.renameSync(src, dst);
+
+    await triggerRebuildAsync(project.id, 'fs-rename');
+    return res.json({ ok: true });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.delete('/:projectId/fs/entry', requireAuth, async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId);
+    const entryPath = typeof req.query.path === 'string' ? req.query.path : '';
+    const recursive = String(req.query.recursive ?? '') === 'true';
+    const project = await prisma.project.findFirstOrThrow({
+      where: { id: projectId, session: { userId: req.user.userId } },
+    });
+    if (!project.paid) throw new AppError(402, 'Purchase this project to edit files', 'payment_required');
+    if (isWithinSkippedDir(entryPath)) throw new AppError(403, 'This path is not accessible');
+
+    const { absPath } = resolveProjectSafePath(projectId, entryPath);
+    if (!fs.existsSync(absPath)) throw new AppError(404, 'Not found');
+    const st = fs.statSync(absPath);
+    if (st.isDirectory()) {
+      const children = fs.readdirSync(absPath);
+      if (children.length > 0 && !recursive) {
+        throw new AppError(400, 'Directory is not empty (pass recursive=true to delete)');
+      }
+      fs.rmSync(absPath, { recursive: true, force: true });
+    } else {
+      fs.unlinkSync(absPath);
+    }
+
+    await triggerRebuildAsync(project.id, 'fs-delete');
     return res.json({ ok: true });
   } catch (err) {
     return next(err);

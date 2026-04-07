@@ -8,6 +8,7 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ChatPage from './pages/ChatPage';
 import PreviewPage from './pages/PreviewPage';
+import FilesPage from './pages/FilesPage';
 import BillingPage from './pages/BillingPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import ConnectDomainDocsPage from './pages/ConnectDomainDocsPage';
@@ -105,6 +106,7 @@ export default function App() {
           {/* One route so /chat → /chat/:id does not remount ChatPage and drop in-flight state */}
           <Route path="/chat/:sessionId?" element={<ChatPage />} />
           <Route path="/preview/:projectId" element={<PreviewPage />} />
+          <Route path="/files/:projectId" element={<FilesPage />} />
           <Route path="/analytics/:projectId" element={<AnalyticsPage />} />
           <Route path="/billing" element={<BillingPage />} />
           <Route path="/docs/connect-domain" element={<ConnectDomainDocsPage />} />

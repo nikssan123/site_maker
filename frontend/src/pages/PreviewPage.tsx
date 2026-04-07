@@ -25,6 +25,7 @@ import ArticleIcon from '@mui/icons-material/Article';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import HistoryIcon from '@mui/icons-material/History';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import DescriptionIcon from '@mui/icons-material/Description';
 
 import PreviewFrame from '../components/PreviewFrame';
 import CatalogPanel from '../components/CatalogPanel';
@@ -643,6 +644,19 @@ export default function PreviewPage() {
               />
             </Box>
           </Tooltip>
+
+          {projectPaid && (
+            <Tooltip title="Редактирай файловете" placement="right">
+              <Box>
+                <ActionButton
+                  icon={<DescriptionIcon fontSize="inherit" />}
+                  label="Файлове"
+                  onClick={() => navigate(`/files/${projectId}`)}
+                  color="#60a5fa"
+                />
+              </Box>
+            </Tooltip>
+          )}
 
           <Divider sx={{ my: 0.5 }} />
 
