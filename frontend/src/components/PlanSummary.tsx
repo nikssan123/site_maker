@@ -1,4 +1,4 @@
-import { Box, Typography, Chip, Button, Stack, Tooltip, Divider } from '@mui/material';
+import { Box, Typography, Chip, Button, Stack, Tooltip, Divider, TextField } from '@mui/material';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import EditIcon from '@mui/icons-material/Edit';
 import StorageIcon from '@mui/icons-material/Storage';
@@ -10,6 +10,7 @@ interface Props {
   plan: PlanData;
   onConfirm: () => void;
   onEdit: () => void;
+  onSocialLinksChange: (links: NonNullable<PlanData['data']['socialLinks']>) => void;
   loading: boolean;
   ctaLabel?: string;
   colorTheme: ColorTheme;
@@ -107,14 +108,26 @@ function normalizePlanData(raw: unknown): PlanData['data'] {
     tech: typeof o.tech === 'string' ? o.tech : base.tech,
     hasDatabase: o.hasDatabase === true,
     dataModels,
+    socialLinks:
+      o.socialLinks && typeof o.socialLinks === 'object' && !Array.isArray(o.socialLinks)
+        ? {
+            facebook: typeof (o.socialLinks as any).facebook === 'string' ? (o.socialLinks as any).facebook : undefined,
+            instagram: typeof (o.socialLinks as any).instagram === 'string' ? (o.socialLinks as any).instagram : undefined,
+            tiktok: typeof (o.socialLinks as any).tiktok === 'string' ? (o.socialLinks as any).tiktok : undefined,
+            linkedin: typeof (o.socialLinks as any).linkedin === 'string' ? (o.socialLinks as any).linkedin : undefined,
+            youtube: typeof (o.socialLinks as any).youtube === 'string' ? (o.socialLinks as any).youtube : undefined,
+            x: typeof (o.socialLinks as any).x === 'string' ? (o.socialLinks as any).x : undefined,
+          }
+        : undefined,
   };
 }
 
-export default function PlanSummary({ plan, onConfirm, onEdit, loading, ctaLabel, colorTheme, onThemeChange, onExtractFromImage }: Props) {
+export default function PlanSummary({ plan, onConfirm, onEdit, onSocialLinksChange, loading, ctaLabel, colorTheme, onThemeChange, onExtractFromImage }: Props) {
   const { t } = useTranslation();
   const data = normalizePlanData(plan?.data);
   const hasStructured =
     !!(data.appType || data.style || data.tech || data.hasDatabase || data.pages.length || data.features.length);
+  const links = data.socialLinks ?? {};
 
   return (
     <Box
@@ -222,6 +235,50 @@ export default function PlanSummary({ plan, onConfirm, onEdit, loading, ctaLabel
             </Stack>
           </Box>
         )}
+
+        <Box mb={2}>
+          <Typography variant="caption" sx={{ color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 10, fontWeight: 600 }}>
+            {t('plan.socialLinks')}
+          </Typography>
+          <Stack gap={1} mt={0.75}>
+            <TextField
+              size="small"
+              label="Facebook"
+              value={links.facebook ?? ''}
+              onChange={(e) => onSocialLinksChange({ ...links, facebook: e.target.value })}
+            />
+            <TextField
+              size="small"
+              label="Instagram"
+              value={links.instagram ?? ''}
+              onChange={(e) => onSocialLinksChange({ ...links, instagram: e.target.value })}
+            />
+            <TextField
+              size="small"
+              label="TikTok"
+              value={links.tiktok ?? ''}
+              onChange={(e) => onSocialLinksChange({ ...links, tiktok: e.target.value })}
+            />
+            <TextField
+              size="small"
+              label="LinkedIn"
+              value={links.linkedin ?? ''}
+              onChange={(e) => onSocialLinksChange({ ...links, linkedin: e.target.value })}
+            />
+            <TextField
+              size="small"
+              label="YouTube"
+              value={links.youtube ?? ''}
+              onChange={(e) => onSocialLinksChange({ ...links, youtube: e.target.value })}
+            />
+            <TextField
+              size="small"
+              label="X (Twitter)"
+              value={links.x ?? ''}
+              onChange={(e) => onSocialLinksChange({ ...links, x: e.target.value })}
+            />
+          </Stack>
+        </Box>
 
         <Divider sx={{ borderColor: 'rgba(255,255,255,0.07)', my: 1.5 }} />
         <ColorThemePicker

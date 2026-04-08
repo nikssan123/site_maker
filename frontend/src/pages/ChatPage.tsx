@@ -89,6 +89,14 @@ export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [colorTheme, setColorTheme] = useState<ColorTheme>(THEME_PRESETS[0]); // Indigo default
   const [planVisible, setPlanVisible] = useState(false);
+  const [socialLinks, setSocialLinks] = useState<{
+    facebook?: string;
+    instagram?: string;
+    tiktok?: string;
+    linkedin?: string;
+    youtube?: string;
+    x?: string;
+  }>({});
   /** When a plan is present, hide chat until user explicitly clicks Edit. */
   const [chatUnlockedForEditing, setChatUnlockedForEditing] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -201,6 +209,15 @@ export default function ChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [store.messages, store.streamBuffer, store.plan]);
+
+  useEffect(() => {
+    const v = store.plan?.data?.socialLinks;
+    if (v && typeof v === 'object') {
+      setSocialLinks(v);
+    } else {
+      setSocialLinks({});
+    }
+  }, [store.plan?.id]);
 
   /** Reattach SSE + ask backend to continue install/build after refresh or server restart. */
   useEffect(() => {
@@ -495,6 +512,13 @@ export default function ChatPage() {
               setPlanVisible(false);
               // Keep focus behavior for quick edits
               inputRef.current?.focus();
+            }}
+            onSocialLinksChange={(links) => {
+              setSocialLinks(links);
+              if (!store.plan) return;
+              api.patch<any>(`/plan/${store.plan.id}`, { socialLinks: links })
+                .then((p) => { store.setPlan(p); })
+                .catch(() => {});
             }}
             loading={store.isStreaming || paymentLoading}
             ctaLabel={isFreeProject ? t('plan.buildFree') : t('plan.buildPaid')}

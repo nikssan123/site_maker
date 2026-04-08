@@ -31,6 +31,17 @@ router.patch('/:planId', requireAuth, async (req, res, next) => {
             background: z.string(),
           })
           .optional(),
+        socialLinks: z
+          .object({
+            facebook: z.string().optional(),
+            instagram: z.string().optional(),
+            tiktok: z.string().optional(),
+            linkedin: z.string().optional(),
+            youtube: z.string().optional(),
+            x: z.string().optional(),
+          })
+          .partial()
+          .optional(),
       })
       .parse(req.body);
 

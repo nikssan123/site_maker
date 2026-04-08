@@ -19,6 +19,14 @@ export interface PlanData {
     tech: string;
     hasDatabase?: boolean;
     dataModels?: Array<{ name: string; fields: string[] }>;
+    socialLinks?: {
+      facebook?: string;
+      instagram?: string;
+      tiktok?: string;
+      linkedin?: string;
+      youtube?: string;
+      x?: string;
+    };
   };
   locked: boolean;
 }

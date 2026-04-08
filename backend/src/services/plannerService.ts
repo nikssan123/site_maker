@@ -69,6 +69,18 @@ function shouldRetryForPlanBlock(userMessage: string, response: string): boolean
   return userSignalsReadyToPlan(userMessage) || assistantPromisedPlanInProse(response);
 }
 
+function extractUrls(text: string): string[] {
+  const matches = text.match(/https?:\/\/[^\s<>"')\]]+/gi) ?? [];
+  return matches.map((s) => s.trim());
+}
+
+function userProvidedAnySocialLink(userMessage: string): boolean {
+  const urls = extractUrls(userMessage);
+  if (urls.length > 0) return true;
+  // Also accept “none” / “нямам” etc. as an explicit answer.
+  return /\b(none|nope|n\/a|нямам|няма|не ползвам|без|нямаме)\b/i.test(userMessage);
+}
+
 const FORCE_PLAN_APPENDIX = `
 
 КРИТИЧНО: Предишният ти отговор НЕ съдържаше валиден машинно-четим \`\`\`plan\`\`\` блок (или беше счупен).
@@ -102,7 +114,17 @@ export async function chat(
   history.push({ role: 'user', content: userMessage });
 
   const ai = getChatClient();
-  let response = await ai.complete(history, PLANNER_SYSTEM_LOCALIZED);
+  const askedSocialBefore = history.some(
+    (m) => m.role === 'assistant' && /\b(Facebook|Instagram|TikTok|LinkedIn|YouTube|Twitter|X)\b/i.test(m.content),
+  );
+  const socialAnswered = history.some((m) => m.role === 'user' && userProvidedAnySocialLink(m.content));
+
+  let system = PLANNER_SYSTEM_LOCALIZED;
+  if (!askedSocialBefore && !socialAnswered) {
+    system += `\n\nIMPORTANT:\nBefore you finalize the plan, you MUST ask the user for their social media links.\nAsk for: Facebook, Instagram, TikTok, LinkedIn, YouTube, X (Twitter).\nIf they don't have some, they can say \"none\".\nAsk ONE short question only. Do NOT output the plan block in this turn unless the user already provided the social links.`;
+  }
+
+  let response = await ai.complete(history, system);
 
   if (shouldRetryForPlanBlock(userMessage, response)) {
     const forcePlanSystem = `${PLANNER_SYSTEM_LOCALIZED}${FORCE_PLAN_APPENDIX}`;
