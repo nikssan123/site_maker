@@ -38,7 +38,6 @@ import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutli
 import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
 import NoteAddIcon from '@mui/icons-material/NoteAdd';
 import SaveIcon from '@mui/icons-material/Save';
-import RefreshIcon from '@mui/icons-material/Refresh';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -365,14 +364,6 @@ export default function FilesPage() {
           <Typography variant="subtitle1" fontWeight={800} sx={{ flex: 1 }}>
             Файлове
           </Typography>
-          <Button
-            size="small"
-            startIcon={<RefreshIcon />}
-            onClick={() => reloadTree()}
-            disabled={loadingTree || saving}
-          >
-            Обнови
-          </Button>
           <Button
             size="small"
             startIcon={<SaveIcon />}
