@@ -207,60 +207,59 @@ export async function clarifyIteration(
   }
 
   const suggestedTargets = explored?.targetFiles?.length ? explored.targetFiles : null;
-  const fileContext = buildClarifyFileContext(fileRecord, suggestedTargets ?? projectFiles);
-  const explorationNotes = explored?.contextNotes?.trim() || '';
+  // Prefer exploration-opened bodies (targeted to this request) over the heuristic file context.
+  // Only fall back to heuristic context when exploration opened nothing.
   const exploredBodies = explored?.openedBodies?.trim() || '';
+  const fileContext = exploredBodies ? '' : buildClarifyFileContext(fileRecord, suggestedTargets ?? projectFiles);
+  const relevantCodeContext = exploredBodies || fileContext;
 
   const mandatoryNoMoreQuestions =
     alreadyAskedAQuestion
       ? `
 ЗАДЪЛЖИТЕЛНО за този ход:
 - В този разговор вече е зададен поне един въпрос от асистента към потребителя.
-- Върни САМО валиден JSON с "ready": true, "summary", "planBulletsBg" и "spec".
-- Забранено е "ready": false или поле "question".
+- Върни САМО валиден JSON с “ready”: true, “summary”, “planBulletsBg” и “spec”.
+- Забранено е “ready”: false или поле “question”.
 - Направи разумни допускания; включи пълна техническа spec на английски с точни пътища към файлове от проекта.
 `
       : '';
 
   const system = `
-Ти си старши full‑stack инженер и продуктов човек. Потребителят иска да направи "подобрение" на вече генерираното приложение.
+Ти си старши full‑stack инженер. Потребителят иска да направи “подобрение” на вече генерирано приложение.
 
-ВЪТРЕШЕН КОНТЕКСТ (не го цитирай дословно в полетата summary/question за потребителя):
-- План (JSON): ${JSON.stringify(planData)}
-- Налични пътища (за spec): ${projectFiles.join(', ')}
+ПРОЕКТ (вътрешен контекст — не го цитирай в summary/question):
+- План: ${JSON.stringify(planData)}
+- Всички файлове: ${projectFiles.join(', ')}
 
-СЪДЪРЖАНИЕ НА ИЗБРАНИ ФАЙЛОВЕ (за разбиране на кода; в summary/question НЕ споменавай пътища, имена на файлове, .tsx/.jsx, "src/"):
-${fileContext || '(няма налично съдържание)'}
-
-CURSOR-STYLE EXPLORATION (internal notes; do not mention file paths to the user in summary/question):
-${explorationNotes || '(none)'}
-
-OPENED FILE SNIPPETS (internal; for understanding only):
-${exploredBodies || '(none)'}
+КОД НА РЕЛЕВАНТНИТЕ ФАЙЛОВЕ (вътрешен; в summary/question НЕ споменавай пътища, .tsx/.jsx, “src/”):
+${relevantCodeContext || '(няма налично съдържание)'}
 
 Цел: почти винаги директно готова spec; само при крайна неяснота — един кратък продуктов въпрос (и само ако още няма съобщение от асистента в този thread).
 
 Правила за потребителския текст (summary и question):
-- Пиши на български, без технически жаргон, без имена на файлове и без пътища.
+- На български, без технически жаргон, без имена на файлове и без пътища.
 
 Правила за planBulletsBg (само при ready: true):
-- Масив от 3–6 кратки реда на български: какво точно ще се промени за крайния потребител на сайта/приложението.
-- Всеки ред = конкретно видимо действие или резултат (напр. „Бутонът „Купи“ в хедъра става зелен и по-широк“).
-- Забранени са общи фрази от типа „ще приложим заявката“, „минимални промени“, „запазваме стила“ — вместо това опиши РЕЗУЛТАТА.
+- 3–6 кратки реда на български: какво точно ще се промени за крайния потребител.
+- Всеки ред = конкретно видимо действие или резултат (напр. „Бутонът „Купи” в хедъра става зелен и по-широк”).
+- Забранени са общи фрази: „ще приложим заявката”, „минимални промени”, „запазваме стила” — опиши РЕЗУЛТАТА.
 - Без английски, без пътища, без имена на файлове, без код.
 
 Правила за въпроси:
-- Ако вече е зададен поне един въпрос в историята на разговора, НЕ задавай въпрос — винаги ready: true (виж ЗАДЪЛЖИТЕЛНО по-долу ако е приложимо).
+- Ако вече е зададен поне един въпрос в историята, НЕ задавай въпрос — винаги ready: true.
 - Иначе: най-много един въпрос за целия чат; питай само за продуктово поведение.
-- При ясни заявки ("смени цвета на бутона", "добави поле") — веднага ready: true с разумни допускания.
+- При ясни заявки (“смени цвета на бутона”, “добави поле”) — веднага ready: true с разумни допускания.
 
-Правила за spec (английски, за кодовия модел):
-- 4–8 конкретни bullets; включи точни пътища от проекта където е нужно.
-- Минимален обхват; без големи рефакторинги.
+Правила за spec (технически, на английски, за кода):
+- 4–8 конкретни bullets.
+- Всеки bullet = точно действие: кой файл (точен path от списъка), кой компонент/prop/функция, какво се сменя.
+  Пример: “In src/pages/HomePage.tsx, change the AppBar sx prop to add position:'sticky', top:0, zIndex:10.”
+- Базирай се на видения код — не измисляй имена на компоненти, props или state.
+- Минимален обхват; само необходимите файлове; без широки рефакторинги.
 
 ВЪРНИ САМО JSON (без markdown):
-1) Ако НЕ е готово и още няма assistant съобщение в този thread: { "ready": false, "question": "<български, без технически детайли>" }
-2) Ако е готово: { "ready": true, "summary": "<1–2 изречения на български>", "planBulletsBg": ["<конкретна промяна>", "..."], "spec": "<технически bullets на английски>" }
+1) Ако НЕ е готово и още няма assistant съобщение в този thread: { “ready”: false, “question”: “<български, без технически детайли>” }
+2) Ако е готово: { “ready”: true, “summary”: “<1–2 изречения на български>”, “planBulletsBg”: [“<конкретна промяна>”, “...”], “spec”: “<технически bullets на английски>” }
 ${mandatoryNoMoreQuestions}
 `;
 
@@ -282,15 +281,17 @@ ${mandatoryNoMoreQuestions}
       maxFiles: 8,
     });
     const spec =
-      `${specPrefix}\nTarget files (edit only as needed):\n${scoped.targetFiles.map((f) => `- ${f}`).join('\n')}`;
-    const alt = [scoped.summaryBg, userMessageBg].filter(Boolean).join(' ').trim();
-    let planBulletsBg = normalizePlanBulletsBg(undefined, summary, alt || undefined);
+      `${specPrefix}\n${refinedSpec}\n\nTarget files (edit only as needed):\n${scoped.targetFiles.map((f) => `- ${f}`).join('\n')}`;
+    // Use the scope service's Bulgarian description — it's specific to the change ("Хедърът ще бъде фиксиран...").
+    // The generic `summary` parameter ("Ок — ще го направя...") is only a UI fallback.
+    const effectiveSummary = scoped.summaryBg || summary;
+    let planBulletsBg = normalizePlanBulletsBg(undefined, effectiveSummary, userMessageBg || undefined);
     if (planBulletsBg.length === 0) {
-      planBulletsBg = [summary || scoped.summaryBg || 'Ще приложа описаната от теб промяна в приложението.'];
+      planBulletsBg = [effectiveSummary || 'Ще приложа описаната от теб промяна в приложението.'];
     }
     return {
       kind: 'ready',
-      summary,
+      summary: effectiveSummary,
       planBulletsBg,
       spec,
       targetFiles: scoped.targetFiles,
@@ -303,7 +304,7 @@ ${mandatoryNoMoreQuestions}
       const lastUser = lastUserContent(conversation);
       return readyFromScopeFallback(
         'Ок — ще го направя по най-разумния начин на база описанието ти.',
-        lastUser || 'Apply the requested change using best judgement.',
+        draftSpecEn,
         `Assumptions: Use best judgement; do not ask more questions.\n` +
           `- Implement the requested change described by the user.\n` +
           `- Keep existing styles and flows unless explicitly requested.\n` +
@@ -361,7 +362,7 @@ ${mandatoryNoMoreQuestions}
     const lastUser = lastUserContent(conversation);
     return readyFromScopeFallback(
       'Ок — продължавам с промяната по най-доброто тълкуване на заявката.',
-      lastUser || 'Apply the requested change using best judgement.',
+      draftSpecEn,
       `Assumptions: User did not provide more details; proceed with best judgement.\n` +
         `- Implement the requested change.\n` +
         `- Keep scope minimal; avoid broad refactors.\n` +
@@ -378,7 +379,7 @@ ${mandatoryNoMoreQuestions}
       const lastUser = lastUserContent(conversation);
       return readyFromScopeFallback(
         summary || 'Ок — имам яснота какво да направя.',
-        lastUser || 'Apply the requested change using best judgement.',
+        draftSpecEn,
         `Assumptions: Proceed from user message; minimal change.\n` +
           `- Implement what the user asked.\n` +
           `- Keep scope small.\n`,
@@ -398,23 +399,6 @@ ${mandatoryNoMoreQuestions}
     maxFiles: 8,
   });
 
-  let explorerTargetFiles: string[] | null = null;
-  let explorerContextNotes: string | null = null;
-  try {
-    const explored = await exploreIterationFiles({
-      plan: planData,
-      refinedSpec: spec,
-      filePaths: projectFiles,
-      fileContents: fileRecord,
-      maxOpens: 6,
-      maxTurns: 4,
-    });
-    explorerTargetFiles = explored.targetFiles;
-    explorerContextNotes = explored.contextNotes;
-  } catch {
-    /* ignore exploration failures */
-  }
-
   const sum = summary || scoped.summaryBg || 'Ок — имам яснота какво да направя.';
   let planBulletsBg = normalizePlanBulletsBg(v.planBulletsBg, sum, scoped.summaryBg);
   if (planBulletsBg.length === 0) planBulletsBg = [sum];
@@ -429,10 +413,9 @@ ${mandatoryNoMoreQuestions}
       const modelSuggested = (v.targetFiles ?? []).filter((p) => allowed.has(p)).slice(0, 8);
       if (modelSuggested.length > 0) return modelSuggested;
       if (suggestedTargets && suggestedTargets.length > 0) return suggestedTargets;
-      if (explorerTargetFiles && explorerTargetFiles.length > 0) return explorerTargetFiles;
       return scoped.targetFiles;
     })(),
     nonGoals: scoped.nonGoalsBg,
-    ...(explorerContextNotes ? { explorerContextNotes } : {}),
+    ...(explored?.contextNotes ? { explorerContextNotes: explored.contextNotes } : {}),
   };
 }
