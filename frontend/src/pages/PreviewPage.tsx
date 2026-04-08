@@ -303,6 +303,7 @@ export default function PreviewPage() {
   }, [editToken]);
 
   const canDownloadZip = store.projectPaid || store.allowUnpaidDownload;
+  const isProjectLocked = !store.projectPaid && !store.allowUnpaidDownload;
 
   const handleDownload = async () => {
     if (!canDownloadZip) {
@@ -608,8 +609,15 @@ export default function PreviewPage() {
             <Box data-tour="action-download">
               <ActionButton
                 icon={canDownloadZip ? <DownloadIcon fontSize="inherit" /> : <LockIcon fontSize="inherit" />}
-                label={t('preview.download')}
-                onClick={handleDownload}
+                label={isProjectLocked ? t('preview.purchase') : t('preview.download')}
+                onClick={() => {
+                  if (isProjectLocked) {
+                    setCheckoutReason(t('preview.purchaseTooltip'));
+                    setCheckoutOpen(true);
+                    return;
+                  }
+                  handleDownload();
+                }}
                 disabled={iterating}
                 color={canDownloadZip ? undefined : '#f87171'}
               />
@@ -618,39 +626,40 @@ export default function PreviewPage() {
 
           <Divider sx={{ my: 0.5 }} />
 
-          <Box data-tour="action-hosting">
-          {projectHosted ? (
-            <Tooltip title={t('preview.hosted')} placement="right">
-              <Box>
-                <ActionButton
-                  icon={<CloudDoneIcon fontSize="inherit" />}
-                  label={t('preview.hosted')}
-                  onClick={() => {
-                    if (drawerOpen && drawerMode === 'hosting') {
-                      setDrawerOpen(false);
-                    } else {
-                      setDrawerMode('hosting');
-                      setDrawerOpen(true);
-                    }
-                  }}
-                  active={drawerOpen && drawerMode === 'hosting'}
-                  color="#a855f7"
-                />
-              </Box>
-            </Tooltip>
-          ) : (
-            <Tooltip title={projectPaid ? t('preview.hostTooltip') : t('preview.unlockTitle')} placement="right">
-              <Box>
-                <ActionButton
-                  icon={<CloudIcon fontSize="inherit" />}
-                  label={t('preview.hostCta')}
-                  onClick={handleHosting}
-                  disabled={!projectPaid}
-                />
-              </Box>
-            </Tooltip>
+          {projectPaid && (
+            <Box data-tour="action-hosting">
+              {projectHosted ? (
+                <Tooltip title={t('preview.hosted')} placement="right">
+                  <Box>
+                    <ActionButton
+                      icon={<CloudDoneIcon fontSize="inherit" />}
+                      label={t('preview.hosted')}
+                      onClick={() => {
+                        if (drawerOpen && drawerMode === 'hosting') {
+                          setDrawerOpen(false);
+                        } else {
+                          setDrawerMode('hosting');
+                          setDrawerOpen(true);
+                        }
+                      }}
+                      active={drawerOpen && drawerMode === 'hosting'}
+                      color="#a855f7"
+                    />
+                  </Box>
+                </Tooltip>
+              ) : (
+                <Tooltip title={t('preview.hostTooltip')} placement="right">
+                  <Box>
+                    <ActionButton
+                      icon={<CloudIcon fontSize="inherit" />}
+                      label={t('preview.hostCta')}
+                      onClick={handleHosting}
+                    />
+                  </Box>
+                </Tooltip>
+              )}
+            </Box>
           )}
-          </Box>
 
           <Divider sx={{ my: 0.5 }} />
 
