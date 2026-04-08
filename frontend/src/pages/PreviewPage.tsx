@@ -26,6 +26,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import HistoryIcon from '@mui/icons-material/History';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import DescriptionIcon from '@mui/icons-material/Description';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 
 import PreviewFrame from '../components/PreviewFrame';
 import CatalogPanel from '../components/CatalogPanel';
@@ -43,6 +44,8 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 import { useProjectStore } from '../store/project';
 import HostingPanel from '../components/HostingPanel';
+import { Joyride } from 'react-joyride';
+import { usePreviewTour } from '../hooks/usePreviewTour';
 
 const DRAWER_WIDTH = 400;
 
@@ -164,6 +167,7 @@ export default function PreviewPage() {
   const paymentsOauthError = searchParams.get('error') ?? null;
 
   const store = useProjectStore();
+  const tour = usePreviewTour(store.projectPaid);
 
   const [paymentsConfigured, setPaymentsConfigured] = useState(true);
   const [planNeedsPayments, setPlanNeedsPayments] = useState(false);
@@ -471,6 +475,35 @@ export default function PreviewPage() {
 
   return (
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
+      <Joyride
+        steps={tour.steps}
+        run={tour.run}
+        onEvent={tour.handleCallback}
+        continuous
+        options={{
+          primaryColor: '#6366f1',
+          backgroundColor: '#1e293b',
+          textColor: '#f1f5f9',
+          zIndex: 1400,
+          showProgress: true,
+          buttons: ['back', 'skip', 'primary'],
+        }}
+        locale={{
+          back: t('tour.back'),
+          close: t('tour.finish'),
+          last: t('tour.finish'),
+          next: t('tour.next'),
+          nextWithProgress: t('tour.nextWithProgress', { current: '{current}', total: '{total}' }),
+          skip: t('tour.skip'),
+        }}
+        styles={{
+          tooltip: { borderRadius: 12, overflow: 'visible' },
+          arrow: { zIndex: 1 },
+          buttonBack: { fontWeight: 700 },
+          buttonPrimary: { fontWeight: 700 },
+          buttonSkip: { fontWeight: 700 },
+        }}
+      />
       <Backdrop
         open={editSaving}
         sx={{
@@ -507,6 +540,20 @@ export default function PreviewPage() {
           <Typography variant="subtitle1" fontWeight={700}>
             {t('preview.title')}
           </Typography>
+          <Box sx={{ flex: 1 }} />
+          <Tooltip title={t('tour.replayTooltip')}>
+            <span>
+              <IconButton
+                size="small"
+                onClick={() => {
+                  if (store.projectPaid) tour.replayTourB();
+                  else tour.replayTourA();
+                }}
+              >
+                <HelpOutlineIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
 
         </Toolbar>
       </AppBar>
@@ -516,6 +563,7 @@ export default function PreviewPage() {
 
         {/* ── Left: action strip ── */}
         <Box
+          data-tour="preview-action-strip"
           sx={{
             width: 68,
             flexShrink: 0,
@@ -530,7 +578,7 @@ export default function PreviewPage() {
           }}
         >
           <Tooltip title={drawerOpen && drawerMode === 'improvements' ? t('preview.hideImprovements') : t('preview.showImprovements')} placement="right">
-            <Box>
+            <Box data-tour="action-improvements">
               <ActionButton
                 icon={<AutoFixHighIcon fontSize="inherit" />}
                 label={t('iteration.barLabel')}
@@ -550,7 +598,7 @@ export default function PreviewPage() {
           <Divider sx={{ my: 0.5 }} />
 
           <Tooltip title={canDownloadZip ? t('preview.downloadZip') : t('preview.downloadLocked')} placement="right">
-            <Box>
+            <Box data-tour="action-download">
               <ActionButton
                 icon={canDownloadZip ? <DownloadIcon fontSize="inherit" /> : <LockIcon fontSize="inherit" />}
                 label={t('preview.download')}
@@ -563,6 +611,7 @@ export default function PreviewPage() {
 
           <Divider sx={{ my: 0.5 }} />
 
+          <Box data-tour="action-hosting">
           {projectHosted ? (
             <Tooltip title={t('preview.hosted')} placement="right">
               <Box>
@@ -594,11 +643,12 @@ export default function PreviewPage() {
               </Box>
             </Tooltip>
           )}
+          </Box>
 
           <Divider sx={{ my: 0.5 }} />
 
           <Tooltip title={t('common.analytics')} placement="right">
-            <Box>
+            <Box data-tour="action-analytics">
               <ActionButton
                 icon={<BarChartIcon fontSize="inherit" />}
                 label={t('common.analytics')}
@@ -608,7 +658,7 @@ export default function PreviewPage() {
           </Tooltip>
 
           <Tooltip title={t('payments.setupTooltip')} placement="right">
-            <Box>
+            <Box data-tour="action-payments">
               <ActionButton
                 icon={<PaymentsIcon fontSize="inherit" />}
                 label={t('payments.setupCta')}
@@ -699,7 +749,7 @@ export default function PreviewPage() {
           <Divider sx={{ my: 0.5 }} />
 
           <Tooltip title={editToken ? t('editMode.exit') : t('editMode.enter')} placement="right">
-            <Box>
+            <Box data-tour="action-edit">
               <ActionButton
                 icon={<EditIcon fontSize="inherit" />}
                 label={t('editMode.label')}
@@ -712,7 +762,7 @@ export default function PreviewPage() {
 
           {projectPaid && (
             <Tooltip title="Редактирай файловете" placement="right">
-              <Box>
+              <Box data-tour="action-files">
                 <ActionButton
                   icon={<DescriptionIcon fontSize="inherit" />}
                   label="Файлове"
@@ -725,7 +775,7 @@ export default function PreviewPage() {
 
           {projectPaid && (
             <Tooltip title="Настройки за имейли" placement="right">
-              <Box>
+              <Box data-tour="action-email">
                 <ActionButton
                   icon={<MailOutlineIcon fontSize="inherit" />}
                   label="Имейл"
@@ -739,7 +789,7 @@ export default function PreviewPage() {
           <Divider sx={{ my: 0.5 }} />
 
           <Tooltip title={t('preview.refresh')} placement="right">
-            <Box>
+            <Box data-tour="action-refresh">
               <ActionButton
                 icon={<RefreshIcon fontSize="inherit" />}
                 label={t('preview.refresh')}
@@ -750,7 +800,10 @@ export default function PreviewPage() {
         </Box>
 
         {/* ── Center: preview frame ── */}
-        <Box sx={{ flex: 1, overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+        <Box
+          data-tour="preview-frame"
+          sx={{ flex: 1, overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}
+        >
           {planNeedsPayments && !paymentsConfigured && (
             <Alert
               severity="warning"
@@ -900,7 +953,10 @@ export default function PreviewPage() {
             {drawerMode === 'improvements' && (
               <>
                 {/* Scrollable middle */}
-                <Box sx={{ flex: 1, overflow: 'auto', p: 1.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                <Box
+                  data-tour="drawer-improvements"
+                  sx={{ flex: 1, overflow: 'auto', p: 1.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}
+                >
                   {allowUnpaidDownload && !projectPaid && (
                     <Alert severity="warning" sx={{ py: 0.5, fontSize: 12 }}>
                       {t('preview.testModeAlert')}
