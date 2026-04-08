@@ -464,7 +464,14 @@ export default function PreviewPage() {
       });
       return;
     } catch {
-      setIterateChat((prev) => [...prev, { role: 'assistant', content: 'Можеш ли да уточниш какво точно да се промени и къде? (Ще задам 1 кратък въпрос и после ще го приложа.)' }]);
+      setIterateChat((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content:
+            'Можеш ли да уточниш какво точно да се промени и къде? (Ще задам максимум 1 кратък въпрос и после ще го приложа.)',
+        },
+      ]);
       return;
     }
   };

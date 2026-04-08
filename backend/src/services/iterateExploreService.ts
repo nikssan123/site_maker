@@ -4,6 +4,8 @@ import { getIterateAssistClient } from './aiClient';
 export type IterateExploreResult = {
   targetFiles: string[];
   contextNotes: string;
+  openedPaths: string[];
+  openedBodies: string;
 };
 
 type ToolState = {
@@ -164,6 +166,15 @@ Rules:
     `- Suggested target files: ${fallbackTargets.join(', ') || '(none)'}`,
   ].join('\n');
 
-  return { targetFiles: fallbackTargets, contextNotes };
+  const openedBodies = state.opened
+    .map((o) => `// ${o.path}\n${o.content}`)
+    .join('\n\n---\n\n');
+
+  return {
+    targetFiles: fallbackTargets,
+    contextNotes,
+    openedPaths: state.opened.map((o) => o.path),
+    openedBodies,
+  };
 }
 

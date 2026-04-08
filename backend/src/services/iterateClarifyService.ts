@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { prisma } from '../index';
 import { AppError } from '../middleware/errorHandler';
-import { getIterateAssistClient, ChatMessage } from './aiClient';
+import { getChatClient, getIterateAssistClient, ChatMessage } from './aiClient';
 import { scopeIteration } from './iterateScopeService';
 import { exploreIterationFiles } from './iterateExploreService';
 
@@ -25,6 +25,7 @@ const RESULT_SCHEMA = z.object({
   /** 3–6 bullets: Bulgarian, user-visible outcomes only (no file paths, no English). */
   planBulletsBg: z.array(z.string().min(1)).optional(),
   spec: z.string().optional(),
+  targetFiles: z.array(z.string().min(1)).optional(),
 });
 
 const CLARIFY_MAX_FILES = 10;
@@ -165,14 +166,56 @@ export async function clarifyIteration(
   const planData = session.plan.data as Record<string, unknown>;
   const projectFiles = Object.keys((session.project.files as Record<string, string>) ?? {});
   const fileRecord = (session.project.files as Record<string, string>) ?? {};
-  const priorAssistantTurns = conversation.filter((m) => m.role === 'assistant').length;
-  const fileContext = buildClarifyFileContext(fileRecord, projectFiles);
+  const alreadyAskedAQuestion = conversation.some(
+    (m) => m.role === 'assistant' && /[?？]\s*$/.test(m.content.trim()),
+  );
+
+  // Draft an English intent spec for exploration (no questions, no file paths).
+  const draftFromUser = lastUserContent(conversation);
+  let draftSpecEn = draftFromUser || 'Apply the requested change using best judgement.';
+  try {
+    const chatAi = getChatClient();
+    const draftSystem = `You convert a user's change request into technical intent.\n\nRules:\n- English only.\n- 3–8 concise bullet points.\n- Do NOT ask questions.\n- Do NOT include file paths.\n`;
+    const draftUser = `User request (may be Bulgarian):\n${draftFromUser || '(empty)'}\n\nApp plan JSON:\n${JSON.stringify(planData)}`;
+    const drafted = await chatAi.complete([{ role: 'user', content: draftUser }], draftSystem, { maxTokens: 250 });
+    const cleaned = drafted.trim();
+    if (cleaned.length >= 20) draftSpecEn = cleaned;
+  } catch {
+    /* ignore */
+  }
+
+  // Cursor-style exploration BEFORE deciding to ask a question.
+  let explored:
+    | {
+        targetFiles: string[];
+        contextNotes: string;
+        openedPaths: string[];
+        openedBodies: string;
+      }
+    | null = null;
+  try {
+    explored = await exploreIterationFiles({
+      plan: planData,
+      refinedSpec: draftSpecEn,
+      filePaths: projectFiles,
+      fileContents: fileRecord,
+      maxOpens: 6,
+      maxTurns: 4,
+    });
+  } catch {
+    explored = null;
+  }
+
+  const suggestedTargets = explored?.targetFiles?.length ? explored.targetFiles : null;
+  const fileContext = buildClarifyFileContext(fileRecord, suggestedTargets ?? projectFiles);
+  const explorationNotes = explored?.contextNotes?.trim() || '';
+  const exploredBodies = explored?.openedBodies?.trim() || '';
 
   const mandatoryNoMoreQuestions =
-    priorAssistantTurns >= 1
+    alreadyAskedAQuestion
       ? `
 ЗАДЪЛЖИТЕЛНО за този ход:
-- В този разговор вече има поне едно съобщение от асистента към потребителя.
+- В този разговор вече е зададен поне един въпрос от асистента към потребителя.
 - Върни САМО валиден JSON с "ready": true, "summary", "planBulletsBg" и "spec".
 - Забранено е "ready": false или поле "question".
 - Направи разумни допускания; включи пълна техническа spec на английски с точни пътища към файлове от проекта.
@@ -189,6 +232,12 @@ export async function clarifyIteration(
 СЪДЪРЖАНИЕ НА ИЗБРАНИ ФАЙЛОВЕ (за разбиране на кода; в summary/question НЕ споменавай пътища, имена на файлове, .tsx/.jsx, "src/"):
 ${fileContext || '(няма налично съдържание)'}
 
+CURSOR-STYLE EXPLORATION (internal notes; do not mention file paths to the user in summary/question):
+${explorationNotes || '(none)'}
+
+OPENED FILE SNIPPETS (internal; for understanding only):
+${exploredBodies || '(none)'}
+
 Цел: почти винаги директно готова spec; само при крайна неяснота — един кратък продуктов въпрос (и само ако още няма съобщение от асистента в този thread).
 
 Правила за потребителския текст (summary и question):
@@ -201,7 +250,7 @@ ${fileContext || '(няма налично съдържание)'}
 - Без английски, без пътища, без имена на файлове, без код.
 
 Правила за въпроси:
-- Ако вече има поне едно assistant съобщение в историята на разговора, НЕ задавай въпрос — винаги ready: true (виж ЗАДЪЛЖИТЕЛНО по-долу ако е приложимо).
+- Ако вече е зададен поне един въпрос в историята на разговора, НЕ задавай въпрос — винаги ready: true (виж ЗАДЪЛЖИТЕЛНО по-долу ако е приложимо).
 - Иначе: най-много един въпрос за целия чат; питай само за продуктово поведение.
 - При ясни заявки ("смени цвета на бутона", "добави поле") — веднага ready: true с разумни допускания.
 
@@ -216,7 +265,7 @@ ${mandatoryNoMoreQuestions}
 `;
 
   const ai = getIterateAssistClient();
-  const raw = await ai.complete(conversation, system, { maxTokens: priorAssistantTurns >= 1 ? 1800 : 1400 });
+  const raw = await ai.complete(conversation, system, { maxTokens: alreadyAskedAQuestion ? 1800 : 1500 });
   const parsed = safeParseJson(raw);
   const data = parsed ? RESULT_SCHEMA.safeParse(parsed) : null;
 
@@ -250,7 +299,7 @@ ${mandatoryNoMoreQuestions}
   }
 
   if (!data?.success) {
-    if (priorAssistantTurns >= 1) {
+    if (alreadyAskedAQuestion) {
       const lastUser = lastUserContent(conversation);
       return readyFromScopeFallback(
         'Ок — ще го направя по най-разумния начин на база описанието ти.',
@@ -271,7 +320,7 @@ ${mandatoryNoMoreQuestions}
 
   const v = data.data;
   if (!v.ready) {
-    if (priorAssistantTurns === 0) {
+    if (!alreadyAskedAQuestion) {
       const q = (v.question ?? '').trim();
       return {
         kind: 'question',
@@ -325,7 +374,7 @@ ${mandatoryNoMoreQuestions}
   const summary = (v.summary ?? '').trim();
   const spec = (v.spec ?? '').trim();
   if (!spec) {
-    if (priorAssistantTurns >= 1) {
+    if (alreadyAskedAQuestion) {
       const lastUser = lastUserContent(conversation);
       return readyFromScopeFallback(
         summary || 'Ок — имам яснота какво да направя.',
@@ -375,7 +424,14 @@ ${mandatoryNoMoreQuestions}
     summary: sum,
     planBulletsBg,
     spec,
-    targetFiles: explorerTargetFiles && explorerTargetFiles.length > 0 ? explorerTargetFiles : scoped.targetFiles,
+    targetFiles: (() => {
+      const allowed = new Set(projectFiles);
+      const modelSuggested = (v.targetFiles ?? []).filter((p) => allowed.has(p)).slice(0, 8);
+      if (modelSuggested.length > 0) return modelSuggested;
+      if (suggestedTargets && suggestedTargets.length > 0) return suggestedTargets;
+      if (explorerTargetFiles && explorerTargetFiles.length > 0) return explorerTargetFiles;
+      return scoped.targetFiles;
+    })(),
     nonGoals: scoped.nonGoalsBg,
     ...(explorerContextNotes ? { explorerContextNotes } : {}),
   };
