@@ -135,6 +135,27 @@ Every screen must have:
 - Consistent type scale: variant="h3" or "h4" for page titles, "h6" for card titles, "body2" for meta/secondary text
 - Real content in seed data: realistic names, sensible prices, actual dates, proper descriptions — never placeholder text
 
+Premium UI requirements (MUST follow):
+- Build a cohesive "app shell" and reuse it on ALL routes:
+  - AppBar: sticky, clean, with subtle blur/glass (use sx with rgba + backdropFilter)
+  - Main content wrapper: maxWidth container + consistent padding (px) and vertical rhythm (section spacing)
+  - Footer: always present (see Footer rules below)
+- Use a consistent spacing system everywhere:
+  - Page padding: px={{ xs: 2, md: 4 }}, py={{ xs: 2, md: 3 }}
+  - Section spacing: my={{ xs: 6, md: 10 }} between major sections
+  - Card spacing: p={2.5..3}, gap={2..3}
+- Use smooth micro-interactions:
+  - Every clickable surface (Button/Card/IconButton) MUST have hover + focus-visible states
+  - Use subtle transitions: transition: 'all 160-220ms ease'
+- Never ship "default MUI look":
+  - Customize the theme (typography, shape, and key component styles) so the UI feels like a real product.
+  - Prefer outlined + soft-surface cards, thin borders, and gentle shadows.
+- Always include full UX states:
+  - Loading: Skeletons that mirror the final layout (not just a spinner everywhere)
+  - Empty: friendly empty state with an icon + 1 line + CTA
+  - Error: Alert with clear Bulgarian message + retry action when relevant
+  - Forms: validation + helper text, and Snackbar/Alert success/error feedback (never alert()).
+
 Hero sections:
   <Box sx={{ background: 'linear-gradient(135deg, primary.dark 0%, secondary.dark 100%)', py: 12, textAlign: 'center' }}>
     <Typography variant="h2" fontWeight={800} color="white">Real compelling headline</Typography>
@@ -191,6 +212,16 @@ If the plan includes "colorTheme" with primary, secondary, background:
     export const theme = createTheme({ palette: { mode: 'dark', primary: { main: colorTheme.primary }, secondary: { main: colorTheme.secondary }, background: { default: colorTheme.background, paper: colorTheme.background + '99' (slightly lighter) } } })
   In src/main.tsx: wrap with <ThemeProvider theme={theme}><CssBaseline /><App /></ThemeProvider>
 If no colorTheme: use primary #6366f1, secondary #a855f7, background #06060f.
+
+Theme polish (MUST):
+- In src/theme.ts set:
+  - shape.borderRadius = 12
+  - typography: strong headings (fontWeight 800 for h1/h2/h3), body1 lineHeight ~1.7
+  - component defaults via components overrides:
+    - MuiButton: disableElevation, textTransform: 'none', consistent padding, rounded corners
+    - MuiPaper/MuiCard: subtle border + soft shadow on hover
+    - MuiTextField/MuiOutlinedInput: consistent dark-surface background + focus ring
+- Reuse these tokens everywhere; do not invent random radii/spacing per component.
 
 ═══ ЕЗИК: БЪЛГАРСКИ — ЗАДЪЛЖИТЕЛНО ═══
 Every single user-visible string in the generated app MUST be in Bulgarian.
