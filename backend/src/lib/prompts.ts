@@ -176,11 +176,11 @@ Components to use:
 - Avatar: user representations
 
 ═══ STEP 5: COLOR THEME ═══
-If the plan includes "colorTheme" with primary, secondary, background:
-  Create src/theme.ts:
-    export const theme = createTheme({ palette: { mode: 'dark', primary: { main: colorTheme.primary }, secondary: { main: colorTheme.secondary }, background: { default: colorTheme.background, paper: colorTheme.background + '99' (slightly lighter) } } })
-  In src/main.tsx: wrap with <ThemeProvider theme={theme}><CssBaseline /><App /></ThemeProvider>
-If no colorTheme: use primary #6366f1, secondary #a855f7, background #06060f.
+The user prompt will provide exact hex color values under "COLOR THEME". You MUST use those exact values — they override any visual mood or design direction that might suggest different colors.
+Create src/theme.ts:
+  export const theme = createTheme({ palette: { mode: 'dark', primary: { main: '<from COLOR THEME>' }, secondary: { main: '<from COLOR THEME>' }, background: { default: '<from COLOR THEME>', paper: '<from COLOR THEME background>' + '99' (slightly lighter) } } })
+In src/main.tsx: wrap with <ThemeProvider theme={theme}><CssBaseline /><App /></ThemeProvider>
+If no COLOR THEME is provided in the user prompt: use primary #6366f1, secondary #a855f7, background #06060f.
 
 Theme polish (MUST):
 - In src/theme.ts set:
@@ -479,10 +479,10 @@ const CARD_STYLES = [
 
 const VISUAL_MOODS = [
   'Premium dark: deep blacks and grays, accent color used sparingly for CTAs and highlights. Think Linear/Vercel aesthetic.',
-  'Vibrant gradient: bold use of gradients throughout — section backgrounds, buttons, text accents. Energetic and modern.',
+  'Vibrant gradient: bold use of gradients throughout — section backgrounds, buttons, text accents. Energetic and modern. Derive all gradients from the provided color theme.',
   'Clean minimal: maximum whitespace, thin borders, subtle shadows. Typography-driven hierarchy. Think Stripe/Notion.',
-  'Warm glow: dark background with warm-toned accents (amber/orange glow effects). Cozy but professional.',
-  'Cool tech: dark background with blue/purple undertones, neon-ish accent glows, geometric decorative elements.',
+  'Warm glow: dark background with soft accent glows on CTAs and interactive elements. Cozy but professional. Use the provided theme colors for all glows.',
+  'Cool tech: dark background, neon-ish accent glows using the provided theme colors, geometric decorative elements.',
 ];
 
 const ANIMATION_STYLES = [
@@ -572,10 +572,13 @@ export function buildCodeGenPrompt(plan: Record<string, unknown>, designDNA?: De
   prompt += buildDesignDNAPrompt(dna);
 
   if (colorTheme?.primary && colorTheme?.secondary && colorTheme?.background) {
-    prompt += `\n\nCOLOR THEME — use these exact hex values in MUI createTheme (src/theme.ts):
+    prompt += `\n\n═══ COLOR THEME (HIGHEST PRIORITY — overrides any conflicting visual mood or design direction) ═══
+Use these EXACT hex values in MUI createTheme (src/theme.ts) — do NOT deviate or substitute:
 primary.main: ${colorTheme.primary}
 secondary.main: ${colorTheme.secondary}
 background.default: ${colorTheme.background}
+All gradients, glows, accents, and decorative elements must derive from these colors.
+If the VISUAL MOOD above suggests different colors (e.g. "warm amber" or "blue/purple"), IGNORE the color suggestion and use these hex values instead. The mood's layout and style advice still applies, but the palette is locked to the values above.
 Wrap app in <ThemeProvider theme={theme}><CssBaseline /> in src/main.tsx.`;
   }
 
