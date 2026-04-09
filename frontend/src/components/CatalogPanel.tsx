@@ -29,12 +29,14 @@ interface Props {
   runPort: number | null;
   /** Sent as X-Admin-Token for POST/PUT/DELETE to generated /api (required when app-runner enforces writes). */
   adminApiToken?: string | null;
+  /** Called after a successful save or delete so the parent can refresh the preview. */
+  onDataChange?: () => void;
 }
 
 type Row = Record<string, unknown>;
 type TypedModel = { name: string; fields: AdminField[] | null };
 
-export default function CatalogPanel({ projectId, runPort, adminApiToken }: Props) {
+export default function CatalogPanel({ projectId, runPort, adminApiToken, onDataChange }: Props) {
   const { t } = useTranslation();
 
   // Step 1: discover models
@@ -161,6 +163,7 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken }: Prop
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setDialogOpen(false);
       await fetchRows(activeModel);
+      onDataChange?.();
     } catch (e: unknown) {
       setFormError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -181,6 +184,7 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken }: Prop
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setDeleteTarget(null);
       await fetchRows(activeModel);
+      onDataChange?.();
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : String(e));
     } finally {

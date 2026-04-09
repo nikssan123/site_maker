@@ -923,6 +923,7 @@ export default function PreviewPage() {
                   projectId={projectId}
                   runPort={store.runPort ?? null}
                   adminApiToken={adminApiToken}
+                  onDataChange={() => setRefreshKey((k) => k + 1)}
                 />
               </Box>
             )}
