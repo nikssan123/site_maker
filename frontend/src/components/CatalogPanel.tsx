@@ -120,7 +120,7 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken, onData
     fields[0] ??
     'name';
   const priceField = fields.find((f) => /price|cost|amount/.test(f.toLowerCase()));
-  const imgField = typedFields.find((f) => f.type === 'image')?.name
+  const imgField = typedFields.find((f) => f.type === 'image' || f.type === 'photo')?.name
     ?? fields.find((f) => /url|image|img|photo|pic|avatar|thumbnail/.test(f.toLowerCase()));
 
   // ── Dialog helpers ───────────────────────────────────────────────

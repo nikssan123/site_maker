@@ -20,6 +20,7 @@ Always ask for social links (popular ones) before finalizing the plan:
 Identify silently (never ask technically):
 - Does it need to store or manage records (products, bookings, customers, posts, orders, etc.)? → hasDatabase: true
 - List dataModels with sensible fields. Keep models simple and practical.
+- For fields that hold an image/photo, append ":photo" to the field name (e.g. "photo:photo", "coverImage:photo"). This tells the admin panel to show an upload widget. All other fields are auto-detected by name.
 - If it has a contact form that should be saved and later reviewed (inquiries/messages), it MUST use hasDatabase: true and include a data model:
   { "name": "inquiries", "fields": ["name", "email", "message", "createdAt"] }
 
@@ -43,7 +44,7 @@ The block is machine-readable and hidden from the user. Do NOT mention or explai
   },
   "hasDatabase": true,
   "dataModels": [
-    { "name": "services", "fields": ["name", "duration", "price", "description"] },
+    { "name": "services", "fields": ["name", "photo:photo", "duration", "price", "description"] },
     { "name": "bookings", "fields": ["customerName", "customerEmail", "customerPhone", "serviceId", "date", "time", "notes"] }
   ]
 }
@@ -616,12 +617,24 @@ function inferFieldType(field: string): string {
   return 'text';
 }
 
+function parseField(raw: string): { name: string; type: string } {
+  const sep = raw.indexOf(':');
+  if (sep > 0) {
+    const name = raw.slice(0, sep);
+    const explicit = raw.slice(sep + 1);
+    // Normalise "photo" → "image" so the admin panel renders the upload widget
+    const type = explicit === 'photo' ? 'image' : explicit;
+    return { name, type };
+  }
+  return { name: raw, type: inferFieldType(raw) };
+}
+
 function buildAdminConfig(appType: string, models: Array<{ name: string; fields: string[] }>): string {
   const config = {
     appType,
     models: models.map((m) => ({
       name: m.name,
-      fields: m.fields.filter((f) => f.toLowerCase() !== 'id').map((f) => ({ name: f, type: inferFieldType(f) })),
+      fields: m.fields.filter((f) => f.split(':')[0].toLowerCase() !== 'id').map((f) => parseField(f)),
     })),
   };
   return JSON.stringify(config);
@@ -667,7 +680,9 @@ Wrap app in <ThemeProvider theme={theme}><CssBaseline /> in src/main.tsx.`;
   if (hasDatabase && dataModels?.length) {
     prompt += `\n\nDATABASE MODELS:\n`;
     for (const model of dataModels) {
-      prompt += `- ${model.name}: [${model.fields.join(', ')}]\n`;
+      // Strip explicit ":type" suffixes so the codegen sees clean field names
+      const cleanFields = model.fields.map((f) => f.split(':')[0]);
+      prompt += `- ${model.name}: [${cleanFields.join(', ')}]\n`;
     }
     if (planHasContactForm(plan) && !dataModels.some((m) => String(m.name).toLowerCase() === 'inquiries')) {
       prompt += `- inquiries: [name, email, message, createdAt]\n`;

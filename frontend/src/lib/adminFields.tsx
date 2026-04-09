@@ -24,7 +24,7 @@ export function renderField(
   onFileSelect: (file: File) => void,
   labels: { clickToUpload: string; orPasteUrl: string; imageUrl: string },
 ): React.ReactNode {
-  if (f.type === 'image') {
+  if (f.type === 'image' || f.type === 'photo') {
     const hasImage = Boolean(value);
     return (
       <Box key={f.name}>
