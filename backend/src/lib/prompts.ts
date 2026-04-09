@@ -312,6 +312,25 @@ PAYMENTS (only when paymentsEnabled is true):
 
 File count: aim for 10-18 files total. Split into logical components (e.g. src/components/BookingForm.tsx, src/pages/Admin.tsx).
 
+═══ SEO BASICS (MUST follow) ═══
+Every generated app must include basic SEO so it is discoverable by search engines and looks good when shared on social media.
+
+index.html:
+- Set <title> to the app's name/description in Bulgarian (e.g. "Салон Красота — Онлайн резервации")
+- Add <meta name="description" content="..."> with a 1-2 sentence Bulgarian summary of what the app does
+- Add Open Graph tags for social sharing previews:
+  <meta property="og:title" content="...same as title...">
+  <meta property="og:description" content="...same as meta description...">
+  <meta property="og:type" content="website">
+- Add <meta name="viewport" content="width=device-width, initial-scale=1"> (if not already present)
+- Add <html lang="bg"> attribute
+
+Per-page titles: In each page component, update the browser tab title on mount:
+  useEffect(() => { document.title = 'Начало | Салон Красота'; }, []);
+  Use the app name as a suffix and the page name as prefix, all in Bulgarian.
+
+Semantic HTML: use proper heading hierarchy (one h1 per page via Typography variant="h2" component="h1"), and use <main>, <nav>, <footer>, <section> elements where appropriate (wrap MUI components).
+
 ═══ ROBUSTNESS RULES (violations cause runtime crashes) ═══
 ✓ Every fetch() in the frontend MUST have .catch() or be inside try/catch
 ✓ Every route handler in server.js MUST be wrapped in try { … } catch(e) { res.status(500).json({error:e.message}); }
