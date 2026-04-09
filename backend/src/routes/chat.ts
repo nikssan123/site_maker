@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import Anthropic from '@anthropic-ai/sdk';
 import { requireAuth } from '../middleware/requireAuth';
-import { chat } from '../services/plannerService';
+import { chat, chatStream } from '../services/plannerService';
 import { prisma } from '../index';
 
 const router = Router();
@@ -24,6 +24,43 @@ router.post('/', requireAuth, async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+/**
+ * POST /api/chat/stream — SSE endpoint that streams assistant tokens one-by-one,
+ * then sends a final "done" event with the complete message and plan.
+ */
+router.post('/stream', requireAuth, async (req, res) => {
+  const { message, sessionId } = z
+    .object({ message: z.string().min(1), sessionId: z.string().optional() })
+    .parse(req.body);
+
+  let sid = sessionId;
+  if (!sid) {
+    const session = await prisma.session.create({ data: { userId: req.user.userId } });
+    sid = session.id;
+  }
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+
+  // Send sessionId immediately so the frontend can store it
+  res.write(`data: ${JSON.stringify({ type: 'session', sessionId: sid })}\n\n`);
+
+  try {
+    const result = await chatStream(sid, req.user.userId, message, (token) => {
+      res.write(`data: ${JSON.stringify({ type: 'token', token })}\n\n`);
+    });
+
+    res.write(`data: ${JSON.stringify({ type: 'done', message: result.message, plan: result.plan })}\n\n`);
+  } catch (err: any) {
+    res.write(`data: ${JSON.stringify({ type: 'error', message: err.message ?? 'Chat failed' })}\n\n`);
+  }
+
+  res.end();
 });
 
 // POST /api/chat/extract-colors — analyze an uploaded image and return a color theme

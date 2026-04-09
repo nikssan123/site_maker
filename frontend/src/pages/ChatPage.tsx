@@ -260,35 +260,59 @@ export default function ChatPage() {
 
     store.addMessage({ role: 'user', content: msg });
     store.setIsStreaming(true);
+    store.clearStreamBuffer();
 
-    try {
-      const res = await api.post<any>('/chat', {
-        message: msg,
-        sessionId: store.sessionId ?? undefined,
-      });
+    const ctrl = api.stream(
+      '/chat/stream',
+      { message: msg, sessionId: store.sessionId ?? undefined },
+      (raw) => {
+        try {
+          const event = JSON.parse(raw) as {
+            type: string;
+            sessionId?: string;
+            token?: string;
+            message?: string;
+            plan?: any;
+          };
 
-      const wasNewSession = !store.sessionId;
-      if (wasNewSession) {
-        store.setSessionId(res.sessionId);
-      }
-
-      store.addMessage({ role: 'assistant', content: res.message });
-      if (res.plan) { store.setPlan(res.plan); }
-      if (res.plan || store.plan) {
-        setPlanVisible(true);
-        setChatUnlockedForEditing(false);
-      }
-
-      // Navigate last so Zustand already has messages + plan before any route-driven effects run.
-      if (wasNewSession) {
-        navigate(`/chat/${res.sessionId}`, { replace: true });
-      }
-    } catch (err: any) {
-      store.addMessage({ role: 'assistant', content: t('chat.errorGeneric') });
-    } finally {
-      store.setIsStreaming(false);
-      api.get<any>('/auth/me').then(updateUser).catch(() => {});
-    }
+          if (event.type === 'session') {
+            const wasNewSession = !store.sessionId;
+            if (event.sessionId) {
+              store.setSessionId(event.sessionId);
+              if (wasNewSession) {
+                navigate(`/chat/${event.sessionId}`, { replace: true });
+              }
+            }
+          } else if (event.type === 'token') {
+            store.appendStreamToken(event.token ?? '');
+          } else if (event.type === 'done') {
+            // Finalise: move streamed content into messages list
+            store.clearStreamBuffer();
+            store.addMessage({ role: 'assistant', content: event.message ?? '' });
+            if (event.plan) { store.setPlan(event.plan); }
+            if (event.plan || store.plan) {
+              setPlanVisible(true);
+              setChatUnlockedForEditing(false);
+            }
+          } else if (event.type === 'error') {
+            store.clearStreamBuffer();
+            store.addMessage({ role: 'assistant', content: t('chat.errorGeneric') });
+          }
+        } catch { /* ignore malformed SSE */ }
+      },
+      () => {
+        // onDone — stream ended
+        // If stream buffer still has content (e.g. connection dropped before 'done' event),
+        // move it into messages so it's not lost.
+        const leftover = useProjectStore.getState().streamBuffer;
+        if (leftover) {
+          store.clearStreamBuffer();
+          store.addMessage({ role: 'assistant', content: leftover });
+        }
+        store.setIsStreaming(false);
+        api.get<any>('/auth/me').then(updateUser).catch(() => {});
+      },
+    );
   };
 
   const handleExtractFromImage = useCallback(async (dataUrl: string): Promise<ColorTheme> => {

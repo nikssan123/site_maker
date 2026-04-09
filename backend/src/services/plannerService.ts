@@ -170,6 +170,86 @@ export async function chat(
   return { message: displayText, plan };
 }
 
+/**
+ * Streaming version of chat — streams tokens via SSE, then finalises
+ * the message and plan extraction once the model finishes.
+ */
+export async function chatStream(
+  sessionId: string,
+  userId: string,
+  userMessage: string,
+  onToken: (token: string) => void,
+): Promise<{ message: string; plan: unknown }> {
+  const session = await prisma.session.findFirst({
+    where: { id: sessionId, userId },
+    include: { messages: { orderBy: { createdAt: 'asc' } } },
+  });
+
+  if (!session) throw new Error('Session not found');
+
+  await prisma.message.create({
+    data: { sessionId, role: 'user', content: userMessage },
+  });
+
+  const history: ChatMessage[] = session.messages.map((m) => ({
+    role: m.role as 'user' | 'assistant',
+    content: m.content,
+  }));
+  history.push({ role: 'user', content: userMessage });
+
+  const ai = getChatClient();
+  const askedSocialBefore = history.some(
+    (m) => m.role === 'assistant' && /\b(Facebook|Instagram|TikTok|LinkedIn|YouTube|Twitter|X)\b/i.test(m.content),
+  );
+  const socialAnswered = history.some((m) => m.role === 'user' && userProvidedAnySocialLink(m.content));
+
+  let system = PLANNER_SYSTEM_LOCALIZED;
+  if (!askedSocialBefore && !socialAnswered) {
+    system += `\n\nIMPORTANT:\nBefore you finalize the plan, you MUST ask the user for their social media links.\nAsk for: Facebook, Instagram, TikTok, LinkedIn, YouTube, X (Twitter).\nIf they don't have some, they can say \"none\".\nAsk ONE short question only. Do NOT output the plan block in this turn unless the user already provided the social links.`;
+  }
+
+  // Stream the first attempt
+  let response = await ai.stream(history, system, onToken);
+
+  // If the model forgot the plan block and should have included it, do a
+  // non-streamed retry (rare path — the plan block is machine-only anyway).
+  if (shouldRetryForPlanBlock(userMessage, response)) {
+    const forcePlanSystem = `${PLANNER_SYSTEM_LOCALIZED}${FORCE_PLAN_APPENDIX}`;
+    response = await ai.complete(history, forcePlanSystem);
+  }
+
+  const displayText = response.replace(PLAN_REGEX, '').trim();
+
+  await prisma.message.create({
+    data: { sessionId, role: 'assistant', content: displayText },
+  });
+
+  const fenceJson = extractPlanFence(response);
+  let plan = null;
+
+  if (fenceJson) {
+    try {
+      const planData = parsePlanData(fenceJson) as { appType?: string };
+      if (planData && typeof planData.appType === 'string') {
+        const existing = await prisma.plan.findUnique({ where: { sessionId } });
+        if (!existing || !existing.locked) {
+          plan = await prisma.plan.upsert({
+            where: { sessionId },
+            create: { sessionId, data: planData },
+            update: { data: planData },
+          });
+        } else {
+          plan = existing;
+        }
+      }
+    } catch (e) {
+      console.error('[planner] Failed to extract plan from response:', e);
+    }
+  }
+
+  return { message: displayText, plan };
+}
+
 export async function lockPlan(planId: string, userId: string) {
   const plan = await prisma.plan.findUniqueOrThrow({
     where: { id: planId },
