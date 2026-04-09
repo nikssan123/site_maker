@@ -288,18 +288,27 @@ function applyContentPatch(projectId: string, original: string, replacement: str
   const files = walkSourceFiles(projectDir);
 
   // Never patch server.js via edit mode (too easy to break runtime JS strings).
-  // If the requested "original" exists only there, we fail with a clear message.
   const serverFile = path.join(projectDir, 'server.js');
   const serverContent = fs.existsSync(serverFile) ? fs.readFileSync(serverFile, 'utf8') : null;
   const serverHasOriginal = Boolean(serverContent && serverContent.includes(original));
 
   const patchableFiles = files.filter((f) => path.basename(f).toLowerCase() !== 'server.js');
 
-  // Pass 1 — exact match
-  for (const file of patchableFiles) {
-    const content = fs.readFileSync(file, 'utf8');
+  // Read all patchable files once — avoids double I/O and TOCTOU races.
+  const fileContents: Array<{ path: string; content: string }> = patchableFiles.map((f) => ({
+    path: f,
+    content: fs.readFileSync(f, 'utf8'),
+  }));
+
+  // Pass 1 — exact match (prefer JSX/TSX files over JSON/CSS for ambiguous hits)
+  const jsxFirst = [...fileContents].sort((a, b) => {
+    const aJsx = /\.[jt]sx?$/i.test(a.path) ? 0 : 1;
+    const bJsx = /\.[jt]sx?$/i.test(b.path) ? 0 : 1;
+    return aJsx - bJsx;
+  });
+  for (const { path: fp, content } of jsxFirst) {
     if (content.includes(original)) {
-      fs.writeFileSync(file, content.replace(original, replacement), 'utf8');
+      fs.writeFileSync(fp, content.replace(original, replacement), 'utf8');
       return;
     }
   }
@@ -309,11 +318,10 @@ function applyContentPatch(projectId: string, original: string, replacement: str
   if (norm.length > 0) {
     const escaped = norm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const flexRegex = new RegExp(escaped.replace(/ /g, '\\s+'));
-    for (const file of patchableFiles) {
-      const content = fs.readFileSync(file, 'utf8');
+    for (const { path: fp, content } of jsxFirst) {
       const m = flexRegex.exec(content);
       if (m) {
-        fs.writeFileSync(file, content.replace(m[0], replacement), 'utf8');
+        fs.writeFileSync(fp, content.replace(m[0], replacement), 'utf8');
         return;
       }
     }
@@ -1002,6 +1010,11 @@ router.patch('/:projectId/content', requireAuth, async (req, res, next) => {
     const project = await prisma.project.findFirstOrThrow({
       where: { id: projectId, session: { userId: req.user.userId } },
     });
+
+    // Reject edits while a rebuild is already in progress to prevent races
+    if (project.status === 'building' || project.status === 'generating') {
+      throw new AppError(409, 'A rebuild is already in progress. Please wait and try again.');
+    }
 
     applyContentPatch(projectId, original, replacement);
 

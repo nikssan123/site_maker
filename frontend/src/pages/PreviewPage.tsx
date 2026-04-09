@@ -363,7 +363,23 @@ export default function PreviewPage() {
           const { url } = await api.uploadImage(projectId!, patch.imageDataUrl, patch.imageFilename ?? 'image.jpg');
           replacement = url;
         }
-        await api.patchContent(projectId!, { token: editToken, original: patch.original, replacement });
+
+        // Retry loop: if a rebuild is already in progress, wait and retry
+        const MAX_PATCH_RETRIES = 3;
+        for (let attempt = 0; ; attempt++) {
+          try {
+            await api.patchContent(projectId!, { token: editToken, original: patch.original, replacement });
+            break;
+          } catch (retryErr: any) {
+            const isRebuildBusy = retryErr.status === 409 && /rebuild|in progress/i.test(retryErr.message ?? '');
+            if (isRebuildBusy && attempt < MAX_PATCH_RETRIES) {
+              await new Promise((r) => setTimeout(r, 3000));
+              continue;
+            }
+            throw retryErr;
+          }
+        }
+
         await pollUntilRunning(projectId!);
         // Reload the preview iframe after rebuild
         setRefreshKey((k) => k + 1);
@@ -383,7 +399,7 @@ export default function PreviewPage() {
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [editToken]);
+  }, [editToken, projectId]);
 
   const canDownloadZip = store.projectPaid || store.allowUnpaidDownload;
   const isProjectLocked = !store.projectPaid && !store.allowUnpaidDownload;

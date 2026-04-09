@@ -19,6 +19,9 @@ export const EDIT_OVERLAY_SCRIPT = `
   function isEditable(el) {
     if (!el || el === document.body || el === document.documentElement) return false;
     if (el.tagName === 'IMG') return true;
+    // List containers aggregate text from all children — patching that blob always fails.
+    // Individual items (LI, DT, DD) are still editable via the normal leaf check below.
+    if (el.tagName === 'UL' || el.tagName === 'OL' || el.tagName === 'DL') return false;
     var hasText = el.textContent && el.textContent.trim().length > 0;
     return hasText && isLeafLike(el);
   }
@@ -295,7 +298,7 @@ export const EDIT_OVERLAY_SCRIPT = `
         patch.imageFilename = _pendingFilename || 'image.jpg';
         patch.replacement = null; // parent will fill in after upload
       }
-      window.parent.postMessage({ type: 'EDIT_SAVED', patch: patch }, '*');
+      window.parent.postMessage({ type: 'EDIT_SAVED', patch: patch }, window.location.origin || '*');
       removeCard();
     });
   }
