@@ -57,32 +57,33 @@ const PricingTable: FC<PricingTableProps> = ({ reveal }) => {
     description: string;
     features: string[];
   }> = [
-    {
-      tone: 'generate',
-      icon: <RocketLaunchIcon sx={{ fontSize: 26, color: 'primary.light' }} />,
-      title: t('pricing.generateTitle'),
-      price: t('pricing.generatePrice'),
-      period: t('pricing.generatePeriod'),
-      description: t('pricing.generateDesc'),
-      features: [t('pricing.featGenerate1'), t('pricing.featGenerate2'), t('pricing.featGenerate3')],
-    },
-    {
-      tone: 'host',
-      featured: true,
-      icon: <CloudIcon sx={{ fontSize: 26, color: 'secondary.light' }} />,
-      title: t('pricing.hostTitle'),
-      price: t('pricing.hostPrice'),
-      period: t('pricing.hostPeriod'),
-      description: t('pricing.hostDesc'),
-      features: [
-        t('pricing.featHost1'),
-        t('pricing.featHost2'),
-        t('pricing.featHost3'),
-        t('pricing.featHost4'),
-        t('pricing.featHost5'),
-      ],
-    },
-  ];
+      {
+        tone: 'generate',
+        icon: <RocketLaunchIcon sx={{ fontSize: 26, color: 'primary.light' }} />,
+        title: t('pricing.generateTitle'),
+        price: t('pricing.generatePrice'),
+        period: t('pricing.generatePeriod'),
+        description: t('pricing.generateDesc'),
+        features: [t('pricing.featGenerate1'), t('pricing.featGenerate2'), t('pricing.featGenerate3'), t('pricing.featGenerate4'), t('pricing.featGenerate5'), t('pricing.featGenerate6'), t('pricing.featGenerate7')],
+      },
+      {
+        tone: 'host',
+        featured: true,
+        icon: <CloudIcon sx={{ fontSize: 26, color: 'secondary.light' }} />,
+        title: t('pricing.hostTitle'),
+        price: t('pricing.hostPrice'),
+        period: t('pricing.hostPeriod'),
+        description: t('pricing.hostDesc'),
+        features: [
+          t('pricing.featHost1'),
+          t('pricing.featHost2'),
+          t('pricing.featHost3'),
+          t('pricing.featHost4'),
+          t('pricing.featHost5'),
+          t('pricing.featHost6'),
+        ],
+      },
+    ];
 
   const accentForTone = (tone: PlanTone, featured: boolean) => {
     if (tone === 'host' && featured) {
