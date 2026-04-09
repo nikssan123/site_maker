@@ -728,21 +728,6 @@ export default function PreviewPage() {
                 />
               </Box>
             </Tooltip>
-          ) : planHasContactForm ? (
-            <Tooltip title={t('inquiries.tooltip')} placement="right">
-              <Box>
-                <ActionButton
-                  icon={<MailOutlineIcon fontSize="inherit" />}
-                  label={t('inquiries.label')}
-                  onClick={() => {
-                    if (drawerOpen && drawerMode === 'inquiries') setDrawerOpen(false);
-                    else { setDrawerMode('inquiries'); setDrawerOpen(true); }
-                  }}
-                  active={drawerOpen && drawerMode === 'inquiries'}
-                  color="#34d399"
-                />
-              </Box>
-            </Tooltip>
           ) : planAppType === 'portfolio' || planAppType === 'landing_page' || planAppType === 'saas' ? null : (
             <Tooltip title={editDynamicError ? t('editMode.useCatalogTooltip') : t('catalog.tooltip')} placement="right">
               <Box>
@@ -756,6 +741,23 @@ export default function PreviewPage() {
                   }}
                   active={drawerOpen && drawerMode === 'catalog'}
                   pulsing={editDynamicError}
+                  color="#34d399"
+                />
+              </Box>
+            </Tooltip>
+          )}
+
+          {planHasContactForm && (
+            <Tooltip title={t('inquiries.tooltip')} placement="right">
+              <Box>
+                <ActionButton
+                  icon={<MailOutlineIcon fontSize="inherit" />}
+                  label={t('inquiries.label')}
+                  onClick={() => {
+                    if (drawerOpen && drawerMode === 'inquiries') setDrawerOpen(false);
+                    else { setDrawerMode('inquiries'); setDrawerOpen(true); }
+                  }}
+                  active={drawerOpen && drawerMode === 'inquiries'}
                   color="#34d399"
                 />
               </Box>
