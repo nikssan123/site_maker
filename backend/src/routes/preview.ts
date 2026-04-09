@@ -710,6 +710,117 @@ router.post('/:projectId/upload-image', requireAuth, async (req, res, next) => {
   }
 });
 
+// Replace the logo in the generated site's navbar with an uploaded image and rebuild
+router.post('/:projectId/replace-logo', requireAuth, async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId);
+    const project = await prisma.project.findFirstOrThrow({
+      where: { id: projectId, session: { userId: req.user.userId } },
+    });
+
+    const { data, filename: originalName } = z.object({
+      data: z.string().max(10_000_000),
+      filename: z.string().max(255),
+    }).parse(req.body);
+
+    const match = data.match(/^data:(image\/[a-z+]+);base64,/);
+    if (!match) throw new AppError(400, 'Invalid image data URL');
+
+    const mimeType = match[1];
+    const base64 = data.slice(match[0].length);
+    const extFromMime: Record<string, string> = {
+      'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif',
+      'image/webp': 'webp', 'image/svg+xml': 'svg', 'image/avif': 'avif',
+    };
+    const ext = extFromMime[mimeType] ??
+      (originalName.includes('.') ? originalName.split('.').pop()!.toLowerCase() : 'png');
+    const safeExt = ext.replace(/[^a-z0-9]/g, '');
+    const filename = `logo.${safeExt}`;
+
+    // Save logo to public/ so it's served as a static asset by vite/express
+    const publicDir = path.join(projectPath(projectId), 'public');
+    fs.mkdirSync(publicDir, { recursive: true });
+    fs.writeFileSync(path.join(publicDir, filename), Buffer.from(base64, 'base64'));
+
+    const logoSrc = `/${filename}`;
+
+    // Scan source files for the navbar logo and replace it
+    const projectDir = projectPath(projectId);
+    const files = walkSourceFiles(projectDir);
+    const tsxFiles = files.filter((f) => /\.(tsx|jsx)$/i.test(f));
+
+    // Logo in generated sites typically appears as:
+    //   <Typography ... component="..." sx={{...}}>SiteName</Typography>
+    //   or <IconComponent ... /> next to a Typography inside Toolbar
+    // We look for the first Typography-with-text inside a Toolbar/AppBar context.
+    // Strategy: find a file containing "Toolbar" and within it the logo Typography pattern.
+
+    const logoImgJsx = `<Box component="img" src="${logoSrc}" alt="Logo" sx={{ height: 36, mr: 1, objectFit: 'contain' }} />`;
+    let replaced = false;
+
+    for (const file of tsxFiles) {
+      const content = fs.readFileSync(file, 'utf8');
+      if (!/<Toolbar/i.test(content) && !/<AppBar/i.test(content)) continue;
+
+      // Pattern 1: <Typography ... component="..." ...>SiteName</Typography> inside toolbar area
+      // This captures the logo text Typography — usually the first Typography after <Toolbar>
+      const logoTypographyRegex = /(<Toolbar[\s\S]*?)(<Typography\b[^>]*?(?:variant=["']h[456]["']|fontWeight|letterSpacing|fontFamily)[\s\S]*?>)([\s\S]*?)(<\/Typography>)/;
+      const m = logoTypographyRegex.exec(content);
+      if (m) {
+        // Replace the Typography content with the logo image + keep the text as well
+        const originalTypography = m[2] + m[3] + m[4];
+        const replacement = `<Box sx={{ display: 'flex', alignItems: 'center' }}>${logoImgJsx}${m[2]}${m[3]}${m[4]}</Box>`;
+        fs.writeFileSync(file, content.replace(originalTypography, replacement), 'utf8');
+
+        // Ensure Box is imported
+        const updatedContent = fs.readFileSync(file, 'utf8');
+        if (!/import[^;]*\bBox\b[^;]*from\s+['"]@mui\/material/.test(updatedContent)) {
+          // Add Box to existing @mui/material import
+          const muiImportRegex = /(import\s*\{[^}]*)(}\s*from\s*['"]@mui\/material['"])/;
+          const muiMatch = muiImportRegex.exec(updatedContent);
+          if (muiMatch) {
+            const withBox = updatedContent.replace(muiImportRegex, `$1, Box $2`);
+            fs.writeFileSync(file, withBox, 'utf8');
+          }
+        }
+        replaced = true;
+        break;
+      }
+
+      // Pattern 2: Just an icon before a Typography in the toolbar (e.g. <SomeIcon /> <Typography ...>)
+      const iconLogoRegex = /(<Toolbar[\s\S]*?)(<[A-Z]\w*Icon\b[^/]*\/>)(\s*<Typography)/;
+      const m2 = iconLogoRegex.exec(content);
+      if (m2) {
+        // Replace the icon with the logo image
+        fs.writeFileSync(file, content.replace(m2[2], logoImgJsx), 'utf8');
+
+        const updatedContent = fs.readFileSync(file, 'utf8');
+        if (!/import[^;]*\bBox\b[^;]*from\s+['"]@mui\/material/.test(updatedContent)) {
+          const muiImportRegex = /(import\s*\{[^}]*)(}\s*from\s*['"]@mui\/material['"])/;
+          const muiMatch = muiImportRegex.exec(updatedContent);
+          if (muiMatch) {
+            fs.writeFileSync(file, updatedContent.replace(muiImportRegex, `$1, Box $2`), 'utf8');
+          }
+        }
+        replaced = true;
+        break;
+      }
+    }
+
+    if (!replaced) {
+      // Fallback: if no pattern matched, still save the file — the user can reference it via iterations
+      // Return success but indicate the logo was saved but not auto-placed
+      await triggerRebuildAsync(project.id, 'logo-replace');
+      return res.json({ ok: true, autoPlaced: false, logoUrl: logoSrc });
+    }
+
+    await triggerRebuildAsync(project.id, 'logo-replace');
+    return res.json({ ok: true, autoPlaced: true, logoUrl: logoSrc });
+  } catch (err) {
+    return next(err);
+  }
+});
+
 // Return admin config: appType + typed model fields (from __admin_config.json or regex fallback)
 router.get('/:projectId/catalog-models', requireAuth, async (req, res, next) => {
   try {

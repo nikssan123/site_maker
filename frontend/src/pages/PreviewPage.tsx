@@ -27,6 +27,7 @@ import HistoryIcon from '@mui/icons-material/History';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import DescriptionIcon from '@mui/icons-material/Description';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import ImageIcon from '@mui/icons-material/Image';
 
 import PreviewFrame from '../components/PreviewFrame';
 import CatalogPanel from '../components/CatalogPanel';
@@ -177,6 +178,11 @@ export default function PreviewPage() {
   const [editToken, setEditToken] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [editDynamicError, setEditDynamicError] = useState(false);
+  const [logoDialogOpen, setLogoDialogOpen] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoFile, setLogoFile] = useState<{ dataUrl: string; name: string } | null>(null);
+  const [snackMsg, setSnackMsg] = useState<string | null>(null);
   /** For catalog/booking panels: X-Admin-Token on writes to generated /api (app-runner enforces PUT/DELETE). */
   const [adminApiToken, setAdminApiToken] = useState<string | null>(null);
 
@@ -257,6 +263,43 @@ export default function PreviewPage() {
       }
     }
     throw new Error(t('previewFrame.errorCouldNotStartHint'));
+  };
+
+  const MAX_LOGO_BYTES = 7 * 1024 * 1024;
+
+  const handleLogoFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_LOGO_BYTES) {
+      setSnackMsg(t('logo.fileTooLarge'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      setLogoPreview(dataUrl);
+      setLogoFile({ dataUrl, name: file.name });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleLogoUpload = async () => {
+    if (!logoFile || !projectId) return;
+    setLogoUploading(true);
+    try {
+      const result = await api.replaceLogo(projectId, logoFile.dataUrl, logoFile.name);
+      await pollUntilRunning(projectId);
+      setRefreshKey((k) => k + 1);
+      await loadProject();
+      setLogoDialogOpen(false);
+      setLogoPreview(null);
+      setLogoFile(null);
+      setSnackMsg(result.autoPlaced ? t('logo.success') : t('logo.successManual'));
+    } catch {
+      setSnackMsg(t('logo.error'));
+    } finally {
+      setLogoUploading(false);
+    }
   };
 
   useEffect(() => {
@@ -778,6 +821,17 @@ export default function PreviewPage() {
             </Box>
           </Tooltip>
 
+          <Tooltip title={t('logo.tooltip')} placement="right">
+            <Box>
+              <ActionButton
+                icon={<ImageIcon fontSize="inherit" />}
+                label={t('logo.label')}
+                onClick={() => { setLogoDialogOpen(true); setLogoPreview(null); setLogoFile(null); }}
+                color="#f5a97f"
+              />
+            </Box>
+          </Tooltip>
+
           {projectPaid && (
             <Tooltip title="Редактирай файловете" placement="right">
               <Box data-tour="action-files">
@@ -1201,6 +1255,58 @@ export default function PreviewPage() {
           {t('editMode.dynamicContentError')}
         </Alert>
       </Snackbar>
+
+      {/* Logo upload dialog */}
+      <Dialog
+        open={logoDialogOpen}
+        onClose={() => !logoUploading && setLogoDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 2 } }}
+      >
+        <DialogTitle sx={{ fontWeight: 700, fontSize: 16 }}>{t('logo.dialogTitle')}</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '8px !important' }}>
+          <Typography variant="body2" color="text.secondary">{t('logo.dialogHint')}</Typography>
+
+          <Button variant="outlined" component="label" disabled={logoUploading}>
+            {t('logo.selectFile')}
+            <input type="file" hidden accept="image/*" onChange={handleLogoFileSelect} />
+          </Button>
+
+          {logoPreview && (
+            <Box sx={{ textAlign: 'center' }}>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>{t('logo.preview')}</Typography>
+              <Box
+                component="img"
+                src={logoPreview}
+                alt="Logo preview"
+                sx={{ maxHeight: 80, maxWidth: '100%', objectFit: 'contain', borderRadius: 1, border: '1px solid', borderColor: 'divider', p: 1 }}
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <Box sx={{ px: 3, pb: 2, display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+          <Button size="small" onClick={() => setLogoDialogOpen(false)} disabled={logoUploading}>{t('common.cancel')}</Button>
+          <Button
+            variant="contained"
+            size="small"
+            onClick={handleLogoUpload}
+            disabled={!logoFile || logoUploading}
+            startIcon={logoUploading ? <CircularProgress size={14} /> : undefined}
+          >
+            {logoUploading ? t('logo.uploading') : t('common.save')}
+          </Button>
+        </Box>
+      </Dialog>
+
+      {/* General snackbar for feedback messages */}
+      <Snackbar
+        open={Boolean(snackMsg)}
+        autoHideDuration={6000}
+        onClose={() => setSnackMsg(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        message={snackMsg}
+      />
     </Box>
   );
 }
