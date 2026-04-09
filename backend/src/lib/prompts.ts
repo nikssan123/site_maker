@@ -95,6 +95,40 @@ blog:
 directory:
   Navigation with prominent search → Filter row (chips, selects) → Results grid → Detail view (dialog or separate page)
 
+═══ DESIGN DIRECTION (VERY IMPORTANT) ═══
+
+Before building the UI, choose ONE clear visual direction and apply it consistently across the app.
+
+Pick ONE of the following styles:
+
+1. "Minimal SaaS":
+   - Clean white/soft dark background
+   - Strong typography
+   - Subtle shadows
+   - Lots of whitespace
+
+2. "Gradient Modern":
+   - Bold gradients (hero + accents)
+   - Glowing buttons
+   - Soft radial background shapes
+   - Slightly futuristic feel
+
+3. "Glassmorphism":
+   - Semi-transparent cards
+   - Blur effects
+   - Light borders
+   - Floating UI elements
+
+4. "Bold Product":
+   - Large visuals/images
+   - Strong contrast
+   - Big headings
+   - Card-heavy layout
+
+IMPORTANT:
+- Stick to ONE direction — do not mix styles randomly
+- All sections must feel visually consistent
+
 ═══ STEP 3: DESIGN STANDARDS ═══
 
 Your goal is to build apps that look like premium, modern SaaS products — the kind of polished UI you'd see on Dribbble, Linear, Vercel, or Stripe. Every app should feel intentional, clean, and alive.
@@ -114,13 +148,14 @@ Premium app shell (MUST follow):
 
 ═══ MODERN DESIGN TECHNIQUES (use these to make the app feel alive) ═══
 
-Animations & micro-interactions (MUST include):
+Animations & micro-interactions (MUST include — make them NOTICEABLE):
 - Page entrance: use CSS @keyframes fadeInUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } } and apply via sx={{ animation: 'fadeInUp 0.6s ease-out' }}. Define the keyframes in a global style or in the component.
-- Staggered reveals: when rendering a grid of cards, give each card a slightly increasing animation-delay (e.g. index * 0.1s) so they cascade in
-- Hover transforms: cards and interactive elements should lift on hover: '&:hover': { transform: 'translateY(-4px)', boxShadow: theme => theme.shadows[8] }
-- Button hover: primary buttons should glow or shift — e.g. '&:hover': { boxShadow: '0 4px 20px rgba(primary, 0.4)' }
+- Staggered reveals: when rendering a grid of cards, give each card animation-delay of index * 0.08–0.12s so they cascade in
+- Hover transforms: cards and interactive elements MUST lift on hover: '&:hover': { transform: 'translateY(-6px) scale(1.01)', transition: 'all 0.25s ease' }
+- Button hover: primary buttons MUST glow using boxShadow with primary color + slight scale on hover
 - Smooth page transitions: use transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)' on interactive elements
-- Scroll-triggered animations: for below-the-fold sections, use IntersectionObserver to fade in content when it enters the viewport
+- Scroll-triggered animations: ALL below-the-fold sections MUST animate into view using IntersectionObserver — this is not optional
+- AVOID invisible or too-subtle animations — they should feel smooth and premium, not flashy, but clearly visible
 
 Modern visual effects:
 - Gradient text for hero headlines: background: 'linear-gradient(…)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent'
@@ -130,6 +165,21 @@ Modern visual effects:
 - Decorative elements: subtle radial-gradient blobs or shapes in the background of key sections for visual depth (use pseudo-elements or absolutely positioned Box with low opacity)
 - Use alpha-transparency creatively: semi-transparent cards, overlays, frosted panels
 
+═══ SIGNATURE INTERACTION (MUST HAVE) ═══
+
+Each app MUST include at least ONE memorable interaction:
+- Animated card hover with scale + glow
+- Interactive filter that updates instantly
+- Stepper with smooth transitions
+- Expandable cards with animation
+- Floating CTA that reacts on scroll
+
+This interaction should be:
+- visible without searching
+- part of the main user flow
+
+Avoid static, lifeless UI.
+
 Card styles — choose what fits the app's feel (do NOT always use the same style):
 - Glass card: background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)'
 - Elevated card: subtle shadow that deepens on hover, no border
@@ -137,12 +187,32 @@ Card styles — choose what fits the app's feel (do NOT always use the same styl
 - Gradient accent: subtle gradient border or accent strip on one edge
 - Image-first: large image area with content overlay or content below
 
-Hero sections — be creative! Do NOT always use the same gradient + centered text pattern. Choose a style that matches the app:
-- Split hero: text on one side, illustration/visual/gradient shape on the other
-- Full-width gradient with floating decorative shapes/blobs in the background
-- Minimal hero: large bold headline, one line of subtext, single CTA, lots of whitespace
-- Gradient text hero: large headline using gradient text effect, dark background, glowing CTA
-- Angled/diagonal: use clipPath or a skewed overlay to create visual dynamism
+═══ AVOID TEMPLATE LOOK (VERY IMPORTANT) ═══
+
+Do NOT generate layouts that feel like generic templates.
+Avoid:
+- identical spacing between all sections
+- same card style everywhere
+- repetitive grids
+
+Instead:
+- alternate section backgrounds
+- mix layouts (grid, split, full-width)
+- vary card styles across sections
+
+Each section should feel intentionally designed, not copied.
+
+Hero sections (CRITICAL — MUST BE VISUALLY STRONG):
+The hero section must feel like a real startup landing page. User should say: "This looks like a real product."
+- DO NOT use a basic centered text + button layout
+- MUST include one of:
+  - Split layout (text left, visual right — mock dashboard, product card, or illustration-like layout)
+  - Gradient background with floating decorative shapes
+  - Large visual card/mockup as a "visual anchor"
+  - Angled/diagonal: use clipPath or a skewed overlay for visual dynamism
+- Headline must be short, bold, and impactful (max 8–10 words)
+- Add visual depth using gradients, glow effects, layered elements
+- Include at least one "visual anchor" (dashboard, product card, illustration-like layout)
 
 Status chips: <Chip label="Confirmed" color="success" size="small" /> (use success/warning/error/info)
 
@@ -359,6 +429,18 @@ Semantic HTML: use proper heading hierarchy (one h1 per page via Typography vari
 ✗ ES module syntax (import/export) in server.js — use require()
 ✗ Top-level await in server.js — use async main() wrapper
 ✗ String concatenation in SQL — use parameterized queries
+
+═══ FINAL POLISH PASS (MANDATORY) ═══
+
+Before finishing:
+- Improve spacing: increase whitespace where needed
+- Ensure 1 clear primary CTA per screen
+- Add subtle background elements (gradients, blobs, overlays)
+- Make sure nothing feels cramped or plain
+- Ensure visual hierarchy is strong (headline → sub → action)
+
+Ask yourself: "Would this pass as a real SaaS product landing page?"
+If not → refine.
 
 ═══ OUTPUT CONTRACT (violations break the build pipeline) ═══
 - ENTIRE response: ONE JSON object, nothing else
