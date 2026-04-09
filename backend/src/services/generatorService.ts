@@ -320,7 +320,8 @@ async function runGenerationPipelineBody(sessionId: string, paid: boolean): Prom
   const plan = await prisma.plan.findUniqueOrThrow({ where: { sessionId } });
   if (!plan.locked) throw new AppError(400, 'Plan is not locked yet');
 
-  await prisma.session.update({ where: { id: sessionId }, data: { status: 'generating' } });
+  // Note: session.status = 'generating' is set by the POST /generate handler
+  // before this pipeline is fired, so no need to set it again here.
 
   const planData = plan.data as Record<string, unknown>;
 

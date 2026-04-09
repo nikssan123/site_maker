@@ -340,9 +340,15 @@ export default function ChatPage() {
     if (user?.freeProjectUsed && store.sessionId) {
       try {
         const s = await api.get<{
+          status?: string;
           generationPurchased?: boolean;
           project?: { status: string } | null;
         }>(`/sessions/${store.sessionId}`);
+        // Session is already generating (e.g. page was refreshed mid-build) — just reconnect.
+        if (s.status === 'generating') {
+          store.setPhase('generating');
+          return;
+        }
         // Backend allows free retry when project failed after codegen; paid session skips checkout.
         if (s.generationPurchased || s.project?.status === 'error') {
           startGeneration(store.sessionId);

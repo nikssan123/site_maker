@@ -49,6 +49,10 @@ router.post('/', requireAuth, async (req, res, next) => {
       return;
     }
 
+    // Mark session as generating NOW (before fire-and-forget) so a page refresh
+    // sees the correct status and doesn't re-prompt for payment.
+    await prisma.session.update({ where: { id: sessionId }, data: { status: 'generating' } });
+
     // Snapshot the plan used for this execution (audit trail)
     const plan = await prisma.plan.findUnique({
       where: { sessionId },
