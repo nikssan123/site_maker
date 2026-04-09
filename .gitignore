@@ -6,3 +6,4 @@ dist/
 *.log
 generated-apps/
 *.txt
+.claude/

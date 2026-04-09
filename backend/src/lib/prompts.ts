@@ -67,122 +67,91 @@ Before writing any file, answer these questions mentally:
 2. What is the user's happy path from landing to goal? Make every step feel obvious and frictionless
 3. This is a customer/user-facing app only — do NOT build any admin, owner, or management panel
 
-═══ STEP 2: LAYOUT PATTERNS (follow exactly for each appType) ═══
+═══ STEP 2: LAYOUT PATTERNS ═══
+
+Each appType below lists its REQUIRED sections. Include all of them but design each app to feel unique — vary hero styles, card layouts, section ordering, and visual treatments.
 
 landing_page:
-  Sticky AppBar (logo left, nav links right, CTA button) →
-  Hero: full-width Box with gradient bg, large bold h2 headline, subtitle, 2 Buttons (primary + outlined) →
-  Feature grid: 3-column Grid of Cards (icon + title + description) →
-  Social proof section (testimonials or stats) →
-  Pricing or CTA section →
-  Footer (links, copyright)
+  Navigation (AppBar) → Hero section → Features/benefits → Social proof (testimonials or stats) → Pricing or CTA → Footer
 
 portfolio:
-  AppBar (name/logo + nav links: Work, About, Contact) →
-  Hero: name, title, short bio, avatar placeholder, 2 CTAs →
-  Project grid: masonry-style or 3-col Grid of Cards (image area, title, tags as Chips, "View project" Button) →
-  About section: 2-col layout (text left, skills/stack right) →
-  Contact section: form (name, email, message) + social links
+  Navigation → Personal intro/hero → Project showcase (grid, masonry, or featured layout) → About + skills → Contact form + social links
 
 ecommerce:
-  AppBar (logo, search bar, cart IconButton with badge count) →
-  Category filter Chips row →
-  Product Grid: responsive cards (image area, name, price, "Add to cart" Button) →
-  Cart Drawer (slides from right, list of items, total, Checkout Button) →
-  Checkout page (shipping form + order summary sidebar) →
-  Order confirmation page (success icon, order ID, summary)
+  Navigation (with search + cart badge) → Category filters → Product grid → Cart (drawer or page) → Checkout (shipping + order summary) → Confirmation page
 
 booking:
-  AppBar (logo, "Book Now" Button) →
-  Hero (gradient bg, headline, subtitle, large "Book an Appointment" Button) →
-  Services section: Grid of service Cards (icon, name, duration, price, "Book" Button) →
-  Booking form page (/book): Stepper with steps [Select Service → Pick Date & Time → Your Details → Confirm] →
-  Confirmation page (/confirmation): success icon, booking reference, summary →
-  Calendar section (/calendar): show taken (unavailable) slots in a clean calendar view, and allow users to mark a slot as taken (block time). The booking flow MUST respect taken slots (prevent selecting unavailable times).
+  Navigation → Hero with booking CTA → Services showcase → Booking form (/book): Stepper [Select Service → Pick Date & Time → Your Details → Confirm] → Confirmation page (/confirmation) → Calendar (/calendar): show taken slots, allow blocking time, booking flow MUST respect unavailable slots
 
 dashboard:
-  Permanent Drawer sidebar (logo top, nav items with icons, user info bottom) →
-  Main area: page title + date →
-  Stats row: 3-4 metric Cards (number, label, trend icon) →
-  Data section: DataGrid or Chart + summary cards →
-  Quick-action buttons or recent activity list
+  Sidebar navigation (permanent drawer) → Stats overview (metric cards) → Data section (DataGrid or charts) → Quick actions or recent activity
 
 saas:
-  Marketing AppBar (logo, nav links, Sign In + Start Free Trial buttons) →
-  Hero: bold h1, subtitle, email input + CTA, product screenshot/mockup placeholder →
-  Feature highlights: alternating 2-col sections (icon/image left/right, text opposite) →
-  Pricing: 3 tier Cards (highlight the middle one) →
-  FAQ accordion →
-  Footer
+  Marketing navigation → Hero with CTA → Feature highlights → Pricing tiers (3 cards, highlight middle) → FAQ accordion → Footer
 
 blog:
-  AppBar (blog name, category nav, search) →
-  Hero post: large Card with image area, category Chip, title, excerpt, author + date →
-  Post grid: 3-col cards with image, category, title, excerpt, read time →
-  Post detail page: article with proper typography (h1, body1 with lineHeight 1.8), author bio, related posts
+  Navigation (with category nav + search) → Featured/hero post → Post grid → Post detail page (proper typography, h1, lineHeight 1.8, author bio, related posts)
 
 directory:
-  AppBar with prominent SearchBar in center →
-  Filter row: category Chips, location Select, sort Select →
-  Results grid: Cards (image, name, rating Stars, category Chip, description excerpt) →
-  Detail: Dialog or separate page with full info, contact button, map placeholder
+  Navigation with prominent search → Filter row (chips, selects) → Results grid → Detail view (dialog or separate page)
 
 ═══ STEP 3: DESIGN STANDARDS ═══
 
-Every screen must have:
-- A clear visual hierarchy: one dominant element, supporting elements, actions
-- Breathing room: sx={{ p: 3 }} on Cards, gap={3} in Stack/Grid, my={6} between page sections
+Your goal is to build apps that look like premium, modern SaaS products — the kind of polished UI you'd see on Dribbble, Linear, Vercel, or Stripe. Every app should feel intentional, clean, and alive.
+
+Visual hierarchy & spacing:
+- One dominant element per screen, clear supporting elements, obvious actions
+- Generous whitespace — don't cram elements. Sections need room to breathe
 - Consistent type scale: variant="h3" or "h4" for page titles, "h6" for card titles, "body2" for meta/secondary text
 - Real content in seed data: realistic names, sensible prices, actual dates, proper descriptions — never placeholder text
 
-Premium UI requirements (MUST follow):
-- Build a cohesive "app shell" and reuse it on ALL routes:
-  - AppBar: sticky, clean, with subtle blur/glass (use sx with rgba + backdropFilter)
-  - Main content wrapper: maxWidth container + consistent padding (px) and vertical rhythm (section spacing)
+Premium app shell (MUST follow):
+- Build a cohesive "app shell" reused on ALL routes:
+  - AppBar: sticky, with glassmorphism (backdropFilter: 'blur(20px)', semi-transparent background)
+  - Main content wrapper: maxWidth container + consistent padding and vertical rhythm
   - Footer: always present (see Footer rules below)
-- Use a consistent spacing system everywhere:
-  - Page padding: px={{ xs: 2, md: 4 }}, py={{ xs: 2, md: 3 }}
-  - Section spacing: my={{ xs: 6, md: 10 }} between major sections
-  - Card spacing: p={2.5..3}, gap={2..3}
-- Use smooth micro-interactions:
-  - Every clickable surface (Button/Card/IconButton) MUST have hover + focus-visible states
-  - Use subtle transitions: transition: 'all 160-220ms ease'
-- Never ship "default MUI look":
-  - Customize the theme (typography, shape, and key component styles) so the UI feels like a real product.
-  - Prefer outlined + soft-surface cards, thin borders, and gentle shadows.
-- Always include full UX states:
-  - Loading: Skeletons that mirror the final layout (not just a spinner everywhere)
-  - Empty: friendly empty state with an icon + 1 line + CTA
-  - Error: Alert with clear Bulgarian message + retry action when relevant
-  - Forms: validation + helper text, and Snackbar/Alert success/error feedback (never alert()).
+- Consistent spacing system: page padding px={{ xs: 2, md: 4 }}, section spacing my={{ xs: 6, md: 10 }}, card padding p={2.5..3}
 
-Hero sections:
-  <Box sx={{ background: 'linear-gradient(135deg, primary.dark 0%, secondary.dark 100%)', py: 12, textAlign: 'center' }}>
-    <Typography variant="h2" fontWeight={800} color="white">Real compelling headline</Typography>
-    <Typography variant="h5" sx={{ opacity: 0.85, mt: 2, mb: 5 }}>Descriptive subtitle</Typography>
-    <Stack direction="row" gap={2} justifyContent="center">
-      <Button variant="contained" size="large">Primary CTA</Button>
-      <Button variant="outlined" size="large" sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.5)' }}>Secondary</Button>
-    </Stack>
-  </Box>
+═══ MODERN DESIGN TECHNIQUES (use these to make the app feel alive) ═══
 
-Cards:
-  Paper elevation={0} variant="outlined" sx={{ borderRadius: 3, p: 3, '&:hover': { borderColor: 'primary.main', boxShadow: 4 }, transition: 'all 0.2s' }}
+Animations & micro-interactions (MUST include):
+- Page entrance: use CSS @keyframes fadeInUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } } and apply via sx={{ animation: 'fadeInUp 0.6s ease-out' }}. Define the keyframes in a global style or in the component.
+- Staggered reveals: when rendering a grid of cards, give each card a slightly increasing animation-delay (e.g. index * 0.1s) so they cascade in
+- Hover transforms: cards and interactive elements should lift on hover: '&:hover': { transform: 'translateY(-4px)', boxShadow: theme => theme.shadows[8] }
+- Button hover: primary buttons should glow or shift — e.g. '&:hover': { boxShadow: '0 4px 20px rgba(primary, 0.4)' }
+- Smooth page transitions: use transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)' on interactive elements
+- Scroll-triggered animations: for below-the-fold sections, use IntersectionObserver to fade in content when it enters the viewport
+
+Modern visual effects:
+- Gradient text for hero headlines: background: 'linear-gradient(…)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent'
+- Subtle gradient backgrounds on sections (not just the hero)
+- Glassmorphism for navbars and floating elements: background: 'rgba(bg, 0.7)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.1)'
+- Soft glows around CTAs and accent elements using box-shadow with the primary color at low opacity
+- Decorative elements: subtle radial-gradient blobs or shapes in the background of key sections for visual depth (use pseudo-elements or absolutely positioned Box with low opacity)
+- Use alpha-transparency creatively: semi-transparent cards, overlays, frosted panels
+
+Card styles — choose what fits the app's feel (do NOT always use the same style):
+- Glass card: background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)'
+- Elevated card: subtle shadow that deepens on hover, no border
+- Outlined minimal: thin border, no shadow, clean and sharp
+- Gradient accent: subtle gradient border or accent strip on one edge
+- Image-first: large image area with content overlay or content below
+
+Hero sections — be creative! Do NOT always use the same gradient + centered text pattern. Choose a style that matches the app:
+- Split hero: text on one side, illustration/visual/gradient shape on the other
+- Full-width gradient with floating decorative shapes/blobs in the background
+- Minimal hero: large bold headline, one line of subtext, single CTA, lots of whitespace
+- Gradient text hero: large headline using gradient text effect, dark background, glowing CTA
+- Angled/diagonal: use clipPath or a skewed overlay to create visual dynamism
 
 Status chips: <Chip label="Confirmed" color="success" size="small" /> (use success/warning/error/info)
 
-Empty states (when list is empty):
-  <Box sx={{ textAlign: 'center', py: 10 }}>
-    <InboxIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
-    <Typography variant="h6" color="text.secondary">No items yet</Typography>
-    <Button variant="contained" sx={{ mt: 3 }}>Add your first one</Button>
-  </Box>
-
-Loading states: <CircularProgress /> centered in a Box sx={{ display:'flex', justifyContent:'center', py: 8 }}
-Or Skeleton components mirroring the expected content shape.
-
-Form feedback: Snackbar + Alert (severity="success"/"error") after submit — NEVER alert()
-Confirmations: Dialog with title, description, Cancel + Confirm buttons — NEVER confirm()
+UX states (MUST include):
+- Loading: Skeleton components mirroring the final layout shape (not just a spinner)
+- Empty: friendly state with icon + message + CTA
+- Error: Alert with clear Bulgarian message + retry action
+- Forms: validation + helper text, Snackbar/Alert feedback (never alert())
+- Confirmations: Dialog with title, description, Cancel + Confirm (never confirm())
 
 ═══ STEP 4: MUI COMPONENT GUIDE ═══
 
@@ -215,12 +184,13 @@ If no colorTheme: use primary #6366f1, secondary #a855f7, background #06060f.
 
 Theme polish (MUST):
 - In src/theme.ts set:
-  - shape.borderRadius = 12
-  - typography: strong headings (fontWeight 800 for h1/h2/h3), body1 lineHeight ~1.7
+  - shape.borderRadius: choose a value that fits the app's personality (8-16 range — sharper for professional/dashboard, rounder for friendly/consumer)
+  - typography: use a clear hierarchy with distinct heading weights (700-900 for h1-h3), body1 lineHeight ~1.7
   - component defaults via components overrides:
-    - MuiButton: disableElevation, textTransform: 'none', consistent padding, rounded corners
-    - MuiPaper/MuiCard: subtle border + soft shadow on hover
-    - MuiTextField/MuiOutlinedInput: consistent dark-surface background + focus ring
+    - MuiButton: disableElevation, textTransform: 'none', consistent padding, rounded corners, add a subtle hover glow using boxShadow with the primary color
+    - MuiPaper/MuiCard: customize to match the card style you chose — add transitions for hover states
+    - MuiTextField/MuiOutlinedInput: dark-surface background + focus ring
+    - MuiCssBaseline: add global @keyframes (fadeInUp, fadeIn) here so all components can use them
 - Reuse these tokens everywhere; do not invent random radii/spacing per component.
 
 ═══ ЕЗИК: БЪЛГАРСКИ — ЗАДЪЛЖИТЕЛНО ═══
@@ -461,6 +431,80 @@ Shape: {"files":{"path":"full new file contents as one JSON string per path"}}
 File bodies MUST be valid JSON strings: escape newlines as \\n, quotes as \\", backslashes as \\\\ — raw line breaks inside a string value break parsing.
 Only include files that changed or are new. Do not regenerate unchanged files.${BG_LANGUAGE_BLOCK}`;
 
+/* ── Design DNA: curated design directions injected per project ── */
+
+interface DesignDNA {
+  heroStyle: string;
+  cardStyle: string;
+  visualMood: string;
+  animationStyle: string;
+  layoutFeel: string;
+}
+
+const HERO_STYLES = [
+  'Split layout: headline + subtext on the left, decorative gradient blob or abstract shape on the right. Large bold gradient-text headline.',
+  'Full-width dark hero with a radial gradient glow behind the headline. Centered text, floating decorative circles/blobs at low opacity in the background.',
+  'Minimal hero: extra-large bold headline, one short subtitle, single glowing CTA button, massive whitespace. Let the typography speak.',
+  'Angled hero: use clipPath polygon to create a diagonal bottom edge. Gradient background, text left-aligned with staggered fade-in animation.',
+  'Layered hero: dark background with multiple subtle gradient layers. Headline with gradient text effect, animated floating particles or subtle grid pattern overlay.',
+  'Hero with glass card overlay: dark gradient background, main content inside a frosted glass card (backdropFilter blur), creating depth.',
+];
+
+const CARD_STYLES = [
+  'Glass cards: background rgba(255,255,255,0.05), backdropFilter blur(10px), border 1px solid rgba(255,255,255,0.08). Subtle glow on hover.',
+  'Elevated cards: no border, soft shadow (boxShadow: "0 4px 24px rgba(0,0,0,0.12)"), deeper shadow + slight lift (translateY(-4px)) on hover.',
+  'Gradient-border cards: transparent background with a subtle gradient border using a wrapper technique or border-image. Clean interior.',
+  'Accent-edge cards: clean minimal card with a 3px colored left border (primary color). Slight scale(1.02) on hover.',
+  'Soft-fill cards: subtle primary-tinted background (rgba(primary, 0.06)), no border, rounded corners. Hover brightens the fill.',
+];
+
+const VISUAL_MOODS = [
+  'Premium dark: deep blacks and grays, accent color used sparingly for CTAs and highlights. Think Linear/Vercel aesthetic.',
+  'Vibrant gradient: bold use of gradients throughout — section backgrounds, buttons, text accents. Energetic and modern.',
+  'Clean minimal: maximum whitespace, thin borders, subtle shadows. Typography-driven hierarchy. Think Stripe/Notion.',
+  'Warm glow: dark background with warm-toned accents (amber/orange glow effects). Cozy but professional.',
+  'Cool tech: dark background with blue/purple undertones, neon-ish accent glows, geometric decorative elements.',
+];
+
+const ANIMATION_STYLES = [
+  'Smooth cascade: elements fade in from below (translateY(24px) to 0) with staggered delays (index * 100ms). Sections animate on scroll via IntersectionObserver.',
+  'Scale reveal: elements start at scale(0.95) opacity(0) and grow to scale(1) opacity(1). Cards pop in sequentially.',
+  'Slide-in: sections slide in from alternating sides (odd from left, even from right). Subtle but dynamic.',
+  'Fade-only: clean, minimal animation — just opacity 0 to 1 with 0.5s ease. No transforms. Elegant and understated.',
+];
+
+const LAYOUT_FEELS = [
+  'Airy: generous padding (py: 10-14 on sections), wide gaps, lots of breathing room between elements.',
+  'Balanced: moderate spacing (py: 6-8 on sections), well-structured grid layouts, neither cramped nor sparse.',
+  'Editorial: asymmetric layouts, large typography mixed with compact info blocks, magazine-like visual rhythm.',
+  'Card-centric: content organized primarily in card grids, floating above subtle background sections.',
+];
+
+export function pickDesignDNA(): DesignDNA {
+  const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+  return {
+    heroStyle: pick(HERO_STYLES),
+    cardStyle: pick(CARD_STYLES),
+    visualMood: pick(VISUAL_MOODS),
+    animationStyle: pick(ANIMATION_STYLES),
+    layoutFeel: pick(LAYOUT_FEELS),
+  };
+}
+
+function buildDesignDNAPrompt(dna: DesignDNA): string {
+  return `
+═══ DESIGN DIRECTION FOR THIS PROJECT ═══
+Follow these specific design choices to make this app unique:
+
+HERO STYLE: ${dna.heroStyle}
+CARD STYLE: ${dna.cardStyle}
+VISUAL MOOD: ${dna.visualMood}
+ANIMATIONS: ${dna.animationStyle}
+LAYOUT DENSITY: ${dna.layoutFeel}
+
+Apply these consistently throughout the entire app. Every design decision should reinforce this direction.`;
+}
+
 function inferFieldType(field: string): string {
   const f = field.toLowerCase();
   if (/url|image|img|photo|pic|avatar|thumbnail|cover|banner|logo|picture|poster/.test(f)) return 'image';
@@ -494,16 +538,19 @@ function planHasContactForm(plan: Record<string, unknown>): boolean {
   return /(contact|inquiry|inquiries|message|messages|контакт|запит|запитван)/i.test(hay);
 }
 
-export function buildCodeGenPrompt(plan: Record<string, unknown>): string {
+export function buildCodeGenPrompt(plan: Record<string, unknown>, designDNA?: DesignDNA): string {
   const hasDatabase = plan.hasDatabase === true;
   const paymentsEnabled = plan.paymentsEnabled === true;
   const appType = typeof plan.appType === 'string' ? plan.appType : 'other';
   const dataModels = plan.dataModels as Array<{ name: string; fields: string[] }> | undefined;
   const colorTheme = plan.colorTheme as { name?: string; primary?: string; secondary?: string; background?: string } | undefined;
+  const dna = designDNA ?? pickDesignDNA();
 
   let prompt = `Build a ${hasDatabase ? 'full-stack React + SQLite' : 'React'} app for: ${typeof plan.description === 'string' ? plan.description : appType}\n\nFull specification:\n${JSON.stringify(plan, null, 2)}`;
 
   prompt += `\n\nAPP TYPE: ${appType} — customer/user-facing only. Do NOT include any admin, owner, or management panel.`;
+
+  prompt += buildDesignDNAPrompt(dna);
 
   if (colorTheme?.primary && colorTheme?.secondary && colorTheme?.background) {
     prompt += `\n\nCOLOR THEME — use these exact hex values in MUI createTheme (src/theme.ts):
