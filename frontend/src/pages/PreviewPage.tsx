@@ -28,6 +28,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import DescriptionIcon from '@mui/icons-material/Description';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import ImageIcon from '@mui/icons-material/Image';
+import WallpaperIcon from '@mui/icons-material/Wallpaper';
 
 import PreviewFrame from '../components/PreviewFrame';
 import CatalogPanel from '../components/CatalogPanel';
@@ -182,6 +183,10 @@ export default function PreviewPage() {
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<{ dataUrl: string; name: string } | null>(null);
+  const [heroBgDialogOpen, setHeroBgDialogOpen] = useState(false);
+  const [heroBgUploading, setHeroBgUploading] = useState(false);
+  const [heroBgPreview, setHeroBgPreview] = useState<string | null>(null);
+  const [heroBgFile, setHeroBgFile] = useState<{ dataUrl: string; name: string } | null>(null);
   const [snackMsg, setSnackMsg] = useState<string | null>(null);
   /** For catalog/booking panels: X-Admin-Token on writes to generated /api (app-runner enforces PUT/DELETE). */
   const [adminApiToken, setAdminApiToken] = useState<string | null>(null);
@@ -299,6 +304,41 @@ export default function PreviewPage() {
       setSnackMsg(t('logo.error'));
     } finally {
       setLogoUploading(false);
+    }
+  };
+
+  const handleHeroBgFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_LOGO_BYTES) {
+      setSnackMsg(t('heroBg.fileTooLarge'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      setHeroBgPreview(dataUrl);
+      setHeroBgFile({ dataUrl, name: file.name });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleHeroBgUpload = async () => {
+    if (!heroBgFile || !projectId) return;
+    setHeroBgUploading(true);
+    try {
+      const result = await api.replaceHeroBg(projectId, heroBgFile.dataUrl, heroBgFile.name);
+      await pollUntilRunning(projectId);
+      setRefreshKey((k) => k + 1);
+      await loadProject();
+      setHeroBgDialogOpen(false);
+      setHeroBgPreview(null);
+      setHeroBgFile(null);
+      setSnackMsg(result.autoPlaced ? t('heroBg.success') : t('heroBg.successManual'));
+    } catch {
+      setSnackMsg(t('heroBg.error'));
+    } finally {
+      setHeroBgUploading(false);
     }
   };
 
@@ -832,6 +872,17 @@ export default function PreviewPage() {
             </Box>
           </Tooltip>
 
+          <Tooltip title={t('heroBg.tooltip')} placement="right">
+            <Box>
+              <ActionButton
+                icon={<WallpaperIcon fontSize="inherit" />}
+                label={t('heroBg.label')}
+                onClick={() => { setHeroBgDialogOpen(true); setHeroBgPreview(null); setHeroBgFile(null); }}
+                color="#f5a97f"
+              />
+            </Box>
+          </Tooltip>
+
           {projectPaid && (
             <Tooltip title="Редактирай файловете" placement="right">
               <Box data-tour="action-files">
@@ -1295,6 +1346,49 @@ export default function PreviewPage() {
             startIcon={logoUploading ? <CircularProgress size={14} /> : undefined}
           >
             {logoUploading ? t('logo.uploading') : t('common.save')}
+          </Button>
+        </Box>
+      </Dialog>
+
+      {/* Hero background upload dialog */}
+      <Dialog
+        open={heroBgDialogOpen}
+        onClose={() => !heroBgUploading && setHeroBgDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 2 } }}
+      >
+        <DialogTitle sx={{ fontWeight: 700, fontSize: 16 }}>{t('heroBg.dialogTitle')}</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '8px !important' }}>
+          <Typography variant="body2" color="text.secondary">{t('heroBg.dialogHint')}</Typography>
+
+          <Button variant="outlined" component="label" disabled={heroBgUploading}>
+            {t('heroBg.selectFile')}
+            <input type="file" hidden accept="image/*" onChange={handleHeroBgFileSelect} />
+          </Button>
+
+          {heroBgPreview && (
+            <Box sx={{ textAlign: 'center' }}>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>{t('heroBg.preview')}</Typography>
+              <Box
+                component="img"
+                src={heroBgPreview}
+                alt="Background preview"
+                sx={{ maxHeight: 120, maxWidth: '100%', objectFit: 'cover', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <Box sx={{ px: 3, pb: 2, display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+          <Button size="small" onClick={() => setHeroBgDialogOpen(false)} disabled={heroBgUploading}>{t('common.cancel')}</Button>
+          <Button
+            variant="contained"
+            size="small"
+            onClick={handleHeroBgUpload}
+            disabled={!heroBgFile || heroBgUploading}
+            startIcon={heroBgUploading ? <CircularProgress size={14} /> : undefined}
+          >
+            {heroBgUploading ? t('heroBg.uploading') : t('common.save')}
           </Button>
         </Box>
       </Dialog>

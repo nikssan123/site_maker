@@ -821,6 +821,114 @@ router.post('/:projectId/replace-logo', requireAuth, async (req, res, next) => {
   }
 });
 
+// Replace or add a background image to the hero / main section of the generated site
+router.post('/:projectId/replace-hero-bg', requireAuth, async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId);
+    const project = await prisma.project.findFirstOrThrow({
+      where: { id: projectId, session: { userId: req.user.userId } },
+    });
+
+    const { data, filename: originalName } = z.object({
+      data: z.string().max(10_000_000),
+      filename: z.string().max(255),
+    }).parse(req.body);
+
+    const match = data.match(/^data:(image\/[a-z+]+);base64,/);
+    if (!match) throw new AppError(400, 'Invalid image data URL');
+
+    const mimeType = match[1];
+    const base64 = data.slice(match[0].length);
+    const extFromMime: Record<string, string> = {
+      'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif',
+      'image/webp': 'webp', 'image/svg+xml': 'svg', 'image/avif': 'avif',
+    };
+    const ext = extFromMime[mimeType] ??
+      (originalName.includes('.') ? originalName.split('.').pop()!.toLowerCase() : 'jpg');
+    const safeExt = ext.replace(/[^a-z0-9]/g, '');
+    const filename = `hero-bg.${safeExt}`;
+
+    const publicDir = path.join(projectPath(projectId), 'public');
+    fs.mkdirSync(publicDir, { recursive: true });
+    fs.writeFileSync(path.join(publicDir, filename), Buffer.from(base64, 'base64'));
+
+    const bgSrc = `/${filename}`;
+
+    const projectDir = projectPath(projectId);
+    const files = walkSourceFiles(projectDir);
+    const tsxFiles = files.filter((f) => /\.(tsx|jsx)$/i.test(f));
+
+    // Generated hero sections follow a few patterns. We look for the first Box with a large
+    // background/gradient that lives in the main page or App component (not the AppBar).
+    // Common markers: minHeight: '...vh', background: 'linear-gradient', py: {xs: 8+}
+    let replaced = false;
+
+    for (const file of tsxFiles) {
+      const content = fs.readFileSync(file, 'utf8');
+
+      // Skip files that are clearly not the main page / hero
+      const basename = path.basename(file).toLowerCase();
+      if (/theme|server|test|spec/i.test(basename)) continue;
+
+      // Strategy: find a <Box sx={{ ... with hero-like indicators (minHeight with vh, large py, background gradient)
+      // then inject backgroundImage into the sx prop.
+
+      // Pattern: <Box ... sx={{ ... background: '..gradient..' ... minHeight: '..vh' ... }}
+      // or <Box ... sx={{ ... minHeight: '..vh' ... py: ... }}
+      // We match the opening of the sx prop for the hero Box.
+      const heroPatterns = [
+        // Box with both minHeight vh and background/gradient
+        /(<Box\b[^>]*\bsx=\{\{[^}]*?)(minHeight:\s*['"][4-9]\d*vh['"]|minHeight:\s*['"]100vh['"])/,
+        // Box with background linear-gradient and large padding
+        /(<Box\b[^>]*\bsx=\{\{[^}]*?)(background:\s*['"]linear-gradient[\s\S]*?['"])/,
+        // Box component="section" or similar with large padding (py >= 8)
+        /(<Box\b[^>]*\bsx=\{\{[^}]*?)(py:\s*\{?\s*(?:xs:\s*)?(?:[89]|1[0-9]|2[0-9]))/,
+      ];
+
+      for (const pattern of heroPatterns) {
+        const m = pattern.exec(content);
+        if (!m) continue;
+
+        // Verify this is above-the-fold hero, not a random section: check it appears
+        // in the first ~40% of the file or has hero-like sibling content (h1/h2/variant="h2"/variant="h3")
+        const pos = m.index;
+        const isNearTop = pos < content.length * 0.45;
+        const surroundingChunk = content.slice(Math.max(0, pos - 200), Math.min(content.length, pos + 2000));
+        const hasHeroContent = /variant=["']h[12345]["']|<h[12]\b/i.test(surroundingChunk);
+
+        if (!isNearTop && !hasHeroContent) continue;
+
+        // Find the sx={{ opening for this Box to inject backgroundImage
+        // We need to locate the sx={{ ... }} block and add backgroundImage property
+        const sxStart = content.lastIndexOf('sx={{', pos + m[0].length);
+        const actualSxStart = sxStart >= m.index ? sxStart : content.indexOf('sx={{', m.index);
+        if (actualSxStart === -1) continue;
+
+        // Insert right after sx={{
+        const insertPos = actualSxStart + 'sx={{'.length;
+
+        const bgStyles = ` backgroundImage: 'linear-gradient(rgba(0,0,0,0.55), rgba(0,0,0,0.55)), url(${bgSrc})', backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat',`;
+
+        const patched = content.slice(0, insertPos) + bgStyles + content.slice(insertPos);
+        fs.writeFileSync(file, patched, 'utf8');
+        replaced = true;
+        break;
+      }
+      if (replaced) break;
+    }
+
+    if (!replaced) {
+      await triggerRebuildAsync(project.id, 'hero-bg-replace');
+      return res.json({ ok: true, autoPlaced: false, imageUrl: bgSrc });
+    }
+
+    await triggerRebuildAsync(project.id, 'hero-bg-replace');
+    return res.json({ ok: true, autoPlaced: true, imageUrl: bgSrc });
+  } catch (err) {
+    return next(err);
+  }
+});
+
 // Return admin config: appType + typed model fields (from __admin_config.json or regex fallback)
 router.get('/:projectId/catalog-models', requireAuth, async (req, res, next) => {
   try {

@@ -134,6 +134,9 @@ export const api = {
   replaceLogo: (projectId: string, dataUrl: string, filename: string) =>
     request<{ ok: boolean; autoPlaced: boolean; logoUrl: string }>('POST', `/preview/${projectId}/replace-logo`, { data: dataUrl, filename }),
 
+  replaceHeroBg: (projectId: string, dataUrl: string, filename: string) =>
+    request<{ ok: boolean; autoPlaced: boolean; imageUrl: string }>('POST', `/preview/${projectId}/replace-hero-bg`, { data: dataUrl, filename }),
+
   getEditToken: (projectId: string) =>
     request<{ token: string }>('GET', `/preview/${projectId}/edit-token`),
 
