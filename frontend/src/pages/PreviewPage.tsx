@@ -584,6 +584,7 @@ export default function PreviewPage() {
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
       <Joyride
         steps={tour.steps}
+        stepIndex={tour.stepIndex}
         run={tour.run}
         onEvent={tour.handleCallback}
         continuous
@@ -784,7 +785,7 @@ export default function PreviewPage() {
 
           {planAppType === 'booking' ? (
             <Tooltip title={t('bookingSlots.tooltip')} placement="right">
-              <Box>
+              <Box data-tour="action-data-panel">
                 <ActionButton
                   icon={<CalendarMonthIcon fontSize="inherit" />}
                   label={t('bookingSlots.label')}
@@ -799,7 +800,7 @@ export default function PreviewPage() {
             </Tooltip>
           ) : planAppType === 'blog' ? (
             <Tooltip title={t('blog.tooltip')} placement="right">
-              <Box>
+              <Box data-tour="action-data-panel">
                 <ActionButton
                   icon={<ArticleIcon fontSize="inherit" />}
                   label={t('blog.label')}
@@ -814,7 +815,7 @@ export default function PreviewPage() {
             </Tooltip>
           ) : planAppType === 'dashboard' ? (
             <Tooltip title={t('dashboard.tooltip')} placement="right">
-              <Box>
+              <Box data-tour="action-data-panel">
                 <ActionButton
                   icon={<DashboardIcon fontSize="inherit" />}
                   label={t('dashboard.label')}
@@ -829,7 +830,7 @@ export default function PreviewPage() {
             </Tooltip>
           ) : planAppType === 'portfolio' || planAppType === 'landing_page' || planAppType === 'saas' ? null : (
             <Tooltip title={editDynamicError ? t('editMode.useCatalogTooltip') : t('catalog.tooltip')} placement="right">
-              <Box>
+              <Box data-tour="action-data-panel">
                 <ActionButton
                   icon={<StorefrontIcon fontSize="inherit" />}
                   label={t('catalog.label')}
@@ -848,7 +849,7 @@ export default function PreviewPage() {
 
           {planHasContactForm && (
             <Tooltip title={t('inquiries.tooltip')} placement="right">
-              <Box>
+              <Box data-tour="action-inquiries">
                 <ActionButton
                   icon={<MailOutlineIcon fontSize="inherit" />}
                   label={t('inquiries.label')}
@@ -878,7 +879,7 @@ export default function PreviewPage() {
           </Tooltip>
 
           <Tooltip title={t('logo.tooltip')} placement="right">
-            <Box>
+            <Box data-tour="action-logo">
               <ActionButton
                 icon={<ImageIcon fontSize="inherit" />}
                 label={t('logo.label')}
@@ -889,7 +890,7 @@ export default function PreviewPage() {
           </Tooltip>
 
           <Tooltip title={t('heroBg.tooltip')} placement="right">
-            <Box>
+            <Box data-tour="action-hero">
               <ActionButton
                 icon={<WallpaperIcon fontSize="inherit" />}
                 label={t('heroBg.label')}
