@@ -208,8 +208,53 @@ export async function chatStream(
     system += `\n\nIMPORTANT:\nBefore you finalize the plan, you MUST ask the user for their social media links.\nAsk for: Facebook, Instagram, TikTok, LinkedIn, YouTube, X (Twitter).\nIf they don't have some, they can say \"none\".\nAsk ONE short question only. Do NOT output the plan block in this turn unless the user already provided the social links.`;
   }
 
-  // Stream the first attempt
-  let response = await ai.stream(history, system, onToken);
+  // Stream the first attempt.
+  // Intercept tokens so the ```plan ... ``` JSON block is never sent to the client.
+  // We buffer once we see the opening fence and swallow everything until the closing fence.
+  let planFenceBuffer = '';
+  let insidePlanFence = false;
+  let planFenceConsumed = false;
+
+  const filteredOnToken = (token: string) => {
+    if (planFenceConsumed) return;          // after fence closed, swallow trailing whitespace tokens
+
+    planFenceBuffer += token;
+
+    // Detect opening ``` fence (plan or json)
+    if (!insidePlanFence) {
+      const fenceStart = planFenceBuffer.match(/```(?:plan|json)\s*/i);
+      if (fenceStart) {
+        // Flush everything before the fence to the client
+        const beforeFence = planFenceBuffer.slice(0, fenceStart.index);
+        if (beforeFence) onToken(beforeFence);
+        insidePlanFence = true;
+        planFenceBuffer = planFenceBuffer.slice(fenceStart.index!);
+        return;
+      }
+      // If buffer could be the start of a fence (e.g. just "`" or "``"), hold it
+      if (/`{1,2}$/.test(planFenceBuffer) || /```p?l?a?n?$|```j?s?o?n?$/i.test(planFenceBuffer)) {
+        return;
+      }
+      // Otherwise flush the buffer
+      onToken(planFenceBuffer);
+      planFenceBuffer = '';
+      return;
+    }
+
+    // Inside fence — look for closing ```
+    if (insidePlanFence && planFenceBuffer.includes('```', 3)) {
+      planFenceConsumed = true;
+      planFenceBuffer = '';
+      return;
+    }
+  };
+
+  let response = await ai.stream(history, system, filteredOnToken);
+
+  // Flush any held buffer that wasn't actually a fence
+  if (!insidePlanFence && planFenceBuffer) {
+    onToken(planFenceBuffer);
+  }
 
   // If the model forgot the plan block and should have included it, do a
   // non-streamed retry (rare path — the plan block is machine-only anyway).

@@ -183,11 +183,17 @@ async function runResumePipelineBody(sessionId: string): Promise<void> {
     include: { project: true },
   });
 
-  if (session.status !== 'generating') {
+  const proj = session.project;
+
+  // Allow resume when session was "running" but the process died (e.g. server restart).
+  // The project exists and was previously built — just re-run the install/build/run tail.
+  if (session.status === 'running' && proj) {
+    await prisma.session.update({ where: { id: sessionId }, data: { status: 'generating' } });
+    await prisma.project.update({ where: { id: proj.id }, data: { status: 'generating' } });
+  } else if (session.status !== 'generating') {
     throw new AppError(400, 'Session is not generating', 'cannot_resume');
   }
 
-  const proj = session.project;
   if (!proj) {
     // Still in AI codegen (step 1) — SSE replay + live subscription is enough.
     return;

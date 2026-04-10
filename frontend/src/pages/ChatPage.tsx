@@ -60,9 +60,10 @@ function applySessionFromApi(session: any) {
     projectId = proj?.id ?? null;
     phase = 'generating';
   } else if (proj?.status === 'running') {
-    // DB says "running" but no active preview port (stopped, stale, or inconsistent)
+    // DB says "running" but no active preview port (stopped after server restart).
+    // Treat as generating so the resume effect re-runs install/build/run.
     projectId = proj.id;
-    phase = 'planning';
+    phase = 'generating';
   } else if (proj) {
     projectId = proj.id;
     phase = 'generating';
