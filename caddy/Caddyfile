@@ -1,0 +1,116 @@
+{
+    # Disable auto-HTTPS for local development
+    # Remove this block in production
+    auto_https off
+
+    servers {
+        timeouts {
+            read_body   30s
+            read_header 10s
+            write       300s
+            idle        120s
+        }
+    }
+}
+
+# ─── Shared snippet: security headers ───────────────────────
+(security_headers) {
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options        "SAMEORIGIN"
+        Referrer-Policy        "strict-origin-when-cross-origin"
+        -Server
+    }
+}
+
+# ─── Shared snippet: proxy defaults ─────────────────────────
+(proxy_defaults) {
+    header_up X-Real-IP {remote_host}
+}
+
+# ─── Shared snippet: main site routing ──────────────────────
+(main_site) {
+    import security_headers
+
+    request_body {
+        max_size 10MB
+    }
+
+    # AI endpoints — streaming SSE, no compression (gzip buffers SSE chunks)
+    @ai path /api/generate* /api/iterate*
+    handle @ai {
+        reverse_proxy backend:4000 {
+            import proxy_defaults
+            transport http {
+                read_timeout 300s
+            }
+            flush_interval -1
+        }
+    }
+
+    # Chat endpoint — also SSE streaming
+    handle /api/chat/* {
+        reverse_proxy backend:4000 {
+            import proxy_defaults
+            transport http {
+                read_timeout 300s
+            }
+            flush_interval -1
+        }
+    }
+
+    # General API (with compression)
+    handle /api/* {
+        encode zstd gzip
+        reverse_proxy backend:4000 {
+            import proxy_defaults
+        }
+    }
+
+    # /preview-app/<id> without trailing slash → add it
+    @preview_no_slash path_regexp preview_re ^/preview-app/([^/]+)$
+    redir @preview_no_slash /preview-app/{re.preview_re.1}/ 308
+
+    # Preview proxy: /preview-app/* → app-runner /preview/*
+    handle_path /preview-app/* {
+        encode zstd gzip
+        rewrite * /preview{uri}
+        reverse_proxy app-runner:4001 {
+            import proxy_defaults
+            transport http {
+                read_timeout  300s
+                dial_timeout  300s
+            }
+            flush_interval -1
+        }
+    }
+
+    # Frontend SPA (default)
+    handle {
+        encode zstd gzip
+        reverse_proxy frontend:5173 {
+            import proxy_defaults
+        }
+    }
+}
+
+# ─── Main site (local dev on HTTP) ──────────────────────────
+:80 {
+    import main_site
+}
+
+# ─── Wildcard subdomains: local dev (lvh.me → 127.0.0.1) ───
+http://*.sites.lvh.me {
+    @valid_uuid header_regexp Host uuid ^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.sites\.lvh\.me$
+
+    handle @valid_uuid {
+        rewrite * /preview/{re.uuid.1}{uri}
+        reverse_proxy app-runner:4001 {
+            import proxy_defaults
+        }
+    }
+
+    handle {
+        respond "Not found" 404
+    }
+}

@@ -7,6 +7,8 @@ networks:
 volumes:
   pgdata:
   generated-apps:
+  caddy_data:
+  caddy_config:
 
 services:
   postgres:
@@ -49,7 +51,7 @@ services:
       STRIPE_CANCEL_URL: ${STRIPE_CANCEL_URL:-http://localhost/pricing}
       GENERATED_APPS_DIR: /generated-apps
       APP_RUNNER_URL: http://app-runner:4001
-      # CNAME target host: <projectId>.<HOSTING_SITES_HOST> — must match nginx hosting server_name
+      # CNAME target host: <projectId>.<HOSTING_SITES_HOST> — must match Caddy wildcard block
       HOSTING_SITES_HOST: ${HOSTING_SITES_HOST:-sites.lvh.me}
       # Testing only: set to "true" in .env to download ZIP without Stripe (never in production)
       ALLOW_UNPAID_PROJECT_DOWNLOAD: ${ALLOW_UNPAID_PROJECT_DOWNLOAD:-false}
@@ -105,13 +107,20 @@ services:
     networks:
       - app-net
 
-  nginx:
+  caddy:
     build:
-      context: ./nginx
+      context: ./caddy
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
       - '80:80'
+      - '443:443'
+    # Uncomment when CF_API_TOKEN is set for wildcard cert DNS-01 challenge:
+    # environment:
+    #   CF_API_TOKEN: ${CF_API_TOKEN}
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
     networks:
       - app-net
     depends_on:

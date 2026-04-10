@@ -732,7 +732,7 @@ export function buildFixPrompt(errorLog: string, files: Record<string, string>, 
   const stepHint = failedStep === 'run'
     ? `\n\nThis is a RUNTIME crash (server.js failed to start or crashed after starting). The fix must produce a fully working server.js that starts and responds to HTTP requests within 10 seconds. Return the COMPLETE server.js file, not a diff.`
     : failedStep === 'build'
-      ? `\n\nThis is a BUILD error (vite build failed). Fix the TypeScript/import errors in the affected source files.`
+      ? `\n\nThis is a BUILD error (vite build failed). Fix the TypeScript/import errors in the affected source files. If a module is missing (failed to resolve import), you CAN add it to package.json dependencies — deps will be re-installed automatically.`
       : '';
   return `Build/runtime error:\n\`\`\`\n${errorLog}\n\`\`\`${stepHint}\n\nCurrent source files:\n\n${fileList}`;
 }

@@ -9,6 +9,17 @@ import { AppError } from '../middleware/errorHandler';
 
 const router = Router();
 
+/**
+ * In-memory cache for Caddy on_demand_tls domain validation.
+ * Prevents DB queries on every TLS handshake for known domains.
+ * Caches both positive (verified) and negative (unknown) results.
+ */
+const domainAskCache = new Map<string, { allowed: boolean; expiresAt: number }>();
+const CACHE_TTL_OK = 5 * 60_000;    // 5 min for verified domains
+const CACHE_TTL_DENY = 60_000;       // 1 min for rejected (shorter so new verifications propagate fast)
+const CACHE_MAX_SIZE = 10_000;        // prevent unbounded growth from enumeration attacks
+const DOMAIN_RE = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;
+
 function requireInternalSecret(req: { header: (name: string) => string | undefined }) {
   const secret = (process.env.INTERNAL_SECRET ?? '').trim();
   if (!secret) return; // allow in dev if not set
@@ -37,6 +48,55 @@ router.get('/resolve-domain', async (req, res) => {
 
   if (!project) return res.status(404).json({ error: 'not found' });
   return res.json({ projectId: project.id });
+});
+
+/**
+ * Caddy on_demand_tls validation endpoint.
+ * Caddy sends GET /api/internal/caddy-ask?domain=example.com before issuing a cert.
+ * Return 200 to allow, non-200 to deny.
+ * Unauthenticated intentionally — Caddy cannot send custom headers in `ask` requests.
+ * Safe because port 4000 is Docker-internal only (never exposed to the internet).
+ */
+router.get('/caddy-ask', async (req, res) => {
+  const domain = String(req.query.domain ?? '').toLowerCase().trim();
+
+  // Reject empty or malformed domains before touching DB
+  if (!domain || domain.length > 253 || !DOMAIN_RE.test(domain)) {
+    return res.status(400).json({ error: 'invalid domain' });
+  }
+
+  // Check cache first
+  const cached = domainAskCache.get(domain);
+  if (cached && Date.now() < cached.expiresAt) {
+    return res.status(cached.allowed ? 200 : 404).json(
+      cached.allowed ? { ok: true } : { error: 'not found' }
+    );
+  }
+
+  const project = await prisma.project.findFirst({
+    where: {
+      customDomain: domain,
+      customDomainVerifiedAt: { not: null },
+      hosted: true,
+    },
+    select: { id: true },
+  });
+
+  const allowed = !!project;
+
+  // Evict oldest entries if cache grows too large (protection against enumeration)
+  if (domainAskCache.size >= CACHE_MAX_SIZE) {
+    const firstKey = domainAskCache.keys().next().value;
+    if (firstKey) domainAskCache.delete(firstKey);
+  }
+
+  domainAskCache.set(domain, {
+    allowed,
+    expiresAt: Date.now() + (allowed ? CACHE_TTL_OK : CACHE_TTL_DENY),
+  });
+
+  if (!project) return res.status(404).json({ error: 'not found' });
+  return res.status(200).json({ ok: true });
 });
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

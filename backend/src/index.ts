@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import { PrismaClient } from '@prisma/client';
 
 import authRouter from './routes/auth';
@@ -21,6 +22,26 @@ import { startEmailQueue, stopEmailQueue } from './services/emailQueue';
 export const prisma = new PrismaClient();
 
 const app = express();
+
+// Trust Caddy as the first reverse proxy (required for correct req.ip)
+app.set('trust proxy', 1);
+
+// Rate limiting (replaces Nginx limit_req zones)
+const aiLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+const apiLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/generate', aiLimiter);
+app.use('/api/iterate', aiLimiter);
+app.use('/api/', apiLimiter);
 
 // Stripe webhook needs raw body — mount before express.json()
 app.use('/api/billing/webhook', express.raw({ type: 'application/json' }));

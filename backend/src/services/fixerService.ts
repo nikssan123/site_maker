@@ -2,7 +2,7 @@ import { getCodeClient } from './aiClient';
 import { extractFilesFromCodegenResponse } from '../lib/extractCodegenJson';
 import { FIX_SYSTEM, buildFixPrompt } from '../lib/prompts';
 import { writeProjectFiles } from '../lib/fileWriter';
-import { buildProject, runProject, RunnerResult } from './appRunner';
+import { installDeps, buildProject, runProject, RunnerResult } from './appRunner';
 import { prisma } from '../index';
 
 const MAX_ATTEMPTS = parseInt(process.env.MAX_FIX_ATTEMPTS ?? '3', 10);
@@ -90,6 +90,16 @@ export async function autoFix(ctx: FixContext): Promise<RunnerResult> {
       where: { id: ctx.projectId },
       data: { files, fixAttempts: attempt },
     });
+
+    // Re-install deps if package.json was modified (e.g. Claude added a missing package)
+    if (fixedFiles['package.json']) {
+      console.log(`[autofix] project=${ctx.projectId} attempt=${attempt} — package.json changed, re-installing deps`);
+      const installResult = await installDeps(ctx.projectId);
+      if (!installResult.success) {
+        ctx.errorLog = installResult.log;
+        continue;
+      }
+    }
 
     const result =
       ctx.failedStep === 'build'

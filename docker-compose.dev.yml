@@ -29,7 +29,7 @@ services:
     ports:
       - '5173:5173'
     environment:
-      # Same-origin /preview-app/ via Vite proxy → nginx (avoids broken direct http://localhost:4100 in iframe)
+      # Same-origin /preview-app/ via Vite proxy → caddy (avoids broken direct http://localhost:4100 in iframe)
       VITE_PREVIEW_USE_HOST_PORT: ${VITE_PREVIEW_USE_HOST_PORT:-false}
-      VITE_PREVIEW_PROXY_TARGET: ${VITE_PREVIEW_PROXY_TARGET:-http://nginx}
+      VITE_PREVIEW_PROXY_TARGET: ${VITE_PREVIEW_PROXY_TARGET:-http://caddy}
     command: npx vite --host
