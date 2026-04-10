@@ -13,6 +13,7 @@ import EmailPage from './pages/EmailPage';
 import BillingPage from './pages/BillingPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import ConnectDomainDocsPage from './pages/ConnectDomainDocsPage';
+import AdminPage from './pages/AdminPage';
 import { useParams, useSearchParams } from 'react-router-dom';
 
 function PaymentsRedirect() {
@@ -94,6 +95,12 @@ function AuthRequired() {
   return <Outlet />;
 }
 
+function AdminRequired() {
+  const user = useAuthStore((s) => s.user);
+  if (!user?.isAdmin) return <Navigate to="/chat" replace />;
+  return <Outlet />;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -113,6 +120,9 @@ export default function App() {
           <Route path="/billing" element={<BillingPage />} />
           <Route path="/docs/connect-domain" element={<ConnectDomainDocsPage />} />
           <Route path="/payments/:projectId" element={<PaymentsRedirect />} />
+          <Route element={<AdminRequired />}>
+            <Route path="/admin" element={<AdminPage />} />
+          </Route>
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

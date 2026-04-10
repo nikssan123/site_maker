@@ -14,6 +14,7 @@ import analyticsRouter from './routes/analytics';
 import projectPaymentsRouter from './routes/projectPayments';
 import internalRouter from './routes/internal';
 import emailRouter from './routes/email';
+import adminRouter from './routes/admin';
 import { errorHandler } from './middleware/errorHandler';
 import { startEmailQueue, stopEmailQueue } from './services/emailQueue';
 
@@ -41,6 +42,7 @@ app.use('/api/analytics', analyticsRouter);
 app.use('/api/project-payments', projectPaymentsRouter);
 app.use('/api/internal', internalRouter);
 app.use('/api/email', emailRouter);
+app.use('/api/admin', adminRouter);
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 

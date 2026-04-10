@@ -13,9 +13,11 @@ import BuildIcon from '@mui/icons-material/Build';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import CloudIcon from '@mui/icons-material/Cloud';
 import LockIcon from '@mui/icons-material/Lock';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 import { useProjectStore } from '../store/project';
+import { useAuthStore } from '../store/auth';
 
 interface SessionItem {
   id: string;
@@ -45,6 +47,7 @@ export default function Sidebar({ onNewProject }: Props) {
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId?: string }>();
   const store = useProjectStore();
+  const user = useAuthStore((s) => s.user);
 
   const formatDate = (iso: string) => {
     const d = new Date(iso);
@@ -260,6 +263,31 @@ export default function Sidebar({ onNewProject }: Props) {
           </>
         )}
       </Box>
+
+      {/* Admin link */}
+      {user?.isAdmin && (
+        <Box sx={{ px: 1.5, py: 1.5, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <Box
+            onClick={() => navigate('/admin')}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              px: 1.5,
+              py: 0.75,
+              borderRadius: 2,
+              cursor: 'pointer',
+              '&:hover': { bgcolor: 'rgba(99,102,241,0.12)' },
+              transition: 'all 0.15s',
+            }}
+          >
+            <AdminPanelSettingsIcon sx={{ fontSize: 16, color: 'primary.light' }} />
+            <Typography variant="caption" fontWeight={600} color="primary.light">
+              Admin Portal
+            </Typography>
+          </Box>
+        </Box>
+      )}
     </Box>
   );
 }

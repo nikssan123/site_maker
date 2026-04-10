@@ -5,6 +5,7 @@ import { AppError } from './errorHandler';
 export interface AuthPayload {
   userId: string;
   email: string;
+  isAdmin: boolean;
 }
 
 declare global {

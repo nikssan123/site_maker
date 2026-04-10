@@ -5,9 +5,9 @@ import { AppError } from '../middleware/errorHandler';
 
 const SALT_ROUNDS = 12;
 
-function signToken(userId: string, email: string): string {
+function signToken(userId: string, email: string, isAdmin: boolean): string {
   return jwt.sign(
-    { userId, email },
+    { userId, email, isAdmin },
     process.env.JWT_SECRET!,
     { expiresIn: '24h' },
   );
@@ -23,8 +23,8 @@ export async function register(email: string, password: string) {
   });
 
   return {
-    token: signToken(user.id, user.email),
-    user: { id: user.id, email: user.email },
+    token: signToken(user.id, user.email, false),
+    user: { id: user.id, email: user.email, isAdmin: false },
   };
 }
 
@@ -36,8 +36,8 @@ export async function login(email: string, password: string) {
   if (!valid) throw new AppError(401, 'Invalid credentials');
 
   return {
-    token: signToken(user.id, user.email),
-    user: { id: user.id, email: user.email },
+    token: signToken(user.id, user.email, user.isAdmin),
+    user: { id: user.id, email: user.email, isAdmin: user.isAdmin },
   };
 }
 
@@ -47,5 +47,6 @@ export async function getMe(userId: string) {
     id: user.id,
     email: user.email,
     freeProjectUsed: user.freeProjectUsed,
+    isAdmin: user.isAdmin,
   };
 }
