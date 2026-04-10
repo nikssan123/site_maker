@@ -16,12 +16,12 @@ export interface ColorTheme {
 }
 
 export const THEME_PRESETS: ColorTheme[] = [
-  { name: 'Indigo',   primary: '#6366f1', secondary: '#a855f7', background: '#06060f' },
-  { name: 'Onyx',     primary: '#e2e8f0', secondary: '#94a3b8', background: '#09090b' },
-  { name: 'Emerald',  primary: '#10b981', secondary: '#06b6d4', background: '#020c0a' },
-  { name: 'Crimson',  primary: '#f43f5e', secondary: '#fb923c', background: '#0f0306' },
-  { name: 'Azure',    primary: '#3b82f6', secondary: '#818cf8', background: '#020617' },
-  { name: 'Amber',    primary: '#f59e0b', secondary: '#f97316', background: '#0c0700' },
+  { name: 'Midnight',  primary: '#818cf8', secondary: '#c084fc', background: '#0f0b1e' },
+  { name: 'Noir',      primary: '#f1f5f9', secondary: '#64748b', background: '#0a0a0a' },
+  { name: 'Ocean',     primary: '#22d3ee', secondary: '#6366f1', background: '#0a0f1a' },
+  { name: 'Sunset',    primary: '#f97316', secondary: '#ec4899', background: '#120b0a' },
+  { name: 'Mint',      primary: '#34d399', secondary: '#2dd4bf', background: '#0a1210' },
+  { name: 'Rose',      primary: '#fb7185', secondary: '#f0abfc', background: '#130a10' },
 ];
 
 function compressImage(dataUrl: string): Promise<string> {
@@ -221,14 +221,17 @@ export default function ColorThemePicker({ value, onChange, onExtractFromImage }
         <Button
           size="small"
           variant="outlined"
-          startIcon={<ColorLensIcon sx={{ fontSize: '13px !important' }} />}
+          startIcon={<ColorLensIcon sx={{ fontSize: '14px !important' }} />}
           onClick={() => setShowCustom((v) => !v)}
           sx={{
-            fontSize: 11,
-            py: 0.4,
-            borderColor: showCustom ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.1)',
-            color: showCustom ? '#a5b4fc' : '#94a3b8',
-            '&:hover': { borderColor: 'rgba(255,255,255,0.2)' },
+            fontSize: 12,
+            py: 0.5,
+            px: 1.5,
+            fontWeight: 600,
+            borderColor: showCustom ? 'rgba(99,102,241,0.6)' : 'rgba(99,102,241,0.35)',
+            color: showCustom ? '#a5b4fc' : '#c4b5fd',
+            bgcolor: showCustom ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.05)',
+            '&:hover': { borderColor: 'rgba(99,102,241,0.55)', bgcolor: 'rgba(99,102,241,0.1)', color: '#a5b4fc' },
           }}
         >
           {t('theme.customColors')}

@@ -1,10 +1,26 @@
-import { Box, Typography, Chip, Button, Stack, Tooltip, Divider, TextField } from '@mui/material';
+import { useState } from 'react';
+import { Box, Typography, Chip, Button, Stack, Tooltip, Divider, InputBase, Collapse, IconButton } from '@mui/material';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import EditIcon from '@mui/icons-material/Edit';
 import StorageIcon from '@mui/icons-material/Storage';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import FacebookIcon from '@mui/icons-material/Facebook';
+import InstagramIcon from '@mui/icons-material/Instagram';
+import LinkedInIcon from '@mui/icons-material/LinkedIn';
+import YouTubeIcon from '@mui/icons-material/YouTube';
+import XIcon from '@mui/icons-material/X';
+import { SvgIcon } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { PlanData } from '../store/project';
 import ColorThemePicker, { ColorTheme } from './ColorThemePicker';
+
+function TikTokIcon(props: React.ComponentProps<typeof SvgIcon>) {
+  return (
+    <SvgIcon {...props} viewBox="0 0 24 24">
+      <path d="M16.6 5.82s.51.5 0 0A4.278 4.278 0 0 1 15.54 3h-3.09v12.4a2.592 2.592 0 0 1-2.59 2.5c-1.42 0-2.6-1.16-2.6-2.6 0-1.72 1.66-3.01 3.37-2.48V9.66c-3.45-.46-6.47 2.22-6.47 5.64 0 3.33 2.76 5.7 5.69 5.7 3.14 0 5.69-2.55 5.69-5.7V9.01a7.35 7.35 0 0 0 4.3 1.38V7.3s-1.88.09-3.24-1.48z" />
+    </SvgIcon>
+  );
+}
 
 interface Props {
   plan: PlanData;
@@ -122,8 +138,18 @@ function normalizePlanData(raw: unknown): PlanData['data'] {
   };
 }
 
+const SOCIAL_FIELDS = [
+  { key: 'facebook', label: 'Facebook', icon: FacebookIcon, color: '#1877f2' },
+  { key: 'instagram', label: 'Instagram', icon: InstagramIcon, color: '#e4405f' },
+  { key: 'tiktok', label: 'TikTok', icon: TikTokIcon, color: '#fff' },
+  { key: 'linkedin', label: 'LinkedIn', icon: LinkedInIcon, color: '#0a66c2' },
+  { key: 'youtube', label: 'YouTube', icon: YouTubeIcon, color: '#ff0000' },
+  { key: 'x', label: 'X', icon: XIcon, color: '#fff' },
+] as const;
+
 export default function PlanSummary({ plan, onConfirm, onEdit, onSocialLinksChange, loading, ctaLabel, colorTheme, onThemeChange, onExtractFromImage }: Props) {
   const { t } = useTranslation();
+  const [socialOpen, setSocialOpen] = useState(false);
   const data = normalizePlanData(plan?.data);
   const hasStructured =
     !!(data.appType || data.style || data.tech || data.hasDatabase || data.pages.length || data.features.length);
@@ -236,48 +262,88 @@ export default function PlanSummary({ plan, onConfirm, onEdit, onSocialLinksChan
           </Box>
         )}
 
+        {/* Collapsible social links */}
         <Box mb={2}>
-          <Typography variant="caption" sx={{ color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 10, fontWeight: 600 }}>
-            {t('plan.socialLinks')}
-          </Typography>
-          <Stack gap={1} mt={0.75}>
-            <TextField
+          <Box
+            onClick={() => setSocialOpen(!socialOpen)}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              cursor: 'pointer',
+              gap: 0.75,
+              py: 0.75,
+              px: 1.25,
+              borderRadius: 1.5,
+              border: '1px solid',
+              borderColor: socialOpen ? 'rgba(99,102,241,0.4)' : 'rgba(99,102,241,0.25)',
+              bgcolor: socialOpen ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.04)',
+              transition: 'all 0.15s',
+              '&:hover': { borderColor: 'rgba(99,102,241,0.45)', bgcolor: 'rgba(99,102,241,0.08)' },
+              '&:hover .social-label': { color: '#c4b5fd' },
+            }}
+          >
+            <Typography
+              className="social-label"
+              variant="caption"
+              sx={{ color: '#c4b5fd', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11, fontWeight: 700, transition: 'color 0.15s' }}
+            >
+              {t('plan.socialLinks')}
+            </Typography>
+            {(() => {
+              const filled = Object.values(links).filter((v) => v && String(v).trim()).length;
+              return filled > 0 ? (
+                <Chip label={filled} size="small" sx={{ height: 18, fontSize: 10, bgcolor: 'rgba(99,102,241,0.25)', color: '#a5b4fc', ml: 0.5, '& .MuiChip-label': { px: 0.75 } }} />
+              ) : null;
+            })()}
+            <IconButton
               size="small"
-              label="Facebook"
-              value={links.facebook ?? ''}
-              onChange={(e) => onSocialLinksChange({ ...links, facebook: e.target.value })}
-            />
-            <TextField
-              size="small"
-              label="Instagram"
-              value={links.instagram ?? ''}
-              onChange={(e) => onSocialLinksChange({ ...links, instagram: e.target.value })}
-            />
-            <TextField
-              size="small"
-              label="TikTok"
-              value={links.tiktok ?? ''}
-              onChange={(e) => onSocialLinksChange({ ...links, tiktok: e.target.value })}
-            />
-            <TextField
-              size="small"
-              label="LinkedIn"
-              value={links.linkedin ?? ''}
-              onChange={(e) => onSocialLinksChange({ ...links, linkedin: e.target.value })}
-            />
-            <TextField
-              size="small"
-              label="YouTube"
-              value={links.youtube ?? ''}
-              onChange={(e) => onSocialLinksChange({ ...links, youtube: e.target.value })}
-            />
-            <TextField
-              size="small"
-              label="X (Twitter)"
-              value={links.x ?? ''}
-              onChange={(e) => onSocialLinksChange({ ...links, x: e.target.value })}
-            />
-          </Stack>
+              sx={{
+                ml: 'auto',
+                color: '#a5b4fc',
+                p: 0.25,
+                transform: socialOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.2s',
+              }}
+            >
+              <ExpandMoreIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Box>
+
+          <Collapse in={socialOpen}>
+            <Stack gap={0.75} mt={0.75}>
+              {SOCIAL_FIELDS.map(({ key, label, icon: Icon, color }) => (
+                <Box
+                  key={key}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    bgcolor: 'rgba(255,255,255,0.04)',
+                    borderRadius: 1.5,
+                    px: 1.25,
+                    py: 0.5,
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    transition: 'border-color 0.15s',
+                    '&:focus-within': { borderColor: 'rgba(99,102,241,0.4)' },
+                  }}
+                >
+                  <Icon sx={{ fontSize: 16, color, opacity: 0.7, flexShrink: 0 }} />
+                  <InputBase
+                    placeholder={label}
+                    value={(links as Record<string, string | undefined>)[key] ?? ''}
+                    onChange={(e) => onSocialLinksChange({ ...links, [key]: e.target.value })}
+                    sx={{
+                      flex: 1,
+                      color: '#e2e8f0',
+                      fontSize: 13,
+                      '& input': { p: 0 },
+                      '& input::placeholder': { color: '#64748b', opacity: 1 },
+                    }}
+                  />
+                </Box>
+              ))}
+            </Stack>
+          </Collapse>
         </Box>
 
         <Divider sx={{ borderColor: 'rgba(255,255,255,0.07)', my: 1.5 }} />

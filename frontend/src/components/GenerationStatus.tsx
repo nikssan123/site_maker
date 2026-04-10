@@ -28,30 +28,32 @@ export default function GenerationStatus({
     <Box
       sx={{
         border: '1px solid',
-        borderColor: 'rgba(99,102,241,0.3)',
+        borderColor: 'rgba(99,102,241,0.35)',
         borderRadius: 3,
-        p: 2.5,
-        background: 'linear-gradient(135deg, rgba(99,102,241,0.05) 0%, rgba(139,92,246,0.05) 100%)',
+        p: 3,
+        background: 'linear-gradient(135deg, rgba(99,102,241,0.07) 0%, rgba(139,92,246,0.07) 100%)',
         backdropFilter: 'blur(8px)',
         mb: 2,
+        boxShadow: '0 4px 24px rgba(99,102,241,0.12)',
       }}
     >
       {/* Progress bar */}
-      <Box sx={{ mb: 2.5 }}>
-        <Stack direction="row" justifyContent="space-between" mb={0.75}>
-          <Typography variant="caption" color="primary.light" fontWeight={600} sx={{ letterSpacing: 0.5, textTransform: 'uppercase', fontSize: 11 }}>
+      <Box sx={{ mb: 3 }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="baseline" mb={1}>
+          <Typography variant="body2" color="primary.light" fontWeight={700} sx={{ letterSpacing: 0.3, fontSize: 13 }}>
             {title}
           </Typography>
-          <Typography variant="caption" color="text.secondary">{t('generation.percent', { n: Math.round(progress) })}</Typography>
+          <Typography variant="body2" sx={{ color: '#a5b4fc', fontWeight: 600, fontSize: 13 }}>{t('generation.percent', { n: Math.round(progress) })}</Typography>
         </Stack>
-        <Box sx={{ height: 3, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+        <Box sx={{ height: 5, borderRadius: 3, bgcolor: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
           <Box
             sx={{
               height: '100%',
               width: `${progress}%`,
               background: 'linear-gradient(90deg, #6366f1, #10b981)',
-              borderRadius: 2,
+              borderRadius: 3,
               transition: 'width 0.5s ease',
+              boxShadow: '0 0 12px rgba(99,102,241,0.4)',
             }}
           />
         </Box>

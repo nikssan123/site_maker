@@ -364,12 +364,12 @@
     "customApplied": "Персонална тема приложена",
     "extractedFromImage": "„{{name}}“ от вашето изображение",
     "presets": {
-      "Indigo": "Индиго",
-      "Onyx": "Оникс",
-      "Emerald": "Смарагд",
-      "Crimson": "Пурпур",
-      "Azure": "Лазур",
-      "Amber": "Кехлибар"
+      "Midnight": "Полунощ",
+      "Noir": "Ноар",
+      "Ocean": "Океан",
+      "Sunset": "Залез",
+      "Mint": "Мента",
+      "Rose": "Роза"
     }
   },
   "connectDomain": {

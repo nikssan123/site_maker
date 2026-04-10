@@ -101,6 +101,7 @@ export default function ChatPage() {
   /** When a plan is present, hide chat until user explicitly clicks Edit. */
   const [chatUnlockedForEditing, setChatUnlockedForEditing] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const generationRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   /** True while this tab started generation via Build (skip watch+resume duplicate). */
   const buildStartedInTabRef = useRef(false);
@@ -210,6 +211,13 @@ export default function ChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [store.messages, store.streamBuffer, store.plan]);
+
+  // Scroll to generation progress when it appears or steps update
+  useEffect(() => {
+    if (store.phase === 'generating' && generationRef.current) {
+      generationRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [store.phase, store.generationSteps]);
 
   useEffect(() => {
     const v = store.plan?.data?.socialLinks;
@@ -562,11 +570,13 @@ export default function ChatPage() {
         {(store.phase === 'generating' ||
           (store.phase === 'error' &&
             store.generationSteps.some((s) => s.status !== 'pending'))) && (
+          <div ref={generationRef}>
           <GenerationStatus
             steps={store.generationSteps}
             fixAttempts={store.fixAttempts}
             friendlyMessage={store.generationFriendlyMessage}
           />
+          </div>
         )}
 
         {store.phase === 'running' &&
