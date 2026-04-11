@@ -10,7 +10,7 @@ import { buildProject, runProject, stopProject } from '../services/appRunner';
 const router = Router();
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-12-18.acacia',
+  apiVersion: '2025-02-24.acacia',
 });
 
 const APP_BASE_URL = process.env.APP_BASE_URL ?? 'http://localhost';
