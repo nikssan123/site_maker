@@ -69,13 +69,46 @@ function applySessionFromApi(session: any) {
     phase = 'generating';
   }
 
+  // Infer step progress from project status so refresh doesn't lose visual progress
+  let steps: typeof INITIAL_STEPS | undefined;
+  if (phase === 'planning') {
+    steps = INITIAL_STEPS.map((s) => ({ ...s, status: 'pending' as const }));
+  } else if (phase === 'generating' && proj) {
+    const st = proj.status;
+    steps = INITIAL_STEPS.map((s) => {
+      if (st === 'generating') {
+        // Code generation in progress — step 1 running, rest pending
+        if (s.step === 1) return { ...s, status: 'running' as const };
+        return { ...s, status: 'pending' as const };
+      }
+      if (st === 'building') {
+        // Steps 1-3 done, step 4 (build) running
+        if (s.step <= 3) return { ...s, status: 'done' as const };
+        if (s.step === 4) return { ...s, status: 'running' as const };
+        return { ...s, status: 'pending' as const };
+      }
+      if (st === 'running') {
+        // Was running but no live port — steps 1-3 done, step 4-5 need re-run
+        if (s.step <= 3) return { ...s, status: 'done' as const };
+        if (s.step === 4) return { ...s, status: 'running' as const };
+        return { ...s, status: 'pending' as const };
+      }
+      if (st === 'error') {
+        // Mark all prior steps as done, last as error
+        if (s.step <= 3) return { ...s, status: 'done' as const };
+        if (s.step === 4) return { ...s, status: 'error' as const };
+        return { ...s, status: 'pending' as const };
+      }
+      return { ...s, status: 'pending' as const };
+    });
+  }
+
   useProjectStore.setState({
     projectId,
     phase,
     runPort,
     generationFriendlyMessage: '',
-    // Fresh planning session: clear pipeline UI. Keep steps for in-memory error (fatal → refetch).
-    ...(phase === 'planning' ? { generationSteps: INITIAL_STEPS, fixAttempts: [] } : {}),
+    ...(steps ? { generationSteps: steps, fixAttempts: [] } : {}),
   });
 }
 

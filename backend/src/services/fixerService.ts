@@ -91,9 +91,14 @@ export async function autoFix(ctx: FixContext): Promise<RunnerResult> {
       data: { files, fixAttempts: attempt },
     });
 
-    // Re-install deps if package.json was modified (e.g. Claude added a missing package)
-    if (fixedFiles['package.json']) {
-      console.log(`[autofix] project=${ctx.projectId} attempt=${attempt} — package.json changed, re-installing deps`);
+    // Re-install deps if package.json was modified OR the error was a missing import
+    // (the package may be listed in package.json but not installed due to stale lockfile)
+    const needsReinstall =
+      !!fixedFiles['package.json'] ||
+      (ctx.failedStep === 'build' && /failed to resolve import/i.test(ctx.errorLog));
+
+    if (needsReinstall) {
+      console.log(`[autofix] project=${ctx.projectId} attempt=${attempt} — re-installing deps (package.json changed: ${!!fixedFiles['package.json']}, resolve error: ${/failed to resolve import/i.test(ctx.errorLog)})`);
       const installResult = await installDeps(ctx.projectId);
       if (!installResult.success) {
         ctx.errorLog = installResult.log;

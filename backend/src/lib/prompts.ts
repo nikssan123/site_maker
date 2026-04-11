@@ -226,11 +226,16 @@ UX states (MUST include):
 
 ═══ STEP 4: MUI COMPONENT GUIDE ═══
 
-Always use from @mui/icons-material — icons make apps feel real:
-- Navigation: HomeIcon, MenuIcon, CloseIcon, ArrowBackIcon
-- Actions: AddIcon, EditIcon, DeleteIcon, CheckIcon, CancelIcon
-- Content: CalendarMonthIcon, PersonIcon, EmailIcon, PhoneIcon, StarIcon, LocationOnIcon
-- Status: CheckCircleIcon, WarningAmberIcon, ErrorIcon, InfoIcon
+Always use from @mui/icons-material — icons make apps feel real.
+IMPORTANT: Only use well-known, commonly available icons. NEVER use obscure or rarely-used icon names — they may not exist and will cause build failures.
+Safe icons to use:
+- Navigation: Home, Menu, Close, ArrowBack, ArrowForward, ExpandMore, ChevronRight
+- Actions: Add, Edit, Delete, Check, Cancel, Save, Search, FilterList, Sort, Refresh
+- Content: CalendarMonth, CalendarToday, Person, Email, Phone, Star, LocationOn, AccessTime, Image, AttachFile
+- Status: CheckCircle, WarningAmber, Error, Info, Notifications, Verified
+- Commerce: ShoppingCart, Payment, Receipt, LocalShipping, Store, Inventory
+- Social: Share, Favorite, FavoriteBorder, ThumbUp, Comment, Forum
+- Misc: Settings, Dashboard, BarChart, PieChart, TrendingUp, Visibility, VisibilityOff, Lock, LockOpen, Language, DarkMode, LightMode
 
 Components to use:
 - AppBar + Toolbar: top navigation
@@ -732,7 +737,14 @@ export function buildFixPrompt(errorLog: string, files: Record<string, string>, 
   const stepHint = failedStep === 'run'
     ? `\n\nThis is a RUNTIME crash (server.js failed to start or crashed after starting). The fix must produce a fully working server.js that starts and responds to HTTP requests within 10 seconds. Return the COMPLETE server.js file, not a diff.`
     : failedStep === 'build'
-      ? `\n\nThis is a BUILD error (vite build failed). Fix the TypeScript/import errors in the affected source files. If a module is missing (failed to resolve import), you CAN add it to package.json dependencies — deps will be re-installed automatically.`
+      ? `\n\nThis is a BUILD error (vite build failed). Fix the TypeScript/import errors in the affected source files.
+
+CRITICAL for "failed to resolve import" errors:
+1. Check if the package is listed in the provided package.json dependencies.
+2. If it IS listed but still fails: the icon/component may not exist in that package. Replace the import with a similar one that exists (e.g. replace a non-existent icon like "Eco" with a known one like "Nature" or "Park").
+3. If it is NOT listed: add it to package.json dependencies AND return the updated package.json in your response.
+4. ALWAYS return the updated package.json when you add or change any dependency — deps will be re-installed automatically.
+5. For @mui/icons-material: stick to common, well-known icons (Home, Search, Menu, Person, Settings, Phone, Email, Star, Favorite, ShoppingCart, ArrowForward, ArrowBack, Close, Check, Add, Delete, Edit, LocationOn, AccessTime, CalendarToday, etc.). Avoid obscure icons that may not exist.`
       : '';
   return `Build/runtime error:\n\`\`\`\n${errorLog}\n\`\`\`${stepHint}\n\nCurrent source files:\n\n${fileList}`;
 }
