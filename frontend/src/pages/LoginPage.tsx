@@ -47,7 +47,11 @@ export default function LoginPage() {
           </Stack>
         </form>
 
-        <Typography variant="body2" mt={2} textAlign="center" color="text.secondary">
+        <Typography variant="body2" mt={2} textAlign="center">
+          <Link href="/forgot-password" underline="hover">{t('auth.forgotLink')}</Link>
+        </Typography>
+
+        <Typography variant="body2" mt={1} textAlign="center" color="text.secondary">
           {t('auth.noAccount')}{' '}
           <Link href="/register" underline="hover">{t('auth.createOne')}</Link>
         </Typography>

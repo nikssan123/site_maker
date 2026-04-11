@@ -4,6 +4,8 @@ import {
   requestRegistration,
   verifyRegistration,
   resendVerification,
+  requestPasswordReset,
+  resetPassword,
   login,
   getMe,
 } from '../services/authService';
@@ -23,6 +25,15 @@ const verifySchema = z.object({
 
 const resendSchema = z.object({
   email: z.string().email(),
+});
+
+const forgotSchema = z.object({
+  email: z.string().email(),
+});
+
+const resetSchema = z.object({
+  token: z.string().min(1),
+  password: z.string().min(8),
 });
 
 router.post('/register', async (req, res, next) => {
@@ -50,6 +61,26 @@ router.post('/resend-verification', async (req, res, next) => {
     const { email } = resendSchema.parse(req.body);
     const result = await resendVerification(email);
     res.status(202).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/forgot-password', async (req, res, next) => {
+  try {
+    const { email } = forgotSchema.parse(req.body);
+    const result = await requestPasswordReset(email);
+    res.status(202).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/reset-password', async (req, res, next) => {
+  try {
+    const { token, password } = resetSchema.parse(req.body);
+    const result = await resetPassword(token, password);
+    res.json(result);
   } catch (err) {
     next(err);
   }

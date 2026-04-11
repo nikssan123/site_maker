@@ -32,6 +32,18 @@ model PendingRegistration {
   @@index([expiresAt])
 }
 
+model PasswordReset {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
 model Session {
   id                   String              @id @default(uuid())
   userId               String
