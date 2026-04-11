@@ -3,6 +3,8 @@
     # Remove this block in production
     auto_https off
 
+    order rate_limit before basicauth
+
     servers {
         timeouts {
             read_body   30s
@@ -28,17 +30,72 @@
     header_up X-Real-IP {remote_host}
 }
 
+# ─── Shared snippet: block common vulnerability scanners ────
+(block_scanners) {
+    @scanner_probes {
+        path /.env /.env.* *.env /env.json /env.js /__env.js /__env.json
+        path /stripe.* /stripe_* /*/stripe.* /*/stripe_*
+        path /wp-* /wp-admin/* /wp-content/* /wp-json/* /wp-includes/*
+        path /wp-config /wp-config.* /wordpress/* /xmlrpc.php
+        path /.git /.git/* /.svn /.svn/* /.hg /.hg/*
+        path /.vscode /.vscode/* /.idea /.idea/*
+        path /.circleci /.circleci/* /.bitbucket /.bitbucket/*
+        path /.travis.yml /.gitlab-ci.yml /.github/* /.gitconfig
+        path /.aws /.aws/* /aws/credentials /aws-secret.* /aws-config.*
+        path /.docker /.docker/* /docker-compose.* /Dockerfile*
+        path /secrets /secrets.* /secrets/* /credentials /credentials.*
+        path /config.inc /config.yml /config.yaml /config.json /config.js /config.ts /config.py /config.old /config.bak
+        path /config/stripe.* /config/secrets.* /config/credentials.* /config/parameters.yml
+        path /config/database.yml /config/application.yml /config/initializers/* /config/settings.*
+        path /app/config/* /backend/config/* /instance/config.py /settings.py
+        path /parameters.yml /application.yml /application.properties /appsettings.*
+        path /serverless.* /swagger.json /asset-manifest.json /webhooks/settings.json
+        path /info.php /phpinfo.php /phpinfo /test.php /*.php
+        path /_profiler /_profiler/* /horizon/* /manage/env /server-info /server-status
+        path /debug /debug/* /admin/config /admin/settings
+        path /storage/* /settings/stripe.* /backup/stripe.*
+        path /.vite /.vite/* /main.js /bundle.js /vendor.js /app.js /constants.js /index.js
+        path /phpmyadmin /phpmyadmin/*
+    }
+    handle @scanner_probes {
+        abort
+    }
+}
+
 # ─── Shared snippet: main site routing ──────────────────────
 (main_site) {
     import security_headers
+    import block_scanners
 
     request_body {
         max_size 10MB
     }
 
+    # Auth endpoints — strict per-IP rate limit (brute-force / spam shield)
+    handle /api/auth/* {
+        rate_limit {
+            zone auth_per_ip {
+                key    {remote_host}
+                events 15
+                window 1m
+            }
+        }
+        encode zstd gzip
+        reverse_proxy backend:4000 {
+            import proxy_defaults
+        }
+    }
+
     # AI endpoints — streaming SSE, no compression (gzip buffers SSE chunks)
     @ai path /api/generate* /api/iterate*
     handle @ai {
+        rate_limit {
+            zone ai_per_ip {
+                key    {remote_host}
+                events 20
+                window 1m
+            }
+        }
         reverse_proxy backend:4000 {
             import proxy_defaults
             transport http {
@@ -50,6 +107,13 @@
 
     # Chat endpoint — also SSE streaming
     handle /api/chat/* {
+        rate_limit {
+            zone chat_per_ip {
+                key    {remote_host}
+                events 60
+                window 1m
+            }
+        }
         reverse_proxy backend:4000 {
             import proxy_defaults
             transport http {
@@ -61,6 +125,13 @@
 
     # General API (with compression)
     handle /api/* {
+        rate_limit {
+            zone api_per_ip {
+                key    {remote_host}
+                events 300
+                window 1m
+            }
+        }
         encode zstd gzip
         reverse_proxy backend:4000 {
             import proxy_defaults
