@@ -4,7 +4,7 @@ import * as dns from 'dns/promises';
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** e.g. sites.projectmaker.com — CNAME target is `${projectId}.${HOSTING_SITES_HOST}` */
+/** e.g. sites.fornaxelit.com — CNAME target is `${projectId}.${HOSTING_SITES_HOST}` */
 export function getHostingSitesHost(): string {
   return (process.env.HOSTING_SITES_HOST ?? '').trim().toLowerCase();
 }

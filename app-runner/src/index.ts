@@ -381,9 +381,10 @@ app.use('/preview/:projectId', async (req, res, next) => {
         proxyReq: (proxyReq, req) => {
           // express.json() already consumed the body stream. Re-stream it so the
           // target server (the user's Node.js app) actually receives the body.
-          const contentType = (req.headers['content-type'] ?? '').toLowerCase();
-          if (contentType.includes('application/json') && req.body !== undefined) {
-            const bodyData = JSON.stringify(req.body);
+          const expReq = req as unknown as express.Request;
+          const contentType = (expReq.headers['content-type'] ?? '').toLowerCase();
+          if (contentType.includes('application/json') && expReq.body !== undefined) {
+            const bodyData = JSON.stringify(expReq.body);
             proxyReq.setHeader('Content-Type', 'application/json');
             proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
             proxyReq.write(bodyData);
@@ -507,9 +508,10 @@ app.use('/hosted/', async (req, res, next) => {
       changeOrigin: true,
       on: {
         proxyReq: (proxyReq, req) => {
-          const contentType = (req.headers['content-type'] ?? '').toLowerCase();
-          if (contentType.includes('application/json') && req.body !== undefined) {
-            const bodyData = JSON.stringify(req.body);
+          const expReq = req as unknown as express.Request;
+          const contentType = (expReq.headers['content-type'] ?? '').toLowerCase();
+          if (contentType.includes('application/json') && expReq.body !== undefined) {
+            const bodyData = JSON.stringify(expReq.body);
             proxyReq.setHeader('Content-Type', 'application/json');
             proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
             proxyReq.write(bodyData);

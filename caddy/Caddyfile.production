@@ -1,5 +1,5 @@
 {
-    email admin@projectmaker.com
+    email admin@fornaxelit.com
 
     on_demand_tls {
         ask http://backend:4000/api/internal/caddy-ask
@@ -98,12 +98,12 @@
 }
 
 # ─── Main site (HTTPS with auto cert) ───────────────────────
-projectmaker.com, www.projectmaker.com {
+fornaxelit.com, www.fornaxelit.com {
     import main_site
 }
 
 # ─── Wildcard subdomains (hosted apps) ──────────────────────
-*.sites.projectmaker.com {
+*.sites.fornaxelit.com {
     tls {
         dns cloudflare {env.CF_API_TOKEN}
     }
@@ -111,7 +111,7 @@ projectmaker.com, www.projectmaker.com {
     import security_headers
     encode zstd gzip
 
-    @valid_uuid header_regexp Host uuid ^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.sites\.projectmaker\.com$
+    @valid_uuid header_regexp Host uuid ^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.sites\.fornaxelit\.com$
 
     handle @valid_uuid {
         @static path *.css *.js *.png *.jpg *.jpeg *.gif *.svg *.woff *.woff2 *.ico
