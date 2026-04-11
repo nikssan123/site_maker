@@ -81,7 +81,17 @@
     "noAccount": "Нямате акаунт?",
     "createOne": "Създайте безплатно",
     "hasAccount": "Вече имате акаунт?",
-    "passwordHint": "Минимум 8 знака"
+    "passwordHint": "Минимум 8 знака",
+    "verifyTitle": "Потвърди имейла си",
+    "verifySubtitle": "Изпратихме 6-цифрен код на {{email}}. Въведи го по-долу, за да завършиш регистрацията.",
+    "verifySent": "Кодът е изпратен на {{email}}. Провери входящата си кутия.",
+    "verifyResent": "Изпратихме нов код.",
+    "verifyCodeLabel": "Код за потвърждение",
+    "verifyCodeHint": "6 цифри · валиден 15 минути",
+    "verifyConfirm": "Потвърди",
+    "verifying": "Потвърждаване…",
+    "verifyResend": "Изпрати отново",
+    "verifyBack": "Назад"
   },
   "chat": {
     "headerTitle": "AppMaker",
