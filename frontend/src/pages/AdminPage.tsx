@@ -587,7 +587,7 @@ function PlansPanel() {
                         <Collapse in={expanded === p.id}>
                           <Box sx={{ p: 2, bgcolor: 'background.default' }}>
                             <Typography variant="caption" fontWeight={700} display="block" mb={0.5}>Plan Data</Typography>
-                            {planData.description && (
+                            {Boolean(planData.description) && (
                               <Box mb={1}>
                                 <Typography variant="caption" fontWeight={600} color="primary.light">Description:</Typography>
                                 <Typography variant="body2">{String(planData.description)}</Typography>
@@ -623,7 +623,7 @@ function PlansPanel() {
                                 </Stack>
                               </Box>
                             )}
-                            {planData.colorTheme && (
+                            {Boolean(planData.colorTheme) && (
                               <Box mb={1}>
                                 <Typography variant="caption" fontWeight={600} color="primary.light">Color Theme:</Typography>
                                 <Typography variant="body2" fontFamily="monospace" fontSize={12}>
