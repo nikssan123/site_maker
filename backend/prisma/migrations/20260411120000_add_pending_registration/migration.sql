@@ -1,5 +1,5 @@
 -- CreateTable
-CREATE TABLE "PendingRegistration" (
+CREATE TABLE IF NOT EXISTS "PendingRegistration" (
     "id" TEXT NOT NULL,
     "email" TEXT NOT NULL,
     "passwordHash" TEXT NOT NULL,
@@ -13,5 +13,5 @@ CREATE TABLE "PendingRegistration" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "PendingRegistration_email_key" ON "PendingRegistration"("email");
-CREATE INDEX "PendingRegistration_expiresAt_idx" ON "PendingRegistration"("expiresAt");
+CREATE UNIQUE INDEX IF NOT EXISTS "PendingRegistration_email_key" ON "PendingRegistration"("email");
+CREATE INDEX IF NOT EXISTS "PendingRegistration_expiresAt_idx" ON "PendingRegistration"("expiresAt");

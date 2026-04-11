@@ -26,8 +26,10 @@ COPY prisma ./prisma
 RUN npx prisma generate
 
 COPY --from=builder /app/dist ./dist
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
 
 EXPOSE 4000
 
-# migrate deploy applies any pending migrations then starts the server
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+# Clears any failed migration rows, applies pending migrations, starts server.
+CMD ["./docker-entrypoint.sh"]
