@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { z } from 'zod';
 import Stripe from 'stripe';
 import { prisma } from '../index';
@@ -17,26 +17,37 @@ const APP_BASE_URL = process.env.APP_BASE_URL ?? 'http://localhost';
 const CLIENT_ID = process.env.STRIPE_CLIENT_ID ?? '';
 const CALLBACK_URL = `${APP_BASE_URL}/api/project-payments/oauth/callback`;
 
-/** Sign state to prevent CSRF on the OAuth callback. */
+/** Sign state to prevent CSRF on the OAuth callback. Encodes both projectId and userId. */
 function signState(projectId: string, userId: string): string {
   const payload = `${projectId}:${userId}`;
   const sig = createHmac('sha256', process.env.JWT_SECRET!)
     .update(payload)
-    .digest('hex')
-    .slice(0, 16);
-  return `${projectId}.${sig}`;
+    .digest('hex');
+  return `${payload}.${sig}`;
 }
 
-function verifyState(state: string): string | null {
-  // Returns projectId if valid, null if tampered
-  const dot = state.indexOf('.');
-  if (dot === -1) return null;
-  // We don't have userId at callback time without a DB lookup, so we accept any
-  // state where the projectId portion is a valid UUID — the HMAC check is
-  // best-effort without userId; we verify ownership after loading the project.
-  const projectId = state.slice(0, dot);
-  if (!/^[0-9a-f-]{36}$/i.test(projectId)) return null;
-  return projectId;
+function verifyState(state: string): { projectId: string; userId: string } | null {
+  const lastDot = state.lastIndexOf('.');
+  if (lastDot === -1) return null;
+  const payload = state.slice(0, lastDot);
+  const sig = state.slice(lastDot + 1);
+
+  const colon = payload.indexOf(':');
+  if (colon === -1) return null;
+  const projectId = payload.slice(0, colon);
+  const userId = payload.slice(colon + 1);
+  if (!/^[0-9a-f-]{36}$/i.test(projectId) || !userId) return null;
+
+  const expected = createHmac('sha256', process.env.JWT_SECRET!)
+    .update(payload)
+    .digest('hex');
+  if (sig.length !== expected.length) return null;
+
+  const a = Buffer.from(sig, 'hex');
+  const b = Buffer.from(expected, 'hex');
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+
+  return { projectId, userId };
 }
 
 async function verifyOwnership(projectId: string, userId: string) {
@@ -77,15 +88,19 @@ router.get('/oauth/callback', async (req, res, next) => {
   try {
     const { code, state, error } = req.query as Record<string, string>;
 
-    const projectId = verifyState(state ?? '');
+    const verified = verifyState(state ?? '');
 
-    // On any error, redirect to the payments page with an error flag
     const errorRedirect = (e: string) =>
-      res.redirect(`${APP_BASE_URL}/payments/${projectId ?? ''}?error=${encodeURIComponent(e)}`);
+      res.redirect(`${APP_BASE_URL}/payments/${verified?.projectId ?? ''}?error=${encodeURIComponent(e)}`);
 
     if (error) return errorRedirect('access_denied');
-    if (!projectId) return errorRedirect('invalid_state');
+    if (!verified) return errorRedirect('invalid_state');
     if (!code) return errorRedirect('missing_code');
+
+    const { projectId, userId } = verified;
+
+    // Verify the user actually owns this project
+    await verifyOwnership(projectId, userId);
 
     // Exchange code for Stripe account ID
     let stripeUserId: string;
@@ -109,7 +124,6 @@ router.get('/oauth/callback', async (req, res, next) => {
       data: { stripeAccountId: stripeUserId, paymentsEnabled: true, buildEnv: updatedBuildEnv },
     });
 
-    // Rebuild the app in the background so the new env vars are baked into the bundle
     if (project?.files) {
       (async () => {
         try {
@@ -158,6 +172,20 @@ router.post('/create-checkout-session/:projectId', async (req, res, next) => {
 
     if (!project.paymentsEnabled || !project.stripeAccountId) {
       throw new AppError(400, 'Payments not configured for this project');
+    }
+
+    const allowedHosts = new Set<string>();
+    const sitesHost = (process.env.HOSTING_SITES_HOST ?? '').trim().toLowerCase();
+    if (sitesHost) allowedHosts.add(`${project.id}.${sitesHost}`);
+    if (project.customDomain) allowedHosts.add(project.customDomain.toLowerCase());
+    allowedHosts.add('localhost');
+    allowedHosts.add('127.0.0.1');
+
+    for (const raw of [body.successUrl, body.cancelUrl]) {
+      const host = new URL(raw).hostname.toLowerCase();
+      if (!allowedHosts.has(host)) {
+        throw new AppError(400, 'Redirect URL must match the project domain');
+      }
     }
 
     const session = await stripe.checkout.sessions.create(

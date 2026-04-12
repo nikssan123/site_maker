@@ -27,6 +27,12 @@ const app = express();
 app.set('trust proxy', 1);
 
 // Rate limiting (replaces Nginx limit_req zones)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60_000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 const aiLimiter = rateLimit({
   windowMs: 60_000,
   max: 100,
@@ -39,6 +45,7 @@ const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+app.use('/api/auth', authLimiter);
 app.use('/api/generate', aiLimiter);
 app.use('/api/iterate', aiLimiter);
 app.use('/api/', apiLimiter);
@@ -71,10 +78,36 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT ?? 4000;
 
+const EVENT_PRUNE_INTERVAL = 6 * 60 * 60 * 1000; // 6 hours
+const EVENT_MAX_AGE_DAYS = 30;
+
+async function pruneOldEvents() {
+  try {
+    const cutoff = new Date(Date.now() - EVENT_MAX_AGE_DAYS * 24 * 60 * 60 * 1000);
+    const { count } = await prisma.generationEvent.deleteMany({
+      where: {
+        createdAt: { lt: cutoff },
+        session: { status: { in: ['planning', 'error'] } },
+      },
+    });
+    if (count > 0) console.log(`[prune] deleted ${count} old GenerationEvent rows`);
+  } catch (err) {
+    console.error('[prune] GenerationEvent cleanup failed:', err);
+  }
+}
+
+async function pruneOldStripeEvents() {
+  try {
+    const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    await prisma.processedStripeEvent.deleteMany({ where: { createdAt: { lt: cutoff } } });
+  } catch { /* non-critical */ }
+}
+
 async function main() {
   await prisma.$connect();
   console.log('Database connected');
   await startEmailQueue(prisma);
+  setInterval(() => { pruneOldEvents(); pruneOldStripeEvents(); }, EVENT_PRUNE_INTERVAL);
   app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));
 }
 

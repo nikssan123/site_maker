@@ -126,11 +126,28 @@ router.get('/events/:sessionId', requireAuth, async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
+  let cleaned = false;
+  let unsubscribe: (() => void) | null = null;
+
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    unsubscribe?.();
+    if (!res.writableEnded) res.end();
+  };
+
   const send = (payload: object) => {
-    if (!res.writableEnded) {
+    if (res.writableEnded || cleaned) return;
+    try {
       res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    } catch {
+      cleanup();
     }
   };
+
+  req.on('close', cleanup);
+  req.on('error', cleanup);
+  res.on('error', cleanup);
 
   // 1. Replay stored events in insertion order
   const past = await prisma.generationEvent.findMany({
@@ -144,19 +161,17 @@ router.get('/events/:sessionId', requireAuth, async (req, res) => {
   // If the last replayed event was terminal, close immediately — no live subscription needed
   const last = past.length > 0 ? (past[past.length - 1]!.payload as any) : null;
   if (last && TERMINAL_TYPES.has(last.type)) {
-    res.end();
+    cleanup();
     return;
   }
 
   // 2. Subscribe to live events
-  const unsubscribe = subscribeToSession(sessionId, (payload) => {
+  unsubscribe = subscribeToSession(sessionId, (payload) => {
     send(payload);
     if (TERMINAL_TYPES.has((payload as any).type)) {
-      res.end();
+      cleanup();
     }
   });
-
-  req.on('close', unsubscribe);
 });
 
 export default router;

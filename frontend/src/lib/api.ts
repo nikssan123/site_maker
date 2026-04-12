@@ -45,8 +45,7 @@ async function request<T>(
   }
 
   if (!res.ok) {
-    // Token present but server rejects session (expired secret, user deleted, etc.)
-    if (res.status === 401 && token) {
+    if (res.status === 401 && token && !path.startsWith('/auth/')) {
       clearSessionAndGoHome();
     }
     const err = new Error(

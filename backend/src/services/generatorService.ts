@@ -265,7 +265,6 @@ async function failGeneration(
 }
 
 async function handlePipelineFailure(sessionId: string, err: unknown): Promise<void> {
-  if (err instanceof AppError) throw err;
   const msg = err instanceof Error ? err.message : String(err);
   try {
     await failGeneration(sessionId, genUserMsgGenerationFailed(msg), {
@@ -273,10 +272,11 @@ async function handlePipelineFailure(sessionId: string, err: unknown): Promise<v
     });
   } catch {
     try {
+      await prisma.session.update({ where: { id: sessionId }, data: { status: 'error' } });
+    } catch { /* best-effort */ }
+    try {
       await publishEvent(sessionId, { type: 'fatal', message: msg.slice(0, 500) });
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
   }
 }
 

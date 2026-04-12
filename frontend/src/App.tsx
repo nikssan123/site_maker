@@ -97,6 +97,12 @@ function AuthRequired() {
   return <Outlet />;
 }
 
+function GuestOnly() {
+  const token = useAuthStore((s) => s.token);
+  if (tokenValid(token)) return <Navigate to="/chat" replace />;
+  return <Outlet />;
+}
+
 function AdminRequired() {
   const user = useAuthStore((s) => s.user);
   if (!user?.isAdmin) return <Navigate to="/chat" replace />;
@@ -109,10 +115,12 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/pricing" element={<LandingPage scrollTo="pricing" />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route element={<GuestOnly />}>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+        </Route>
 
         <Route element={<AuthRequired />}>
           {/* One route so /chat → /chat/:id does not remount ChatPage and drop in-flight state */}

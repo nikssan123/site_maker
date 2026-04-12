@@ -67,7 +67,7 @@ export async function requestRegistration(rawEmail: string, password: string) {
   if (!email) throw new AppError(400, 'Email is required');
 
   const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) throw new AppError(409, 'Email already registered');
+  if (existing) return { pending: true as const, email };
 
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
   const code = generateCode();

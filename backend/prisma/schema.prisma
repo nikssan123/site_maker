@@ -137,7 +137,7 @@ model Project {
 model IterationLog {
   id          String   @id @default(uuid())
   projectId   String
-  project     Project  @relation(fields: [projectId], references: [id])
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   userId      String
   title       String?
   description String?
@@ -238,4 +238,9 @@ model EmailLog {
 
   @@index([projectId, createdAt])
   @@index([resendMessageId])
+}
+
+model ProcessedStripeEvent {
+  id        String   @id
+  createdAt DateTime @default(now())
 }

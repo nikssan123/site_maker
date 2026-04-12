@@ -219,6 +219,10 @@ export async function handleWebhook(rawBody: Buffer, signature: string) {
     throw new AppError(400, 'Webhook signature verification failed');
   }
 
+  const existing = await prisma.processedStripeEvent.findUnique({ where: { id: event.id } });
+  if (existing) return;
+  await prisma.processedStripeEvent.create({ data: { id: event.id } });
+
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object as Stripe.Checkout.Session;
