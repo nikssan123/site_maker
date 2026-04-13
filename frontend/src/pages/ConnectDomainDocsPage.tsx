@@ -15,6 +15,7 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
+import AppLogo from '../components/AppLogo';
 
 export default function ConnectDomainDocsPage() {
   const navigate = useNavigate();
@@ -23,13 +24,17 @@ export default function ConnectDomainDocsPage() {
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', py: 3, px: { xs: 2, sm: 4 } }}>
       <Box sx={{ maxWidth: 720, mx: 'auto' }}>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate(-1)}
-          sx={{ mb: 2, color: 'text.secondary' }}
-        >
-          {t('domainDocs.back')}
-        </Button>
+        <Stack direction="row" alignItems="center" gap={2} mb={2}>
+          <Button
+            startIcon={<ArrowBackIcon />}
+            onClick={() => navigate(-1)}
+            sx={{ color: 'text.secondary' }}
+          >
+            {t('domainDocs.back')}
+          </Button>
+          <Box sx={{ flex: 1 }} />
+          <AppLogo size="small" />
+        </Stack>
 
         <Stack direction="row" alignItems="center" gap={1.5} mb={2}>
           <MenuBookIcon color="primary" />

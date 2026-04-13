@@ -14,6 +14,7 @@ import LinkOffIcon from '@mui/icons-material/LinkOff';
 import CheckIcon from '@mui/icons-material/Check';
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
+import AppLogo from '../components/AppLogo';
 
 type Step = 'intro' | 'create-account' | 'connect' | 'success' | 'error';
 
@@ -111,6 +112,8 @@ export default function PaymentsSetupPage() {
           <IconButton onClick={() => navigate(`/preview/${projectId}`)} size="small" sx={{ mr: 1 }}>
             <ArrowBackIcon />
           </IconButton>
+          <AppLogo size="small" />
+          <Divider orientation="vertical" flexItem sx={{ mx: 1.5 }} />
           <PaymentsIcon color="primary" sx={{ mr: 1 }} />
           <Typography variant="h6" fontWeight={700}>{t('payments.pageTitle')}</Typography>
         </Toolbar>

@@ -21,6 +21,8 @@ import {
   TextField,
   Toolbar,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import FolderIcon from '@mui/icons-material/Folder';
@@ -44,6 +46,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
 import Editor, { BeforeMount } from '@monaco-editor/react';
 import { api } from '../lib/api';
+import AppLogo from '../components/AppLogo';
 
 type FsNode =
   | { type: 'dir'; name: string; path: string; children: FsNode[] }
@@ -133,6 +136,9 @@ const configureMonaco: BeforeMount = (monaco) => {
 export default function FilesPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
+  const fTheme = useTheme();
+  const fMobile = useMediaQuery(fTheme.breakpoints.down('md'));
+  const [treeVisible, setTreeVisible] = useState(true);
 
   const [tree, setTree] = useState<FsNode[]>([]);
   const [loadingTree, setLoadingTree] = useState(true);
@@ -196,6 +202,7 @@ export default function FilesPage() {
     setContent('');
     setDirty(false);
     setConfirmServerAck(false);
+    if (fMobile) setTreeVisible(false);
 
     try {
       const res = await api.fsReadFile(projectId, p);
@@ -355,12 +362,14 @@ export default function FilesPage() {
   if (!projectId) return null;
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
+    <Box sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
       <AppBar position="static" color="transparent" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
         <Toolbar sx={{ minHeight: '48px !important', gap: 1 }}>
           <IconButton size="small" onClick={() => navigate(`/preview/${projectId}`)}>
             <ArrowBackIcon fontSize="small" />
           </IconButton>
+          <AppLogo size="small" />
+          <Box sx={{ mx: 0.5, width: '1px', height: 20, bgcolor: 'divider' }} />
           <Typography variant="subtitle1" fontWeight={800} sx={{ flex: 1 }}>
             Файлове
           </Typography>
@@ -376,9 +385,19 @@ export default function FilesPage() {
         </Toolbar>
       </AppBar>
 
-      <Box sx={{ flex: 1, display: 'flex', minHeight: 0 }}>
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, minHeight: 0 }}>
         {/* Left tree */}
-        <Box sx={{ width: 340, borderRight: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <Box sx={{
+          width: { xs: '100%', md: 340 },
+          display: { xs: treeVisible ? 'flex' : 'none', md: 'flex' },
+          borderRight: { md: '1px solid' },
+          borderBottom: { xs: '1px solid', md: 'none' },
+          borderColor: 'divider',
+          bgcolor: 'background.paper',
+          flexDirection: 'column',
+          minHeight: 0,
+          maxHeight: { xs: '40vh', md: 'none' },
+        }}>
           <Box sx={{ p: 1.25, display: 'flex', gap: 1 }}>
             <Button size="small" startIcon={<NoteAddIcon />} onClick={createFile} fullWidth>
               Нов файл
@@ -441,9 +460,14 @@ export default function FilesPage() {
         </Box>
 
         {/* Editor */}
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <Box sx={{ flex: 1, display: { xs: treeVisible ? 'none' : 'flex', md: 'flex' }, flexDirection: 'column', minHeight: 0 }}>
           <Box sx={{ px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ minHeight: 28, flexWrap: 'wrap' }}>
+              {fMobile && (
+                <IconButton size="small" onClick={() => setTreeVisible(true)} sx={{ mr: 0.5 }}>
+                  <ArrowBackIcon fontSize="small" />
+                </IconButton>
+              )}
               {selectedPath ? (
                 <>
                   <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>

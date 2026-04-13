@@ -27,6 +27,7 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts';
 import { api } from '../lib/api';
+import AppLogo from '../components/AppLogo';
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 
@@ -803,7 +804,9 @@ export default function AdminPage() {
           <IconButton onClick={() => navigate('/chat')} size="small" sx={{ mr: 1 }}>
             <ArrowBackIcon />
           </IconButton>
-          <AdminPanelSettingsIcon color="primary" sx={{ mr: 1 }} />
+          <AppLogo size="small" />
+          <Box sx={{ mx: 0.5, width: '1px', height: 20, bgcolor: 'divider' }} />
+          <AdminPanelSettingsIcon color="primary" sx={{ mr: 0.5 }} />
           <Typography variant="h6" fontWeight={700} sx={{ flex: 1 }}>Admin Portal</Typography>
         </Toolbar>
       </AppBar>

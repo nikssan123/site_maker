@@ -16,6 +16,7 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts';
 import { useTranslation } from 'react-i18next';
+import AppLogo from '../components/AppLogo';
 import { api } from '../lib/api';
 
 interface DailyPoint { date: string; views: number }
@@ -88,13 +89,15 @@ export default function AnalyticsPage() {
   };
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
+    <Box sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
       <AppBar position="static" color="transparent" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
         <Toolbar>
           <IconButton onClick={() => navigate(-1)} size="small" sx={{ mr: 1 }}>
             <ArrowBackIcon />
           </IconButton>
-          <BarChartIcon color="primary" sx={{ mr: 1 }} />
+          <AppLogo size="small" />
+          <Box sx={{ mx: 0.5, width: '1px', height: 20, bgcolor: 'divider' }} />
+          <BarChartIcon color="primary" sx={{ mr: 0.5 }} />
           <Typography variant="h6" fontWeight={700} sx={{ flex: 1 }}>{t('analytics.title')}</Typography>
           <ToggleButtonGroup
             value={days}

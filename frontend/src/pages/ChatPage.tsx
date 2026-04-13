@@ -3,13 +3,15 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box, TextField, Stack, Typography, IconButton,
   Tooltip, CircularProgress, Chip, Button, LinearProgress,
+  Drawer, useMediaQuery, useTheme,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import LogoutIcon from '@mui/icons-material/Logout';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import MenuIcon from '@mui/icons-material/Menu';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import Sidebar from '../components/Sidebar';
+import AppLogo from '../components/AppLogo';
 
 import MessageBubble from '../components/MessageBubble';
 import PlanSummary from '../components/PlanSummary';
@@ -120,7 +122,9 @@ export default function ChatPage() {
   const navigate = useNavigate();
   const [input, setInput] = useState('');
   const [paymentLoading, setPaymentLoading] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [sidebarOpen, setSidebarOpen] = useState(() => !window.matchMedia('(max-width:899.95px)').matches);
   const [colorTheme, setColorTheme] = useState<ColorTheme>(THEME_PRESETS[0]); // Indigo default
   const [planVisible, setPlanVisible] = useState(false);
   const [socialLinks, setSocialLinks] = useState<{
@@ -431,10 +435,20 @@ export default function ChatPage() {
   };
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', bgcolor: 'background.default', overflow: 'hidden' }}>
+    <Box sx={{ height: '100dvh', display: 'flex', bgcolor: 'background.default', overflow: 'hidden' }}>
 
-      {/* Sidebar */}
-      {sidebarOpen && <Sidebar onNewProject={handleNewProject} />}
+      {/* Sidebar — permanent on desktop, temporary drawer on mobile */}
+      {isMobile ? (
+        <Drawer
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          PaperProps={{ sx: { width: 260, bgcolor: 'rgba(12,12,12,0.98)', backgroundImage: 'none' } }}
+        >
+          <Sidebar onNewProject={() => { handleNewProject(); setSidebarOpen(false); }} onClose={() => setSidebarOpen(false)} />
+        </Drawer>
+      ) : (
+        sidebarOpen && <Sidebar onNewProject={handleNewProject} />
+      )}
 
       {/* Main column */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -457,21 +471,9 @@ export default function ChatPage() {
             <MenuIcon fontSize="small" />
           </IconButton>
         </Tooltip>
-        <Box
-          sx={{
-            width: 28,
-            height: 28,
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #6366f1, #10b981)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            mr: 1.5,
-          }}
-        >
-          <AutoAwesomeIcon sx={{ fontSize: 14, color: '#fff' }} />
+        <Box sx={{ flex: 1 }}>
+          <AppLogo />
         </Box>
-        <Typography fontWeight={700} sx={{ flex: 1, letterSpacing: '-0.3px' }}>{t('common.appName')}</Typography>
 
         <Stack direction="row" gap={1} alignItems="center">
           {isFreeProject && (

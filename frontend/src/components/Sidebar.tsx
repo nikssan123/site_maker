@@ -40,9 +40,10 @@ function StatusDot({ status, paid, hosted }: { status: string; paid?: boolean; h
 
 interface Props {
   onNewProject: () => void;
+  onClose?: () => void;
 }
 
-export default function Sidebar({ onNewProject }: Props) {
+export default function Sidebar({ onNewProject, onClose }: Props) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId?: string }>();
@@ -83,7 +84,7 @@ export default function Sidebar({ onNewProject }: Props) {
     return (
       <Box key={s.id}>
         <Box
-          onClick={() => navigate(`/chat/${s.id}`)}
+          onClick={() => { navigate(`/chat/${s.id}`); onClose?.(); }}
           sx={{
             px: 1.5,
             py: 1,
@@ -177,9 +178,9 @@ export default function Sidebar({ onNewProject }: Props) {
   return (
     <Box
       sx={{
-        width: 240,
+        width: { xs: '100%', md: 240 },
         flexShrink: 0,
-        height: '100vh',
+        height: '100%',
         display: 'flex',
         flexDirection: 'column',
         borderRight: '1px solid rgba(255,255,255,0.06)',

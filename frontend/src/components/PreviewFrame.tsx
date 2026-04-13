@@ -237,7 +237,7 @@ export default function PreviewFrame({ projectId, port, editToken }: Props) {
   const showOverlay = phase === 'checking' || phase === 'framing';
 
   return (
-    <Box sx={{ position: 'relative', width: '100%', height: '100%', minHeight: 500 }}>
+    <Box sx={{ position: 'relative', width: '100%', height: '100%', minHeight: { xs: 300, md: 500 } }}>
       {phase === 'error' && (
         <Paper
           elevation={0}

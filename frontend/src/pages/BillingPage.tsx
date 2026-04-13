@@ -9,6 +9,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 import PricingTable from '../components/PricingTable';
+import AppLogo from '../components/AppLogo';
 
 export default function BillingPage() {
   const { t } = useTranslation();
@@ -32,10 +33,12 @@ export default function BillingPage() {
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       <AppBar position="static" color="transparent" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
-        <Toolbar>
+        <Toolbar sx={{ gap: 1 }}>
           <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/chat')} color="inherit" size="small">
             {t('billing.backBuilder')}
           </Button>
+          <Box sx={{ flex: 1 }} />
+          <AppLogo size="small" />
         </Toolbar>
       </AppBar>
 
@@ -51,8 +54,8 @@ export default function BillingPage() {
           {t('billing.subtitle')}
         </Typography>
 
-        <Paper variant="outlined" sx={{ p: 3, mb: 4 }}>
-          <Stack direction="row" alignItems="center" justifyContent="space-between">
+        <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, mb: 4 }}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'center' }} justifyContent="space-between" gap={2}>
             <Box>
               <Stack direction="row" alignItems="center" gap={1} mb={0.5}>
                 <CloudIcon color="secondary" fontSize="small" />
@@ -62,7 +65,7 @@ export default function BillingPage() {
                 {t('billing.hostingDesc')}
               </Typography>
             </Box>
-            <Button variant="outlined" onClick={handleManage} disabled={loading}>
+            <Button variant="outlined" onClick={handleManage} disabled={loading} sx={{ flexShrink: 0 }}>
               {loading ? t('billing.loadingManage') : t('billing.manage')}
             </Button>
           </Stack>

@@ -32,6 +32,7 @@ import VerifiedIcon from '@mui/icons-material/Verified';
 import RefreshIcon from '@mui/icons-material/Refresh';
 
 import { api } from '../lib/api';
+import AppLogo from '../components/AppLogo';
 
 type DomainRow = {
   id: string;
@@ -247,6 +248,8 @@ export default function EmailPage() {
           <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(`/preview/${projectId}`)}>
             Назад
           </Button>
+          <AppLogo size="small" />
+          <Box sx={{ width: '1px', height: 20, bgcolor: 'divider' }} />
           <Typography variant="h6" fontWeight={800} sx={{ flex: 1 }}>
             Имейл настройки
           </Typography>

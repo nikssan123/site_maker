@@ -4,6 +4,7 @@ import {
   Box, AppBar, Toolbar, Typography, Button, Tooltip,
   IconButton, Stack, CircularProgress, Paper, Alert,
   Dialog, DialogTitle, DialogContent, Divider, Snackbar, Backdrop, Collapse, List, ListItem, ListItemText,
+  Drawer, useMediaQuery, useTheme,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -30,6 +31,7 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import ImageIcon from '@mui/icons-material/Image';
 import WallpaperIcon from '@mui/icons-material/Wallpaper';
 
+import AppLogo from '../components/AppLogo';
 import PreviewFrame from '../components/PreviewFrame';
 import CatalogPanel from '../components/CatalogPanel';
 import BookingSlotsPanel from '../components/BookingSlotsPanel';
@@ -100,9 +102,11 @@ function ActionButton({ icon, label, onClick, disabled, active, color, pulsing }
         flexDirection: 'column',
         alignItems: 'center',
         gap: 0.5,
-        px: 0.5,
-        py: 1.25,
-        width: '100%',
+        px: { xs: 1, md: 0.5 },
+        py: { xs: 0.75, md: 1.25 },
+        minWidth: { xs: 56, md: 'auto' },
+        minHeight: 44,
+        width: { md: '100%' },
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.35 : 1,
         borderRadius: 1.5,
@@ -139,12 +143,14 @@ export default function PreviewPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const pvTheme = useTheme();
+  const pvMobile = useMediaQuery(pvTheme.breakpoints.down('md'));
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutReason, setCheckoutReason] = useState('');
   const [iterating, setIterating] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [downloadPreparingOpen, setDownloadPreparingOpen] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(true);
+  const [drawerOpen, setDrawerOpen] = useState(() => !window.matchMedia('(max-width:899.95px)').matches);
   const [drawerMode, setDrawerMode] = useState<'improvements' | 'catalog' | 'booking_slots' | 'inquiries' | 'blog' | 'dashboard' | 'hosting'>('improvements');
   const [iterateChat, setIterateChat] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
   const [pendingIterate, setPendingIterate] = useState<null | {
@@ -644,7 +650,8 @@ export default function PreviewPage() {
           >
             <ArrowBackIcon fontSize="small" />
           </IconButton>
-          <AutoAwesomeIcon color="primary" sx={{ fontSize: 18 }} />
+          <AppLogo size="small" />
+          <Box sx={{ mx: 1, width: '1px', height: 20, bgcolor: 'divider' }} />
           <Typography variant="subtitle1" fontWeight={700}>
             {t('preview.title')}
           </Typography>
@@ -667,22 +674,26 @@ export default function PreviewPage() {
       </AppBar>
 
       {/* ── Body ── */}
-      <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, overflow: 'hidden' }}>
 
-        {/* ── Left: action strip ── */}
+        {/* ── Left (desktop) / Bottom (mobile): action strip ── */}
         <Box
           data-tour="preview-action-strip"
           sx={{
-            width: 68,
+            width: { xs: '100%', md: 68 },
             flexShrink: 0,
             display: 'flex',
-            flexDirection: 'column',
-            borderRight: '1px solid',
+            flexDirection: { xs: 'row', md: 'column' },
+            borderRight: { md: '1px solid' },
+            borderTop: { xs: '1px solid', md: 'none' },
             borderColor: 'divider',
             bgcolor: 'background.paper',
-            py: 1,
+            py: { xs: 0.5, md: 1 },
             px: 0.75,
             gap: 0.25,
+            order: { xs: 3, md: 0 },
+            overflowX: { xs: 'auto', md: 'visible' },
+            overflowY: { xs: 'hidden', md: 'visible' },
           }}
         >
           <Tooltip title={drawerOpen && drawerMode === 'improvements' ? t('preview.hideImprovements') : t('preview.showImprovements')} placement="right">
@@ -984,22 +995,22 @@ export default function PreviewPage() {
           </Box>
         </Box>
 
-        {/* ── Right drawer (collapsible) ── */}
+        {/* ── Right drawer (collapsible on desktop, overlay on mobile) ── */}
         <Box
           sx={{
+            display: { xs: 'none', md: 'flex' },
             width: drawerOpen ? DRAWER_WIDTH : 0,
             flexShrink: 0,
             overflow: 'hidden',
             transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-            display: 'flex',
             flexDirection: 'column',
             borderLeft: drawerOpen ? '1px solid' : 'none',
             borderColor: 'divider',
             bgcolor: 'background.paper',
           }}
         >
-          {/* Inner wrapper — fixed width so content doesn't squash during animation */}
           <Box sx={{ width: DRAWER_WIDTH, display: 'flex', flexDirection: 'column', height: '100%' }}>
+
 
             {/* Panel header */}
             <Box sx={{ px: 2, py: 1.25, display: 'flex', alignItems: 'center', gap: 1, borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
@@ -1244,6 +1255,35 @@ export default function PreviewPage() {
             )}
           </Box>
         </Box>
+        {pvMobile && (
+          <Drawer
+            anchor="right"
+            open={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            PaperProps={{ sx: { width: '85vw', maxWidth: DRAWER_WIDTH, bgcolor: 'background.paper', backgroundImage: 'none' } }}
+          >
+            <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <Box sx={{ px: 2, py: 1.25, display: 'flex', alignItems: 'center', gap: 1, borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
+                <AutoFixHighIcon sx={{ fontSize: 15, color: 'primary.main' }} />
+                <Typography variant="subtitle2" fontWeight={700} sx={{ fontSize: 13, flex: 1 }}>
+                  {t('iteration.barLabel')}
+                </Typography>
+                <IconButton size="small" onClick={() => setDrawerOpen(false)}><ChevronRightIcon fontSize="small" /></IconButton>
+              </Box>
+              <Box sx={{ flex: 1, overflow: 'auto', p: 1.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                {iterateChat.length === 0 && (
+                  <MessageBubble role="assistant" content={t('preview.improvementsHint')} />
+                )}
+                {iterateChat.map((msg, i) => (
+                  <MessageBubble key={i} role={msg.role} content={msg.content} />
+                ))}
+              </Box>
+              <Box sx={{ p: 1.5, borderTop: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
+                <IterationBar onSubmit={handleIterate} loading={iterating} onBuyIteration={handleBuyIteration} />
+              </Box>
+            </Box>
+          </Drawer>
+        )}
 
       </Box>
 

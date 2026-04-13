@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 import { useAuthStore, type UserProfile } from '../store/auth';
+import AppLogo from '../components/AppLogo';
 
 type Step = 'credentials' | 'verify';
 
@@ -76,8 +77,9 @@ export default function RegisterPage() {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default' }}>
-      <Paper variant="outlined" sx={{ p: 4, width: '100%', maxWidth: 400 }}>
+    <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default' }}>
+      <Box sx={{ mb: 3 }}><AppLogo /></Box>
+      <Paper variant="outlined" sx={{ p: { xs: 2.5, sm: 4 }, mx: { xs: 2, sm: 0 }, width: '100%', maxWidth: 400 }}>
         {step === 'credentials' ? (
           <>
             <Typography variant="h5" fontWeight={700} mb={0.5}>{t('auth.registerTitle')}</Typography>
