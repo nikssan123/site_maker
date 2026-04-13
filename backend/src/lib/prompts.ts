@@ -147,6 +147,45 @@ Premium app shell (MUST follow):
   - Footer: always present (see Footer rules below)
 - Consistent spacing system: page padding px={{ xs: 2, md: 4 }}, section spacing my={{ xs: 6, md: 10 }}, card padding p={2.5..3}
 
+═══ MOBILE RESPONSIVENESS (MUST follow — apps must work perfectly on phones) ═══
+
+Every generated app MUST be fully usable on mobile devices (360px+). Test your layout mentally at 375px width.
+
+Navigation:
+- AppBar MUST include a hamburger menu (MenuIcon + IconButton) on mobile, visible at md breakpoint and below
+- Use MUI Drawer with variant="temporary" for mobile nav — triggered by the hamburger button
+- Desktop: show full nav links inline in the AppBar (hide hamburger)
+- Pattern: const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+- Mobile drawer must close when a nav link is clicked
+
+Layout & grids:
+- All card grids MUST use responsive columns: use MUI Grid with xs={12} sm={6} md={4} (or similar)
+- Alternatively use CSS grid: gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }
+- Hero sections: split layouts must stack vertically on mobile — flexDirection: { xs: 'column', md: 'row' }
+- Sidebar layouts (dashboards): sidebar must be a temporary Drawer on mobile, permanent on desktop
+- Forms must be full-width on mobile (maxWidth: { xs: '100%', sm: 400 })
+- Images must be responsive: width: '100%', height: 'auto', maxWidth: '100%'
+
+Typography scaling:
+- Hero headlines: fontSize: { xs: '2rem', md: '3rem' } (or variant="h3" with responsive overrides)
+- Section headings: fontSize: { xs: '1.5rem', md: '2rem' }
+- Never use fixed pixel font sizes for body text — use MUI Typography variants
+
+Touch targets:
+- All clickable elements (buttons, links, icons) must have minimum 44px touch target
+- IconButtons: size="medium" or add sx={{ minWidth: 44, minHeight: 44 }}
+- List items and cards that are clickable: add sufficient padding
+
+Spacing & overflow:
+- Use 100dvh instead of 100vh for full-height layouts (handles mobile browser chrome)
+- Prevent horizontal overflow: never use fixed widths wider than the viewport
+- Tables/DataGrids: wrap in a Box with overflow: 'auto' on mobile
+- Long text: use wordBreak: 'break-word' where needed
+
+Bottom-safe areas:
+- Sticky footers or bottom CTAs: add paddingBottom: 'env(safe-area-inset-bottom)' for notched devices
+- Fixed/sticky bottom bars: position them above the mobile browser nav
+
 ═══ MODERN DESIGN TECHNIQUES (use these to make the app feel alive) ═══
 
 Animations & micro-interactions (MUST include — make them NOTICEABLE):
@@ -448,6 +487,8 @@ Before finishing:
 Ask yourself: "Would this pass as a real SaaS product landing page?"
 If not → refine.
 
+Mobile check: mentally resize to 375px width. Does the nav collapse to a hamburger Drawer? Do grids stack to 1 column? Do hero split layouts stack vertically? Are all touch targets ≥44px? If any answer is no → fix it.
+
 ═══ OUTPUT CONTRACT (violations break the build pipeline) ═══
 - ENTIRE response: ONE JSON object, nothing else
 - First character "{", last character "}"
@@ -532,6 +573,7 @@ Apply the requested change while preserving the existing design quality:
 - Prefer minimal diffs: change the smallest number of files/lines needed. Avoid renames, large refactors, or reformatting.
 - If you need to touch global files (src/theme.ts, src/App.tsx, src/main.tsx), do it only when the change request explicitly requires it.
 - When in doubt about design, preserve the existing component patterns and spacing; do not \"upgrade\" visuals across the app.
+- Mobile responsiveness MUST be preserved: all grids must use responsive columns (xs={12} sm={6} md={4}), hero split layouts must stack on mobile (flexDirection: { xs: 'column', md: 'row' }), navigation must have a hamburger Drawer on mobile, touch targets must be at least 44px. If the change adds new layout elements, make them responsive.
 
 Return ONLY a single JSON object (no markdown, no code fences, no commentary before or after). First character "{", last "}".
 Shape: {"files":{"path":"full new file contents as one JSON string per path"}}
