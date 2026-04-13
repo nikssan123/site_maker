@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Box,
   Container,
@@ -24,62 +24,22 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { useTranslation } from 'react-i18next';
 import PricingTable from '../components/PricingTable';
 import { useAuthStore } from '../store/auth';
+import Waves from '../components/Waves';
+import ScrollFloat from '../components/ScrollFloat';
+import AnimatedContent from '../components/AnimatedContent';
+import SpotlightCard from '../components/SpotlightCard';
+import StarBorder from '../components/StarBorder';
+import ShinyText from '../components/ShinyText';
 
 const fadeUp = keyframes`
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
 `;
 
-const orbDrift = keyframes`
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(3%, -4%) scale(1.08); }
+const stickySlideUp = keyframes`
+  from { opacity: 0; transform: translateY(100%); }
+  to   { opacity: 1; transform: translateY(0); }
 `;
-
-const subtlePulse = keyframes`
-  0%, 100% { opacity: 0.35; }
-  50% { opacity: 0.55; }
-`;
-
-const REVEAL_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
-const REVEAL_DURATION = '0.6s';
-const IO_MARGIN = '0px 0px -8% 0px';
-
-function useRevealOnce(reduceMotion: boolean): readonly [RefObject<HTMLDivElement | null>, boolean] {
-  const ref = useRef<HTMLDivElement>(null);
-  const [inView, setInView] = useState(false);
-
-  useEffect(() => {
-    if (reduceMotion) {
-      setInView(true);
-      return;
-    }
-    const el = ref.current;
-    if (!el) return;
-    const io = new IntersectionObserver(
-      ([e]) => {
-        if (e.isIntersecting) {
-          setInView(true);
-          io.disconnect();
-        }
-      },
-      { threshold: 0.14, rootMargin: IO_MARGIN },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [reduceMotion]);
-
-  return [ref, inView] as const;
-}
-
-function revealStagger(reduceMotion: boolean, inView: boolean, delaySec: number, duration = REVEAL_DURATION) {
-  if (reduceMotion) return {};
-  if (!inView) return { opacity: 0 };
-  return {
-    animation: `${fadeUp} ${duration} ${REVEAL_EASE} forwards`,
-    animationDelay: `${delaySec}s`,
-    opacity: 0,
-  };
-}
 
 interface Props {
   scrollTo?: string;
@@ -89,13 +49,10 @@ export default function LandingPage({ scrollTo }: Props) {
   const { t } = useTranslation();
   const token = useAuthStore((s) => s.token);
   const [reduceMotion, setReduceMotion] = useState(false);
-  const [heroRef, heroInView] = useRevealOnce(reduceMotion);
-  const [whatRef, whatInView] = useRevealOnce(reduceMotion);
-  const [examplesRef, examplesInView] = useRevealOnce(reduceMotion);
-  const [trustRef, trustInView] = useRevealOnce(reduceMotion);
-  const [howRef, howInView] = useRevealOnce(reduceMotion);
-  const [ctaRef, ctaInView] = useRevealOnce(reduceMotion);
-  const [pricingRef, pricingInView] = useRevealOnce(reduceMotion);
+  const pricingRef = useRef<HTMLDivElement>(null);
+  const heroCtaRef = useRef<HTMLDivElement>(null);
+  const [pricingInView, setPricingInView] = useState(false);
+  const [showStickyCta, setShowStickyCta] = useState(false);
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -110,6 +67,28 @@ export default function LandingPage({ scrollTo }: Props) {
       pricingRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [scrollTo]);
+
+  useEffect(() => {
+    const el = pricingRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setPricingInView(true); obs.disconnect(); } },
+      { threshold: 0.1 },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const el = heroCtaRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => setShowStickyCta(!entry.isIntersecting),
+      { threshold: 0 },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
 
   const whatYouGetBlocks = [
     {
@@ -156,53 +135,24 @@ export default function LandingPage({ scrollTo }: Props) {
 
   const primaryTo = token ? '/chat' : '/register';
 
+  const heroAnim = (delaySec: number) =>
+    reduceMotion
+      ? {}
+      : { opacity: 0, animation: `${fadeUp} 0.7s cubic-bezier(0.22,1,0.36,1) ${delaySec}s forwards` };
+
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', position: 'relative', overflowX: 'hidden', pb: { xs: 11, md: 10 } }}>
-      {/* Ambient background */}
-      <Box
-        aria-hidden
-        sx={{
-          pointerEvents: 'none',
-          position: 'fixed',
-          inset: 0,
-          zIndex: 0,
-          background: `
-            radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.22), transparent 55%),
-            radial-gradient(ellipse 60% 40% at 100% 0%, rgba(16, 185, 129, 0.08), transparent 50%),
-            radial-gradient(ellipse 50% 30% at 0% 30%, rgba(99, 102, 241, 0.1), transparent 45%)
-          `,
-        }}
-      />
-      <Box
-        aria-hidden
-        sx={{
-          pointerEvents: 'none',
-          position: 'fixed',
-          top: '10%',
-          right: '-10%',
-          width: { xs: 280, md: 420 },
-          height: { xs: 280, md: 420 },
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(99, 102, 241, 0.25) 0%, transparent 70%)',
-          filter: 'blur(40px)',
-          zIndex: 0,
-          ...(reduceMotion ? {} : { animation: `${orbDrift} 18s ease-in-out infinite` }),
-        }}
-      />
-      <Box
-        aria-hidden
-        sx={{
-          pointerEvents: 'none',
-          position: 'fixed',
-          inset: 0,
-          zIndex: 0,
-          opacity: reduceMotion ? 0.2 : undefined,
-          backgroundImage: `linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)`,
-          backgroundSize: '48px 48px',
-          ...(reduceMotion ? {} : { animation: `${subtlePulse} 8s ease-in-out infinite` }),
-        }}
-      />
+      {/* Waves background */}
+      {!reduceMotion && (
+        <Waves
+          lineColor="rgba(99, 102, 241, 0.18)"
+          waveSpeedX={0.0125}
+          waveSpeedY={0.005}
+          waveAmpX={32}
+          waveAmpY={16}
+          style={{ position: 'fixed', zIndex: 0 }}
+        />
+      )}
 
       <AppBar
         position="sticky"
@@ -258,61 +208,63 @@ export default function LandingPage({ scrollTo }: Props) {
       </AppBar>
 
       <Box sx={{ position: 'relative', zIndex: 1 }}>
-        {/* Hero */}
-        <Box ref={heroRef}>
-          <Container maxWidth="lg" sx={{ pt: { xs: 8, md: 12 }, pb: { xs: 8, md: 10 } }}>
-            <Box sx={{ textAlign: 'center', maxWidth: 860, mx: 'auto' }}>
-              <Box sx={revealStagger(reduceMotion, heroInView, 0)}>
+        {/* Hero — uses CSS keyframe animation (not scroll-triggered) since it's above the fold */}
+        <Container maxWidth="lg" sx={{ pt: { xs: 8, md: 12 }, pb: { xs: 8, md: 10 } }}>
+          <Box sx={{ textAlign: 'center', maxWidth: 860, mx: 'auto' }}>
+            <Box sx={{ ...heroAnim(0), mb: 3, display: 'inline-flex' }}>
+              <StarBorder color="rgba(16, 185, 129, 0.6)" speed="4s" radius="80px" style={{ borderRadius: 16 }}>
                 <Chip
                   label={t('landing.chipService')}
                   size="small"
                   sx={{
-                    mb: 3,
                     fontWeight: 600,
-                    border: '1px solid rgba(16, 185, 129, 0.35)',
+                    border: 'none',
                     bgcolor: 'rgba(16, 185, 129, 0.08)',
                     '& .MuiChip-label': { px: 1.5 },
                   }}
                 />
-              </Box>
-              <Typography
-                variant="h1"
-                sx={{
-                  ...revealStagger(reduceMotion, heroInView, 0.06),
-                  fontWeight: 800,
-                  letterSpacing: '-0.03em',
-                  lineHeight: 1.08,
-                  fontSize: { xs: '1.95rem', sm: '2.5rem', md: '3.1rem' },
-                  mb: 2.5,
-                  background: 'linear-gradient(180deg, #f8fafc 0%, #cbd5e1 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                }}
-              >
-                {t('landing.heroTitle')}
-              </Typography>
-              <Typography
-                variant="h6"
-                color="text.secondary"
-                sx={{
-                  ...revealStagger(reduceMotion, heroInView, 0.12),
-                  fontWeight: 400,
-                  lineHeight: 1.65,
-                  fontSize: { xs: '1rem', md: '1.125rem' },
-                  maxWidth: 640,
-                  mx: 'auto',
-                  mb: 4,
-                }}
-              >
+              </StarBorder>
+            </Box>
+            <Typography
+              variant="h1"
+              sx={{
+                ...heroAnim(0.1),
+                fontWeight: 800,
+                letterSpacing: '-0.03em',
+                lineHeight: 1.08,
+                fontSize: { xs: '1.95rem', sm: '2.5rem', md: '3.1rem' },
+                mb: 2.5,
+                background: 'linear-gradient(180deg, #f8fafc 0%, #cbd5e1 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+              }}
+            >
+              {t('landing.heroTitle')}
+            </Typography>
+            <Typography
+              variant="h6"
+              color="text.secondary"
+              sx={{
+                ...heroAnim(0.2),
+                fontWeight: 400,
+                lineHeight: 1.65,
+                fontSize: { xs: '1rem', md: '1.125rem' },
+                maxWidth: 640,
+                mx: 'auto',
+                mb: 4,
+              }}
+            >
+              <ShinyText color="rgba(148,163,184,1)" shineColor="rgba(255,255,255,0.85)" speed="4s">
                 {t('landing.heroSubtitle')}
-              </Typography>
+              </ShinyText>
+            </Typography>
+            <Box ref={heroCtaRef} sx={heroAnim(0.3)}>
               <Stack
                 direction={{ xs: 'column', sm: 'row' }}
                 gap={1.5}
                 justifyContent="center"
                 alignItems="center"
-                sx={{ ...revealStagger(reduceMotion, heroInView, 0.18) }}
               >
                 <Button
                   variant="contained"
@@ -359,25 +311,23 @@ export default function LandingPage({ scrollTo }: Props) {
                 </Button>
               </Stack>
             </Box>
-          </Container>
-        </Box>
+          </Box>
+        </Container>
 
         {/* What you get */}
-        <Box ref={whatRef} sx={{ py: { xs: 6, md: 8 }, borderTop: '1px solid', borderColor: 'rgba(255,255,255,0.06)' }}>
+        <Box sx={{ py: { xs: 6, md: 8 }, borderTop: '1px solid', borderColor: 'rgba(255,255,255,0.06)' }}>
           <Container maxWidth="lg">
-            <Typography
-              variant="h4"
-              component="h2"
-              fontWeight={800}
-              textAlign="center"
-              sx={{
-                mb: 4,
-                letterSpacing: '-0.02em',
-                ...revealStagger(reduceMotion, whatInView, 0),
-              }}
-            >
-              {t('landing.whatYouGetTitle')}
-            </Typography>
+            <AnimatedContent distance={50}>
+              <Typography
+                variant="h4"
+                component="h2"
+                fontWeight={800}
+                textAlign="center"
+                sx={{ mb: 4, letterSpacing: '-0.02em' }}
+              >
+                {t('landing.whatYouGetTitle')}
+              </Typography>
+            </AnimatedContent>
             <Box
               sx={{
                 display: 'grid',
@@ -386,49 +336,52 @@ export default function LandingPage({ scrollTo }: Props) {
               }}
             >
               {whatYouGetBlocks.map(({ Icon, title, bullets }, i) => (
-                <Paper
-                  key={title}
-                  elevation={0}
-                  sx={{
-                    p: 3,
-                    borderRadius: 3,
-                    bgcolor: 'rgba(26, 26, 26, 0.65)',
-                    border: '1px solid rgba(255,255,255,0.06)',
-                    backdropFilter: 'blur(8px)',
-                    ...revealStagger(reduceMotion, whatInView, 0.06 + i * 0.08),
-                    transition: 'border-color 0.25s ease, box-shadow 0.25s ease',
-                    '&:hover': {
-                      borderColor: 'rgba(99, 102, 241, 0.25)',
-                      boxShadow: '0 16px 40px rgba(0,0,0,0.3)',
-                    },
-                  }}
-                >
-                  <Box
+                <AnimatedContent key={title} distance={60} delay={i * 0.1}>
+                  <SpotlightCard style={{ borderRadius: 12 }}>
+                  <Paper
+                    elevation={0}
                     sx={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 2,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      mb: 2,
-                      bgcolor: 'rgba(99, 102, 241, 0.12)',
-                      border: '1px solid rgba(99, 102, 241, 0.2)',
+                      p: 3,
+                      height: '100%',
+                      borderRadius: 3,
+                      bgcolor: 'rgba(26, 26, 26, 0.65)',
+                      border: '1px solid rgba(255,255,255,0.06)',
+                      backdropFilter: 'blur(8px)',
+                      transition: 'border-color 0.25s ease, box-shadow 0.25s ease',
+                      '&:hover': {
+                        borderColor: 'rgba(99, 102, 241, 0.25)',
+                        boxShadow: '0 16px 40px rgba(0,0,0,0.3)',
+                      },
                     }}
                   >
-                    <Icon sx={{ fontSize: 26, color: 'primary.light' }} />
-                  </Box>
-                  <Typography variant="h6" fontWeight={800} sx={{ mb: 1.5, fontSize: '1.1rem' }}>
-                    {title}
-                  </Typography>
-                  <Stack component="ul" sx={{ m: 0, pl: 2.25, color: 'text.secondary' }} gap={0.75}>
-                    {bullets.map((b) => (
-                      <Typography key={b} component="li" variant="body2" sx={{ lineHeight: 1.65 }}>
-                        {b}
-                      </Typography>
-                    ))}
-                  </Stack>
-                </Paper>
+                    <Box
+                      sx={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: 2,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        mb: 2,
+                        bgcolor: 'rgba(99, 102, 241, 0.12)',
+                        border: '1px solid rgba(99, 102, 241, 0.2)',
+                      }}
+                    >
+                      <Icon sx={{ fontSize: 26, color: 'primary.light' }} />
+                    </Box>
+                    <Typography variant="h6" fontWeight={800} sx={{ mb: 1.5, fontSize: '1.1rem' }}>
+                      {title}
+                    </Typography>
+                    <Stack component="ul" sx={{ m: 0, pl: 2.25, color: 'text.secondary' }} gap={0.75}>
+                      {bullets.map((b) => (
+                        <Typography key={b} component="li" variant="body2" sx={{ lineHeight: 1.65 }}>
+                          {b}
+                        </Typography>
+                      ))}
+                    </Stack>
+                  </Paper>
+                  </SpotlightCard>
+                </AnimatedContent>
               ))}
             </Box>
           </Container>
@@ -438,29 +391,37 @@ export default function LandingPage({ scrollTo }: Props) {
         <Box
           id="examples"
           component="section"
-          ref={examplesRef}
           aria-labelledby="landing-examples-heading"
-          sx={{ py: { xs: 7, md: 9 }, borderTop: '1px solid', borderColor: 'rgba(255,255,255,0.06)' }}
+          sx={{
+            py: { xs: 7, md: 9 },
+            borderTop: '1px solid',
+            borderColor: 'rgba(255,255,255,0.06)',
+            ...(!reduceMotion && { '.example-card-lift:hover': { transform: 'translateY(-6px)' } }),
+          }}
         >
           <Container maxWidth="lg">
-            <Typography
-              id="landing-examples-heading"
-              variant="h4"
-              component="h2"
-              fontWeight={800}
-              textAlign="center"
-              sx={{ mb: 1.5, letterSpacing: '-0.02em', ...revealStagger(reduceMotion, examplesInView, 0) }}
-            >
-              {t('landing.examplesTitle')}
-            </Typography>
-            <Typography
-              variant="body1"
-              color="text.secondary"
-              textAlign="center"
-              sx={{ mb: 4, maxWidth: 560, mx: 'auto', ...revealStagger(reduceMotion, examplesInView, 0.08) }}
-            >
-              {t('landing.examplesSubtitle')}
-            </Typography>
+            <AnimatedContent distance={50}>
+              <Typography
+                id="landing-examples-heading"
+                variant="h4"
+                component="h2"
+                fontWeight={800}
+                textAlign="center"
+                sx={{ mb: 1.5, letterSpacing: '-0.02em' }}
+              >
+                {t('landing.examplesTitle')}
+              </Typography>
+            </AnimatedContent>
+            <AnimatedContent distance={40} delay={0.1}>
+              <Typography
+                variant="body1"
+                color="text.secondary"
+                textAlign="center"
+                sx={{ mb: 4, maxWidth: 560, mx: 'auto' }}
+              >
+                {t('landing.examplesSubtitle')}
+              </Typography>
+            </AnimatedContent>
             <Box
               sx={{
                 display: 'grid',
@@ -469,109 +430,116 @@ export default function LandingPage({ scrollTo }: Props) {
               }}
             >
               {exampleCards.map(({ Icon, title, desc }, i) => (
-                <Paper
-                  key={title}
-                  elevation={0}
-                  sx={{
-                    p: 3,
-                    borderRadius: 3,
-                    textAlign: 'center',
-                    bgcolor: 'rgba(12, 12, 12, 0.55)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    ...revealStagger(reduceMotion, examplesInView, 0.14 + i * 0.1),
-                    transition: 'transform 0.25s ease, border-color 0.25s ease',
-                    '&:hover': reduceMotion
-                      ? { borderColor: 'rgba(99, 102, 241, 0.35)' }
-                      : {
-                          transform: 'translateY(-6px)',
-                          borderColor: 'rgba(99, 102, 241, 0.4)',
-                        },
-                  }}
-                >
-                  <Box
+                <AnimatedContent key={title} distance={60} delay={0.15 + i * 0.12}>
+                  <SpotlightCard
+                    spotlightColor="rgba(16, 185, 129, 0.2)"
+                    style={{
+                      borderRadius: 12,
+                      transition: 'transform 0.25s ease',
+                    }}
+                    className="example-card-lift"
+                  >
+                  <Paper
+                    elevation={0}
                     sx={{
-                      width: 56,
-                      height: 56,
-                      borderRadius: '50%',
-                      mx: 'auto',
-                      mb: 2,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      bgcolor: 'rgba(99, 102, 241, 0.12)',
-                      border: '1px solid rgba(99, 102, 241, 0.25)',
+                      p: 3,
+                      borderRadius: 3,
+                      textAlign: 'center',
+                      bgcolor: 'rgba(12, 12, 12, 0.55)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      transition: 'border-color 0.25s ease',
+                      '.example-card-lift:hover &': reduceMotion
+                        ? { borderColor: 'rgba(99, 102, 241, 0.35)' }
+                        : { borderColor: 'rgba(99, 102, 241, 0.4)' },
                     }}
                   >
-                    <Icon sx={{ fontSize: 28, color: 'primary.light' }} />
-                  </Box>
-                  <Typography variant="h6" fontWeight={800} sx={{ mb: 1 }}>
-                    {title}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.65 }}>
-                    {desc}
-                  </Typography>
-                </Paper>
+                    <Box
+                      sx={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: '50%',
+                        mx: 'auto',
+                        mb: 2,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        bgcolor: 'rgba(99, 102, 241, 0.12)',
+                        border: '1px solid rgba(99, 102, 241, 0.25)',
+                      }}
+                    >
+                      <Icon sx={{ fontSize: 28, color: 'primary.light' }} />
+                    </Box>
+                    <Typography variant="h6" fontWeight={800} sx={{ mb: 1 }}>
+                      {title}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.65 }}>
+                      {desc}
+                    </Typography>
+                  </Paper>
+                  </SpotlightCard>
+                </AnimatedContent>
               ))}
             </Box>
           </Container>
         </Box>
 
         {/* Trust */}
-        <Box ref={trustRef} sx={{ py: { xs: 6, md: 8 }, borderTop: '1px solid', borderColor: 'rgba(255,255,255,0.06)' }}>
+        <Box sx={{ py: { xs: 6, md: 8 }, borderTop: '1px solid', borderColor: 'rgba(255,255,255,0.06)' }}>
           <Container maxWidth="md">
-            <Typography
-              variant="h4"
-              component="h2"
-              fontWeight={800}
-              textAlign="center"
-              sx={{ mb: 4, letterSpacing: '-0.02em', ...revealStagger(reduceMotion, trustInView, 0) }}
-            >
-              {t('landing.trustTitle')}
-            </Typography>
+            <AnimatedContent distance={50}>
+              <Typography
+                variant="h4"
+                component="h2"
+                fontWeight={800}
+                textAlign="center"
+                sx={{ mb: 4, letterSpacing: '-0.02em' }}
+              >
+                {t('landing.trustTitle')}
+              </Typography>
+            </AnimatedContent>
             <Stack gap={2}>
               {trustItems.map((line, i) => (
-                <Stack
-                  key={line}
-                  direction="row"
-                  alignItems="center"
-                  gap={2}
-                  sx={{ ...revealStagger(reduceMotion, trustInView, 0.08 + i * 0.06) }}
-                >
-                  <CheckCircleOutlineIcon sx={{ color: 'secondary.light', flexShrink: 0 }} />
-                  <Typography variant="body1" fontWeight={600} sx={{ lineHeight: 1.5 }}>
-                    {line}
-                  </Typography>
-                </Stack>
+                <AnimatedContent key={line} distance={40} delay={0.08 + i * 0.07}>
+                  <Stack direction="row" alignItems="center" gap={2}>
+                    <CheckCircleOutlineIcon sx={{ color: 'secondary.light', flexShrink: 0 }} />
+                    <Typography variant="body1" fontWeight={600} sx={{ lineHeight: 1.5 }}>
+                      {line}
+                    </Typography>
+                  </Stack>
+                </AnimatedContent>
               ))}
             </Stack>
           </Container>
         </Box>
 
         {/* How it works */}
-        <Box ref={howRef} sx={{ py: { xs: 6, md: 9 }, borderTop: '1px solid', borderColor: 'rgba(255,255,255,0.06)' }}>
+        <Box sx={{ py: { xs: 6, md: 9 }, borderTop: '1px solid', borderColor: 'rgba(255,255,255,0.06)' }}>
           <Container maxWidth="lg">
-            <Typography
-              variant="h4"
-              component="h2"
-              fontWeight={800}
-              textAlign="center"
+            <Box
               sx={{
                 mb: 5,
-                letterSpacing: '-0.02em',
-                ...revealStagger(reduceMotion, howInView, 0),
+                '& span': {
+                  fontWeight: 800,
+                  letterSpacing: '-0.02em',
+                  fontSize: { xs: '1.6rem', sm: '2rem', md: '2.125rem' },
+                },
               }}
             >
-              {t('landing.howTitle')}
-            </Typography>
+              <ScrollFloat
+                animationDuration={1}
+                ease="back.inOut(2)"
+                scrollStart="center bottom+=50%"
+                scrollEnd="bottom bottom-=40%"
+                stagger={0.03}
+                containerClassName=""
+                textClassName=""
+              >
+                {t('landing.howTitle')}
+              </ScrollFloat>
+            </Box>
             <Stack direction={{ xs: 'column', md: 'row' }} gap={{ xs: 3, md: 4 }}>
               {steps.map((s, i) => (
-                <Box
-                  key={s.n}
-                  sx={{
-                    flex: 1,
-                    ...revealStagger(reduceMotion, howInView, 0.08 + i * 0.1),
-                  }}
-                >
+                <AnimatedContent key={s.n} distance={50} delay={0.1 + i * 0.12} style={{ flex: 1 }}>
                   <Stack direction="row" gap={2} alignItems="flex-start">
                     <Typography
                       variant="h5"
@@ -600,62 +568,50 @@ export default function LandingPage({ scrollTo }: Props) {
                       </Typography>
                     </Box>
                   </Stack>
-                </Box>
+                </AnimatedContent>
               ))}
             </Stack>
           </Container>
         </Box>
 
         {/* CTA band */}
-        <Box
-          ref={ctaRef}
-          sx={{
-            py: { xs: 6, md: 8 },
-            background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(16, 185, 129, 0.06) 100%)',
-            borderTop: '1px solid rgba(255,255,255,0.06)',
-            borderBottom: '1px solid rgba(255,255,255,0.06)',
-          }}
-        >
-          <Container maxWidth="md" sx={{ textAlign: 'center' }}>
-            <Typography
-              variant="h5"
-              fontWeight={800}
-              sx={{ mb: 1.5, letterSpacing: '-0.02em', ...revealStagger(reduceMotion, ctaInView, 0) }}
-            >
-              {t('landing.ctaBandTitle')}
-            </Typography>
-            <Typography
-              color="text.secondary"
-              sx={{
-                mb: 3,
-                maxWidth: 560,
-                mx: 'auto',
-                lineHeight: 1.65,
-                ...revealStagger(reduceMotion, ctaInView, 0.08),
-              }}
-            >
-              {t('landing.ctaBandSubtitle')}
-            </Typography>
-            <Button
-              variant="contained"
-              size="large"
-              component={RouterLink}
-              to={primaryTo}
-              sx={{
-                px: 5,
-                py: 1.75,
-                fontSize: '1.05rem',
-                fontWeight: 800,
-                borderRadius: 2,
-                ...revealStagger(reduceMotion, ctaInView, 0.16),
-              }}
-            >
-              {t('landing.ctaBuild')}
-            </Button>
-          </Container>
-        </Box>
+        <AnimatedContent distance={50}>
+          <Box
+            sx={{
+              py: { xs: 6, md: 8 },
+              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(16, 185, 129, 0.06) 100%)',
+              borderTop: '1px solid rgba(255,255,255,0.06)',
+              borderBottom: '1px solid rgba(255,255,255,0.06)',
+            }}
+          >
+            <Container maxWidth="md" sx={{ textAlign: 'center' }}>
+              <Typography
+                variant="h5"
+                fontWeight={800}
+                sx={{ mb: 1.5, letterSpacing: '-0.02em' }}
+              >
+                {t('landing.ctaBandTitle')}
+              </Typography>
+              <Typography
+                color="text.secondary"
+                sx={{ mb: 3, maxWidth: 560, mx: 'auto', lineHeight: 1.65 }}
+              >
+                {t('landing.ctaBandSubtitle')}
+              </Typography>
+              <Button
+                variant="contained"
+                size="large"
+                component={RouterLink}
+                to={primaryTo}
+                sx={{ px: 5, py: 1.75, fontSize: '1.05rem', fontWeight: 800, borderRadius: 2 }}
+              >
+                {t('landing.ctaBuild')}
+              </Button>
+            </Container>
+          </Box>
+        </AnimatedContent>
 
-        <Box ref={pricingRef}>
+        <Box ref={pricingRef} id="pricing">
           <PricingTable reveal={{ inView: pricingInView, reduceMotion }} />
         </Box>
 
@@ -672,7 +628,7 @@ export default function LandingPage({ scrollTo }: Props) {
         </Box>
       </Box>
 
-      {/* Sticky CTA — full width on phone, floating bar on larger screens */}
+      {/* Sticky CTA — slides in when the hero CTA scrolls out of view */}
       <Box
         sx={{
           position: 'fixed',
@@ -688,6 +644,9 @@ export default function LandingPage({ scrollTo }: Props) {
           },
           pointerEvents: 'none',
           '& > *': { pointerEvents: 'auto' },
+          ...(showStickyCta
+            ? { animation: `${stickySlideUp} 0.35s cubic-bezier(0.22,1,0.36,1) forwards` }
+            : { opacity: 0, transform: 'translateY(100%)' }),
         }}
       >
         <Box sx={{ maxWidth: 480, mx: 'auto' }}>
