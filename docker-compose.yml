@@ -63,6 +63,7 @@ services:
       MAX_PROJECT_EMAILS_PER_DAY: ${MAX_PROJECT_EMAILS_PER_DAY:-100}
       RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET}
       INTERNAL_SECRET: ${INTERNAL_SECRET:-}
+      FIRST_PARTY_ROOT_DOMAIN: ${FIRST_PARTY_ROOT_DOMAIN:-}
     volumes:
       - generated-apps:/generated-apps
     networks:
