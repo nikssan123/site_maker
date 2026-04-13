@@ -8,6 +8,7 @@ import { triggerEmailEvent } from '../services/emailEvents';
 import { AppError } from '../middleware/errorHandler';
 
 const router = Router();
+const now = () => new Date();
 
 /**
  * In-memory cache for Caddy on_demand_tls domain validation.
@@ -41,7 +42,14 @@ router.get('/resolve-domain', async (req, res) => {
     where: {
       customDomain: host,
       customDomainVerifiedAt: { not: null },
-      hosted: true,
+      OR: [
+        // Legacy / explicit flag used by billing flows
+        { hosted: true },
+        // Active paid hosting
+        { hostingSubscriptionId: { not: null } },
+        // Active free hosting window (bundled with site purchase, promos, etc.)
+        { hostingFreeUntil: { gt: now() } },
+      ],
     },
     select: { id: true },
   });
@@ -77,7 +85,11 @@ router.get('/caddy-ask', async (req, res) => {
     where: {
       customDomain: domain,
       customDomainVerifiedAt: { not: null },
-      hosted: true,
+      OR: [
+        { hosted: true },
+        { hostingSubscriptionId: { not: null } },
+        { hostingFreeUntil: { gt: now() } },
+      ],
     },
     select: { id: true },
   });

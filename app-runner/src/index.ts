@@ -9,6 +9,7 @@ import {
   BASE_DIR,
   install,
   build,
+  buildHostedDist,
   run,
   stop,
   startPersistent,
@@ -17,6 +18,8 @@ import {
   isFullStack,
   isProcessAlive,
   hasPreviewableFiles,
+  hasHostedDist,
+  hostedDistIsStale,
 } from './runner';
 import { EDIT_OVERLAY_SCRIPT } from './editOverlayScript';
 import { assertAdminApiWriteAllowed, normalizeSubPathToUrlPath } from './adminApiGate';
@@ -62,6 +65,7 @@ function shouldSendPageViewBeacon(method: string, urlPath: string): boolean {
 const previewStartLocks = new Map<string, Promise<void>>();
 
 const BACKEND_INTERNAL_URL = process.env.BACKEND_INTERNAL_URL;
+const INTERNAL_SECRET = (process.env.INTERNAL_SECRET ?? '').trim();
 const MAX_PREVIEW_FIX_ATTEMPTS = 3;
 
 /**
@@ -83,7 +87,10 @@ async function fixAndRetryRun(
     try {
       const resp = await fetch(`${BACKEND_INTERNAL_URL}/api/internal/fix-run`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(INTERNAL_SECRET ? { 'x-internal-secret': INTERNAL_SECRET } : {}),
+        },
         body: JSON.stringify({ projectId, errorLog }),
         signal: AbortSignal.timeout(120_000),
       });
@@ -181,8 +188,14 @@ app.post('/stop', (req, res) => {
 });
 
 /** Serve a file from the project's dist directory, with SPA fallback for non-asset routes. */
-function serveStatic(projectId: string, subPath: string, req: express.Request, res: express.Response): void {
-  const distDir = path.resolve(path.join(BASE_DIR, projectId, 'dist'));
+function serveStatic(
+  projectId: string,
+  subPath: string,
+  req: express.Request,
+  res: express.Response,
+  distFolder: 'dist' | 'dist-hosted' = 'dist',
+): void {
+  const distDir = path.resolve(path.join(BASE_DIR, projectId, distFolder));
   const filePath = path.resolve(path.join(distDir, subPath));
 
   // Path-traversal guard
@@ -210,6 +223,12 @@ function serveStatic(projectId: string, subPath: string, req: express.Request, r
   } else {
     // SPA route → serve index.html
     targetFile = path.join(distDir, 'index.html');
+  }
+
+  // If the resolved target does not exist, don't crash with ENOENT.
+  if (!fs.existsSync(targetFile)) {
+    res.status(503).send('App not ready');
+    return;
   }
 
   // Edit mode: inject overlay script into HTML responses
@@ -274,7 +293,7 @@ app.use('/preview/:projectId', async (req, res, next) => {
     if (!fullStack && !hasPort) {
       if (distExists) {
         console.log(`[preview] serving static dist for ${projectId}`);
-        serveStatic(projectId, subPath, req, res);
+        serveStatic(projectId, subPath, req, res, 'dist');
         return;
       }
       console.log(`[preview] ✗ 404 — no dist yet for ${projectId}`);
@@ -461,7 +480,12 @@ app.use('/hosted/', async (req, res, next) => {
           if (!backendUrl) return null;
           try {
             const url = `${backendUrl}/api/internal/resolve-domain?host=${encodeURIComponent(host)}`;
-            const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
+            const r = await fetch(url, {
+              signal: AbortSignal.timeout(5000),
+              headers: {
+                ...(INTERNAL_SECRET ? { 'x-internal-secret': INTERNAL_SECRET } : {}),
+              },
+            });
             if (!r.ok) return null;
             const id = (await r.json() as { projectId: string }).projectId;
             domainCache.set(host, { projectId: id, expires: Date.now() + DOMAIN_CACHE_TTL_MS });
@@ -476,13 +500,37 @@ app.use('/hosted/', async (req, res, next) => {
     // Reuse the same static-serve + proxy logic as /preview/:projectId
     const subPath = (req.url ?? '/').replace(/^\//, '');
 
+    // Serve user-uploaded images stored in projects/:id/uploads/
+    if (subPath.startsWith('uploads/')) {
+      const filename = subPath.slice('uploads/'.length).split('?')[0];
+      // Path-traversal guard: no slashes or dots beyond a single extension
+      if (!filename || filename.includes('/') || filename.includes('..')) {
+        res.status(400).send('Bad request');
+        return;
+      }
+      const uploadsDir = path.resolve(path.join(BASE_DIR, projectId, 'uploads'));
+      const filePath = path.resolve(path.join(uploadsDir, filename));
+      if (!filePath.startsWith(uploadsDir + path.sep)) { res.status(400).send('Bad request'); return; }
+      if (!fs.existsSync(filePath)) { res.status(404).send('Not found'); return; }
+      res.sendFile(filePath);
+      return;
+    }
+
     const pathOnlyHosted = normalizeSubPathToUrlPath(subPath);
     if (!(await assertAdminApiWriteAllowed(projectId, req.method, pathOnlyHosted, req, res))) return;
 
     if (!isFullStack(projectId) && !assignedPorts.has(projectId)) {
       const distIndex = path.join(BASE_DIR, projectId, 'dist', 'index.html');
       if (fs.existsSync(distIndex)) {
-        serveStatic(projectId, subPath, req, res);
+        // Hosted domains are served at `/`, so use the dist built with base `/`.
+        if (!hasHostedDist(projectId) || hostedDistIsStale(projectId)) {
+          const built = buildHostedDist(projectId);
+          if (!built.success) {
+            console.log(`[hosted] dist-hosted build failed for ${projectId}: ${(built.log ?? '').slice(0, 200)}`);
+            return res.status(503).send('App not ready');
+          }
+        }
+        serveStatic(projectId, subPath, req, res, 'dist-hosted');
         return;
       }
       return res.status(503).send('App not ready');
@@ -498,6 +546,30 @@ app.use('/hosted/', async (req, res, next) => {
 
     const port = assignedPorts.get(projectId)!;
     const reqPath = req.url?.split('?')[0] ?? '/';
+
+    // Full-stack hosted domains: serve a `/`-based frontend build from dist-hosted,
+    // but keep proxying API (and uploads) to the running server.js.
+    // This avoids the preview-only `/preview-app/{id}/` base path which breaks at domain root.
+    if (isFullStack(projectId)) {
+      const p = reqPath.replace(/\/+/g, '/');
+      const isApi = p === '/api' || p.startsWith('/api/');
+      const isUploads = p === '/uploads' || p.startsWith('/uploads/');
+      const looksLikeAsset = Boolean(path.extname(p));
+
+      if (!isApi && !isUploads) {
+        if (!hasHostedDist(projectId) || hostedDistIsStale(projectId)) {
+          const built = buildHostedDist(projectId);
+          if (!built.success) {
+            console.log(`[hosted] dist-hosted build failed for ${projectId}: ${(built.log ?? '').slice(0, 200)}`);
+            // If it's an asset request and we can't build, return 404 rather than a blank HTML 503.
+            return res.status(looksLikeAsset ? 404 : 503).send(looksLikeAsset ? 'Not found' : 'App not ready');
+          }
+        }
+        serveStatic(projectId, subPath, req, res, 'dist-hosted');
+        return;
+      }
+    }
+
     if (shouldSendPageViewBeacon(req.method, reqPath)) {
       const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ?? req.socket.remoteAddress;
       sendPageViewBeacon(projectId, reqPath, req.headers.referer, req.headers['user-agent'], ip);

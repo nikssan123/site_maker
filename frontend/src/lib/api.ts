@@ -218,6 +218,9 @@ export const api = {
     request<{
       customDomain: string | null;
       customDomainVerifiedAt: string | null;
+      domainKind: 'first_party_subdomain' | 'custom_domain' | null;
+      firstPartyRootDomain: string | null;
+      firstPartySlug: string | null;
       hostingSitesConfigured: boolean;
       cnameTarget: string | null;
       challengeTxtName: string | null;

@@ -43,10 +43,14 @@ async function resolveExpectedAdminToken(projectId: string): Promise<string | nu
 
   const base = process.env.BACKEND_INTERNAL_URL;
   if (!base) return null;
+  const internalSecret = (process.env.INTERNAL_SECRET ?? '').trim();
 
   try {
     const r = await fetch(`${base}/api/internal/admin-token/${encodeURIComponent(projectId)}`, {
       signal: AbortSignal.timeout(8000),
+      headers: {
+        ...(internalSecret ? { 'x-internal-secret': internalSecret } : {}),
+      },
     });
     if (!r.ok) return null;
     const data = (await r.json()) as { token?: string };

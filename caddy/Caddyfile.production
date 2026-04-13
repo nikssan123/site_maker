@@ -201,7 +201,19 @@ fornaxelit.com, www.fornaxelit.com {
     }
 
     handle {
-        respond "Not found" 404
+        # Human-friendly first-party slugs (e.g. test.sites.fornaxelit.com) and any other
+        # non-UUID hostnames under the wildcard go through the custom-domain resolver.
+        @static path *.css *.js *.png *.jpg *.jpeg *.gif *.svg *.woff *.woff2 *.ico
+        header @static Cache-Control "public, max-age=86400, immutable"
+
+        rewrite * /hosted{uri}
+        reverse_proxy app-runner:4001 {
+            header_up X-Forwarded-Host {host}
+            import proxy_defaults
+            transport http {
+                read_timeout 60s
+            }
+        }
     }
 }
 

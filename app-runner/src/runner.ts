@@ -83,6 +83,32 @@ export function hasPreviewableFiles(projectId: string): boolean {
   return fs.existsSync(path.join(dir, 'dist', 'index.html'));
 }
 
+/** Static dist for hosted domains (served at site root, not under /preview-app/{id}/). */
+export function hasHostedDist(projectId: string): boolean {
+  const dir = getProjectDir(projectId);
+  if (!fs.existsSync(dir)) return false;
+  return fs.existsSync(path.join(dir, 'dist-hosted', 'index.html'));
+}
+
+/**
+ * Hosted build becomes stale when preview dist is rebuilt (edit/iteration).
+ * Use dist/index.html mtime as a cheap freshness signal.
+ */
+export function hostedDistIsStale(projectId: string): boolean {
+  const dir = getProjectDir(projectId);
+  const hostedIndex = path.join(dir, 'dist-hosted', 'index.html');
+  if (!fs.existsSync(hostedIndex)) return true;
+  const previewIndex = path.join(dir, 'dist', 'index.html');
+  if (!fs.existsSync(previewIndex)) return false;
+  try {
+    const hostedMtime = fs.statSync(hostedIndex).mtimeMs;
+    const previewMtime = fs.statSync(previewIndex).mtimeMs;
+    return previewMtime > hostedMtime + 1000; // 1s jitter guard
+  } catch {
+    return true;
+  }
+}
+
 /** Any path-absolute /assets/… that isn’t already under …/preview-app/<id>/… */
 const ROOT_ASSETS_RE = /(?<![\w/])\/assets\//;
 
@@ -246,6 +272,100 @@ export function build(projectId: string): { success: boolean; log: string } {
     // Safety net: rewrite any root-absolute /assets/ that slipped through
     rewriteViteDistRootAssets(projectId, dir);
     return { success: true, log };
+  } catch (err: any) {
+    return { success: false, log: err.stderr ?? err.stdout ?? err.message ?? String(err) };
+  }
+}
+
+/**
+ * Build a second static dist for hosted domains.
+ * Hosted sites are served at `/` (no /preview-app/{id}/ prefix), so Vite base must be `/`.
+ */
+export function buildHostedDist(projectId: string): { success: boolean; log: string } {
+  const dir = getProjectDir(projectId);
+  try {
+    const index = path.join(dir, 'dist-hosted', 'index.html');
+    const distHostedDir = path.join(dir, 'dist-hosted');
+    const previewRoot = previewBase(projectId).replace(/\/$/, ''); // /preview-app/{id}
+
+    const rewriteHostedDistPreviewUrls = (): void => {
+      if (!fs.existsSync(distHostedDir)) return;
+      const rewriteTextOnce = (t: string): string => {
+        // Uploaded images are stored under /uploads/* at runtime on hosted domains.
+        // But the admin UI stores preview URLs (/preview-app/{id}/uploads/*) in content.
+        // Rewrite those to absolute hosted paths.
+        let s = t;
+        s = s.replaceAll(`${previewRoot}/uploads/`, `/uploads/`);
+        s = s.replaceAll(`${previewRoot}/api/`, `/api/`);
+        return s;
+      };
+
+      const walk = (p: string): void => {
+        for (const n of fs.readdirSync(p)) {
+          const fp = path.join(p, n);
+          if (fs.statSync(fp).isDirectory()) walk(fp);
+          else if (/\.(js|mjs|html|css|svg|json)$/.test(n)) {
+            const before = fs.readFileSync(fp, 'utf8');
+            const after = rewriteTextOnce(before);
+            if (after !== before) fs.writeFileSync(fp, after);
+          }
+        }
+      };
+
+      walk(distHostedDir);
+    };
+
+    // 1) Try project-defined build script with forwarded args.
+    let log = '';
+    try {
+      const npmArgs = ['run', 'build', '--', '--base', '/', '--outDir', 'dist-hosted'];
+      log += execFileSync('pnpm', npmArgs, {
+        cwd: dir,
+        timeout: 120_000,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      });
+    } catch (err: any) {
+      log += `\n[pnpm run build failed]\n${err.stderr ?? err.stdout ?? err.message ?? String(err)}`;
+    }
+
+    if (fs.existsSync(index)) {
+      try { rewriteHostedDistPreviewUrls(); } catch {}
+      return { success: true, log };
+    }
+
+    // 2) Fallback: run Vite directly.
+    // Many repos use "build": "tsc && vite build", which does NOT forward args to `vite build`.
+    try {
+      log += '\n[falling back to pnpm exec vite build]\n';
+      log += execFileSync('pnpm', ['exec', 'vite', 'build', '--base', '/', '--outDir', 'dist-hosted'], {
+        cwd: dir,
+        timeout: 120_000,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      });
+    } catch (err: any) {
+      log += `\n[pnpm exec vite build failed]\n${err.stderr ?? err.stdout ?? err.message ?? String(err)}`;
+    }
+
+    if (fs.existsSync(index)) {
+      try { rewriteHostedDistPreviewUrls(); } catch {}
+      return { success: true, log };
+    }
+
+    // If index exists, rewrite any preview URLs (uploads/api) for hosted runtime.
+    if (fs.existsSync(index)) {
+      try { rewriteHostedDistPreviewUrls(); } catch {}
+      return { success: true, log };
+    }
+
+    return {
+      success: false,
+      log:
+        `Hosted build did not produce dist-hosted/index.html.\n` +
+        `This usually means the project is not a Vite frontend, or Vite isn't installed, or the build outputs elsewhere.\n` +
+        `Combined output (first 1200 chars): ${(log ?? '').slice(0, 1200)}`,
+    };
   } catch (err: any) {
     return { success: false, log: err.stderr ?? err.stdout ?? err.message ?? String(err) };
   }

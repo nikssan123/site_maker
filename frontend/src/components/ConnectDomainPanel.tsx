@@ -21,6 +21,9 @@ import { api } from '../lib/api';
 export type CustomDomainDto = {
   customDomain: string | null;
   customDomainVerifiedAt: string | null;
+  domainKind: 'first_party_subdomain' | 'custom_domain' | null;
+  firstPartyRootDomain: string | null;
+  firstPartySlug: string | null;
   hostingSitesConfigured: boolean;
   cnameTarget: string | null;
   challengeTxtName: string | null;
@@ -94,14 +97,8 @@ export default function ConnectDomainPanel({ projectId, onUpdated }: Props) {
         `/preview/${projectId}/custom-domain/verify`,
         {},
       );
-      setData({
-        customDomain: d.customDomain,
-        customDomainVerifiedAt: d.customDomainVerifiedAt,
-        hostingSitesConfigured: d.hostingSitesConfigured,
-        cnameTarget: d.cnameTarget,
-        challengeTxtName: d.challengeTxtName,
-        challengeTxtValue: d.challengeTxtValue,
-      });
+      // Store full payload (includes domainKind + firstParty fields)
+      setData(d);
       onUpdated?.();
     } catch (e: unknown) {
       setLocalError(e instanceof Error ? e.message : t('connectDomain.verifyFailed'));
@@ -144,6 +141,7 @@ export default function ConnectDomainPanel({ projectId, onUpdated }: Props) {
   if (!data) return null;
 
   const verified = Boolean(data.customDomainVerifiedAt);
+  const isFirstParty = data.domainKind === 'first_party_subdomain';
 
   return (
     <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, borderColor: 'rgba(99,102,241,0.35)' }}>
@@ -163,7 +161,14 @@ export default function ConnectDomainPanel({ projectId, onUpdated }: Props) {
         </Tooltip>
       </Stack>
 
-      {!data.hostingSitesConfigured && (
+      {isFirstParty && (
+        <Alert severity="info" sx={{ mb: 2, py: 0.5 }}>
+          Този адрес е поддомейн в нашия домейн и не изисква DNS настройки. Ако искате собствен домейн (напр. www.yourbrand.com),
+          въведете го по-долу и следвайте стъпките за DNS.
+        </Alert>
+      )}
+
+      {!data.hostingSitesConfigured && !isFirstParty && (
         <Alert severity="warning" sx={{ mb: 2, py: 0.5 }}>
           {t('connectDomain.hostingEnvWarn')}
         </Alert>
@@ -201,6 +206,7 @@ export default function ConnectDomainPanel({ projectId, onUpdated }: Props) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           helperText={t('connectDomain.hostnameHint')}
+          disabled={saving || verifying}
         />
         <Button variant="contained" onClick={handleSave} disabled={saving || !input.trim()} sx={{ flexShrink: 0 }}>
           {saving ? <CircularProgress size={20} color="inherit" /> : t('connectDomain.saveDomain')}

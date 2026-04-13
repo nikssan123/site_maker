@@ -182,6 +182,11 @@ http://*.sites.lvh.me {
     }
 
     handle {
-        respond "Not found" 404
+        # Non-UUID subdomains (e.g. test.sites.lvh.me) resolve via /hosted/
+        rewrite * /hosted{uri}
+        reverse_proxy app-runner:4001 {
+            header_up X-Forwarded-Host {host}
+            import proxy_defaults
+        }
     }
 }

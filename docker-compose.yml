@@ -49,6 +49,7 @@ services:
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost}
       STRIPE_SUCCESS_URL: ${STRIPE_SUCCESS_URL:-http://localhost/billing?success=true}
       STRIPE_CANCEL_URL: ${STRIPE_CANCEL_URL:-http://localhost/pricing}
+      FIRST_PARTY_ROOT_DOMAIN: ${FIRST_PARTY_ROOT_DOMAIN:-}
       GENERATED_APPS_DIR: /generated-apps
       APP_RUNNER_URL: http://app-runner:4001
       # CNAME target host: <projectId>.<HOSTING_SITES_HOST> — must match Caddy wildcard block
@@ -63,7 +64,6 @@ services:
       MAX_PROJECT_EMAILS_PER_DAY: ${MAX_PROJECT_EMAILS_PER_DAY:-100}
       RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET}
       INTERNAL_SECRET: ${INTERNAL_SECRET:-}
-      FIRST_PARTY_ROOT_DOMAIN: ${FIRST_PARTY_ROOT_DOMAIN:-}
     volumes:
       - generated-apps:/generated-apps
     networks:
@@ -85,6 +85,7 @@ services:
       # PM2 home inside the volume so saved process list survives container recreates
       PM2_HOME: /generated-apps/.pm2
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      INTERNAL_SECRET: ${INTERNAL_SECRET:-}
       BACKEND_INTERNAL_URL: http://backend:4000
     ports:
       - '4100-4199:4100-4199'

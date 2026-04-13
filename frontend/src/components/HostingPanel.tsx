@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Typography,
@@ -9,13 +9,14 @@ import {
   Paper,
   Divider,
   TextField,
+  Link,
 } from '@mui/material';
 import CloudDoneIcon from '@mui/icons-material/CloudDone';
 import CloudIcon from '@mui/icons-material/Cloud';
 import SettingsIcon from '@mui/icons-material/Settings';
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
-import ConnectDomainPanel from './ConnectDomainPanel';
+import ConnectDomainPanel, { type CustomDomainDto } from './ConnectDomainPanel';
 
 interface Props {
   projectId: string;
@@ -32,8 +33,24 @@ export default function HostingPanel({ projectId, hosted, paid, onUpdated }: Pro
   const [slug, setSlug] = useState('');
   const [savingSlug, setSavingSlug] = useState(false);
   const [slugError, setSlugError] = useState<string | null>(null);
+  const [slugSuccess, setSlugSuccess] = useState<string | null>(null);
+  const [domainInfo, setDomainInfo] = useState<CustomDomainDto | null>(null);
 
   const normalizedSlug = useMemo(() => slug.trim().toLowerCase(), [slug]);
+
+  const refreshDomainInfo = async () => {
+    try {
+      const d = await api.get<CustomDomainDto>(`/preview/${projectId}/custom-domain`);
+      setDomainInfo(d);
+    } catch {
+      setDomainInfo(null);
+    }
+  };
+
+  useEffect(() => {
+    if (paid && hosted) refreshDomainInfo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paid, hosted, projectId]);
 
   const openPortal = async () => {
     setLoadingPortal(true);
@@ -49,11 +66,14 @@ export default function HostingPanel({ projectId, hosted, paid, onUpdated }: Pro
 
   const saveSlug = async () => {
     setSlugError(null);
+    setSlugSuccess(null);
     setSavingSlug(true);
     try {
-      await api.setHostedSubdomain(projectId, normalizedSlug);
+      const d = await api.setHostedSubdomain(projectId, normalizedSlug);
+      await refreshDomainInfo();
       onUpdated?.();
       setSlug('');
+      if (d.customDomain) setSlugSuccess(d.customDomain);
     } catch (e: any) {
       setSlugError(e?.message ?? t('errors.generic'));
     } finally {
@@ -91,10 +111,11 @@ export default function HostingPanel({ projectId, hosted, paid, onUpdated }: Pro
         <>
           <Paper variant="outlined" sx={{ p: 1.75, borderRadius: 2 }}>
             <Typography variant="subtitle2" fontWeight={800} mb={0.75}>
-              Поддомейн в нашия домейн
+              Опция 1: Поддомейн в нашия домейн (без DNS)
             </Typography>
             <Typography variant="body2" color="text.secondary" mb={1.25}>
-              Избери име (пример: <b>mysite</b>) и ще го пуснем като <b>mysite.website.com</b>.
+              Избери име (пример: <b>mysite</b>) и ще го пуснем като{' '}
+              <b>{(domainInfo?.firstPartyRootDomain ? `mysite.${domainInfo.firstPartyRootDomain}` : 'mysite.вашият-домейн')}</b>.
             </Typography>
 
             <Stack direction={{ xs: 'column', sm: 'row' }} gap={1}>
@@ -121,9 +142,44 @@ export default function HostingPanel({ projectId, hosted, paid, onUpdated }: Pro
                 {slugError}
               </Alert>
             )}
+            {(domainInfo?.domainKind === 'first_party_subdomain' && domainInfo.customDomain) || slugSuccess ? (
+              <Alert severity="success" sx={{ mt: 1 }}>
+                Активен адрес:{' '}
+                <Box component="span" sx={{ fontFamily: 'monospace' }}>
+                  {domainInfo?.domainKind === 'first_party_subdomain' && domainInfo.customDomain
+                    ? domainInfo.customDomain
+                    : slugSuccess}
+                </Box>
+                {' — '}
+                <Link
+                  href={`https://${(domainInfo?.domainKind === 'first_party_subdomain' && domainInfo.customDomain) ? domainInfo.customDomain : slugSuccess}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  underline="hover"
+                  sx={{ ml: 0.5 }}
+                >
+                  отвори
+                </Link>
+              </Alert>
+            ) : null}
           </Paper>
 
-          <ConnectDomainPanel projectId={projectId} onUpdated={onUpdated} />
+          <Paper variant="outlined" sx={{ p: 1.75, borderRadius: 2, borderColor: 'rgba(99,102,241,0.35)' }}>
+            <Typography variant="subtitle2" fontWeight={800} mb={0.75}>
+              Опция 2: Собствен домейн (изисква DNS)
+            </Typography>
+            <Typography variant="body2" color="text.secondary" mb={1.25}>
+              Пример: <b>www.yourbrand.com</b>. Ще трябва да добавите TXT запис за потвърждение и (по избор) CNAME за рутиране.
+            </Typography>
+            <ConnectDomainPanel
+              projectId={projectId}
+              onUpdated={async () => {
+                await refreshDomainInfo();
+                onUpdated?.();
+              }}
+            />
+          </Paper>
+
           <Divider sx={{ borderColor: 'rgba(255,255,255,0.06)' }} />
           <Button
             variant="outlined"

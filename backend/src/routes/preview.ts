@@ -347,11 +347,29 @@ function customDomainPayload(project: {
   domainVerificationToken: string | null;
 }) {
   const token = project.domainVerificationToken;
+  const firstPartyRoot = firstPartyRootDomain();
+  const isFirstPartySubdomain = Boolean(
+    firstPartyRoot &&
+      project.customDomain &&
+      project.domainVerificationToken === null &&
+      project.customDomain.endsWith(`.${firstPartyRoot}`),
+  );
+  const firstPartySlug =
+    isFirstPartySubdomain && firstPartyRoot && project.customDomain
+      ? project.customDomain.slice(0, -(firstPartyRoot.length + 1))
+      : null;
   const cnameTarget = cnameTargetForProject(project.id);
   const pending = Boolean(project.customDomain && token && !project.customDomainVerifiedAt);
   return {
     customDomain: project.customDomain,
     customDomainVerifiedAt: project.customDomainVerifiedAt?.toISOString() ?? null,
+    domainKind: isFirstPartySubdomain
+      ? ('first_party_subdomain' as const)
+      : project.customDomain
+        ? ('custom_domain' as const)
+        : null,
+    firstPartyRootDomain: firstPartyRoot,
+    firstPartySlug,
     hostingSitesConfigured: hostingSitesConfigured(),
     cnameTarget,
     challengeTxtName: pending && project.customDomain ? challengeTxtName(project.customDomain) : null,
