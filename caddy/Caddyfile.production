@@ -188,8 +188,13 @@ fornaxelit.com, www.fornaxelit.com {
     @valid_uuid header_regexp Host uuid ^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.sites\.fornaxelit\.com$
 
     handle @valid_uuid {
-        @static path *.css *.js *.png *.jpg *.jpeg *.gif *.svg *.woff *.woff2 *.ico
-        header @static Cache-Control "public, max-age=86400, immutable"
+        # Hash-versioned Vite output under /assets/ — safe to mark immutable.
+        @hashed_static path /assets/*
+        header @hashed_static Cache-Control "public, max-age=31536000, immutable"
+        # Bare-name assets (logo.png, hero-bg.jpg, favicon.ico, uploaded images) can change
+        # under the same URL, so cache briefly and require revalidation.
+        @mutable_static path *.png *.jpg *.jpeg *.gif *.svg *.webp *.avif *.ico
+        header @mutable_static Cache-Control "public, max-age=300, must-revalidate"
 
         rewrite * /preview/{re.uuid.1}{uri}
         reverse_proxy app-runner:4001 {
@@ -203,8 +208,10 @@ fornaxelit.com, www.fornaxelit.com {
     handle {
         # Human-friendly first-party slugs (e.g. test.sites.fornaxelit.com) and any other
         # non-UUID hostnames under the wildcard go through the custom-domain resolver.
-        @static path *.css *.js *.png *.jpg *.jpeg *.gif *.svg *.woff *.woff2 *.ico
-        header @static Cache-Control "public, max-age=86400, immutable"
+        @hashed_static path /assets/*
+        header @hashed_static Cache-Control "public, max-age=31536000, immutable"
+        @mutable_static path *.png *.jpg *.jpeg *.gif *.svg *.webp *.avif *.ico
+        header @mutable_static Cache-Control "public, max-age=300, must-revalidate"
 
         rewrite * /hosted{uri}
         reverse_proxy app-runner:4001 {
@@ -231,8 +238,10 @@ fornaxelit.com, www.fornaxelit.com {
     import security_headers
     encode zstd gzip
 
-    @static path *.css *.js *.png *.jpg *.jpeg *.gif *.svg *.woff *.woff2 *.ico
-    header @static Cache-Control "public, max-age=86400, immutable"
+    @hashed_static path /assets/*
+    header @hashed_static Cache-Control "public, max-age=31536000, immutable"
+    @mutable_static path *.png *.jpg *.jpeg *.gif *.svg *.webp *.avif *.ico
+    header @mutable_static Cache-Control "public, max-age=300, must-revalidate"
 
     rewrite * /hosted{uri}
     reverse_proxy app-runner:4001 {

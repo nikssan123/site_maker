@@ -26,12 +26,17 @@ function rebuildNativeAddons(dir: string): void {
 
 // Track running processes: projectId → child process
 const runningProcesses = new Map<string, ChildProcess>();
+/** Projects currently managed by pm2 (persistent hosting). pm2 supervises + restarts these. */
+const persistentProjects = new Set<string>();
 // Track assigned ports (exported for preview proxy)
 export const assignedPorts = new Map<string, number>();
 let nextPort = 4100;
 
-/** Returns true if the child process for this project is still alive. */
+/** Returns true if the project has an active backing process (plain spawn or pm2-supervised). */
 export function isProcessAlive(projectId: string): boolean {
+  // pm2 supervises persistent projects and auto-restarts on crash — treat as alive
+  // unless explicitly stopped via `stop()`.
+  if (persistentProjects.has(projectId)) return true;
   const proc = runningProcesses.get(projectId);
   if (!proc) return false;
   return proc.exitCode === null && !proc.killed;
@@ -90,6 +95,47 @@ export function hasHostedDist(projectId: string): boolean {
   return fs.existsSync(path.join(dir, 'dist-hosted', 'index.html'));
 }
 
+function latestMtimeMs(dir: string): number {
+  if (!fs.existsSync(dir)) return 0;
+  let latest = 0;
+  const stack = [dir];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const full = path.join(current, entry.name);
+      try {
+        const st = fs.statSync(full);
+        latest = Math.max(latest, st.mtimeMs);
+        if (entry.isDirectory()) stack.push(full);
+      } catch {
+        // Best-effort; ignore raced/deleted files during traversal.
+      }
+    }
+  }
+  return latest;
+}
+
+function readStampMs(filePath: string): number {
+  try {
+    if (!fs.existsSync(filePath)) return 0;
+    const raw = fs.readFileSync(filePath, 'utf8').trim();
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeStampMs(filePath: string): void {
+  fs.writeFileSync(filePath, String(Date.now()), 'utf8');
+}
+
 /**
  * Hosted build becomes stale when preview dist is rebuilt (edit/iteration).
  * Use dist/index.html mtime as a cheap freshness signal.
@@ -98,11 +144,13 @@ export function hostedDistIsStale(projectId: string): boolean {
   const dir = getProjectDir(projectId);
   const hostedIndex = path.join(dir, 'dist-hosted', 'index.html');
   if (!fs.existsSync(hostedIndex)) return true;
-  const previewIndex = path.join(dir, 'dist', 'index.html');
-  if (!fs.existsSync(previewIndex)) return false;
+  const previewDistDir = path.join(dir, 'dist');
+  if (!fs.existsSync(previewDistDir)) return false;
   try {
-    const hostedMtime = fs.statSync(hostedIndex).mtimeMs;
-    const previewMtime = fs.statSync(previewIndex).mtimeMs;
+    const previewStamp = readStampMs(path.join(previewDistDir, '.preview-build-stamp'));
+    const hostedStamp = readStampMs(path.join(dir, 'dist-hosted', '.hosted-build-stamp'));
+    const previewMtime = previewStamp || latestMtimeMs(previewDistDir);
+    const hostedMtime = hostedStamp || latestMtimeMs(path.join(dir, 'dist-hosted'));
     return previewMtime > hostedMtime + 1000; // 1s jitter guard
   } catch {
     return true;
@@ -271,6 +319,7 @@ export function build(projectId: string): { success: boolean; log: string } {
     });
     // Safety net: rewrite any root-absolute /assets/ that slipped through
     rewriteViteDistRootAssets(projectId, dir);
+    writeStampMs(path.join(dir, 'dist', '.preview-build-stamp'));
     return { success: true, log };
   } catch (err: any) {
     return { success: false, log: err.stderr ?? err.stdout ?? err.message ?? String(err) };
@@ -315,6 +364,10 @@ export function buildHostedDist(projectId: string): { success: boolean; log: str
       walk(distHostedDir);
     };
 
+    try {
+      fs.rmSync(distHostedDir, { recursive: true, force: true });
+    } catch {}
+
     // 1) Try project-defined build script with forwarded args.
     let log = '';
     try {
@@ -331,6 +384,7 @@ export function buildHostedDist(projectId: string): { success: boolean; log: str
 
     if (fs.existsSync(index)) {
       try { rewriteHostedDistPreviewUrls(); } catch {}
+      try { writeStampMs(path.join(distHostedDir, '.hosted-build-stamp')); } catch {}
       return { success: true, log };
     }
 
@@ -348,14 +402,25 @@ export function buildHostedDist(projectId: string): { success: boolean; log: str
       log += `\n[pnpm exec vite build failed]\n${err.stderr ?? err.stdout ?? err.message ?? String(err)}`;
     }
 
+    if (fs.existsSync(path.join(dir, 'dist', 'index.html')) && viteDistNeedsPreviewBaseRebuild(projectId, dir)) {
+      log += '\n[repairing preview dist after hosted build]\n';
+      const repaired = build(projectId);
+      log += repaired.log ?? '';
+      if (!repaired.success) {
+        return { success: false, log: `Hosted build succeeded, but preview dist repair failed.\n${log}` };
+      }
+    }
+
     if (fs.existsSync(index)) {
       try { rewriteHostedDistPreviewUrls(); } catch {}
+      try { writeStampMs(path.join(distHostedDir, '.hosted-build-stamp')); } catch {}
       return { success: true, log };
     }
 
     // If index exists, rewrite any preview URLs (uploads/api) for hosted runtime.
     if (fs.existsSync(index)) {
       try { rewriteHostedDistPreviewUrls(); } catch {}
+      try { writeStampMs(path.join(distHostedDir, '.hosted-build-stamp')); } catch {}
       return { success: true, log };
     }
 
@@ -477,6 +542,10 @@ export function stop(projectId: string): void {
     try { proc.kill('SIGTERM'); } catch {}
     runningProcesses.delete(projectId);
   }
+  // Also tear down any pm2-managed persistent instance so rebuilds don't collide on the port.
+  try { execFileSync('pm2', ['delete', projectId], { encoding: 'utf8', stdio: 'pipe' }); } catch {}
+  persistentProjects.delete(projectId);
+  assignedPorts.delete(projectId);
 }
 
 /**
@@ -520,6 +589,7 @@ export function startPersistent(
     fs.chmodSync(cfgPath, 0o600);
     execFileSync('pm2', ['start', cfgPath], { encoding: 'utf8', stdio: 'pipe' });
     execFileSync('pm2', ['save'], { encoding: 'utf8', stdio: 'pipe' });
+    persistentProjects.add(projectId);
     return { success: true, log: 'persistent start', port };
   } catch (err: any) {
     assignedPorts.delete(projectId);

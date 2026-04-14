@@ -8,7 +8,7 @@ import { streamProjectZip } from '../lib/zipBuilder';
 import { prisma } from '../index';
 import { AppError } from '../middleware/errorHandler';
 import { allowUnpaidProjectDownload } from '../lib/devFlags';
-import { ensureRunning, startPersistentHosting, stopProject, buildProject, runProject } from '../services/appRunner';
+import { ensureRunning, startPersistentHosting, stopProject, buildProject, buildHostedProject, runProject } from '../services/appRunner';
 import { encrypt, decrypt } from '../lib/encryption';
 import { projectPath } from '../lib/fileWriter';
 import { deriveAdminToken, writeAdminTokenFile } from '../lib/adminToken';
@@ -86,6 +86,9 @@ function ensureParentDir(absPath: string): void {
 }
 
 async function triggerRebuildAsync(projectId: string, logPrefix: string): Promise<void> {
+  const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
+  const wasPersistent = isHostingActive(project);
+
   await prisma.project.update({
     where: { id: projectId },
     data: { status: 'building' },
@@ -103,7 +106,26 @@ async function triggerRebuildAsync(projectId: string, logPrefix: string): Promis
         return;
       }
 
-      const runResult = await runProject(projectId);
+      if (wasPersistent) {
+        const hostedBuildResult = await buildHostedProject(projectId);
+        if (!hostedBuildResult.success) {
+          await prisma.project.update({
+            where: { id: projectId },
+            data: { status: 'error', errorLog: hostedBuildResult.log?.slice(0, 50_000) ?? 'Hosted build failed' },
+          });
+          return;
+        }
+      }
+
+      // Persistently hosted projects must be brought back up under pm2 (not a plain spawn),
+      // otherwise the hosted subdomain will either collide on the port or split-brain onto
+      // a separate process that doesn't see admin writes.
+      const envVars: Record<string, string> = wasPersistent && project.runtimeEnv
+        ? (JSON.parse(decrypt(project.runtimeEnv)) as Record<string, string>)
+        : {};
+      const runResult = wasPersistent
+        ? await startPersistentHosting(projectId, envVars)
+        : await runProject(projectId);
       if (!runResult.success) {
         await prisma.project.update({
           where: { id: projectId },

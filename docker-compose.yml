@@ -118,8 +118,8 @@ services:
       - '80:80'
       - '443:443'
     # Uncomment when CF_API_TOKEN is set for wildcard cert DNS-01 challenge:
-    # environment:
-    #   CF_API_TOKEN: ${CF_API_TOKEN}
+    environment:
+      CF_API_TOKEN: ${CF_API_TOKEN}
     volumes:
       - caddy_data:/data
       - caddy_config:/config

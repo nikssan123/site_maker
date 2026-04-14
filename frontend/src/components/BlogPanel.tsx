@@ -34,6 +34,13 @@ type TypedModel = { name: string; fields: AdminField[] | null };
 export default function BlogPanel({ projectId, runPort }: Props) {
   const { t } = useTranslation();
 
+  const previewImageUrl = (raw: unknown): string => {
+    const url = typeof raw === 'string' ? raw : '';
+    if (!url) return '';
+    if (url.startsWith('uploads/')) return `/preview-app/${projectId}/${url}`;
+    return url;
+  };
+
   const [models, setModels] = useState<TypedModel[] | null>(null);
   const [modelsError, setModelsError] = useState(false);
   const [activeModel, setActiveModel] = useState<string | null>(null);
@@ -165,7 +172,10 @@ export default function BlogPanel({ projectId, runPort }: Props) {
     try {
       const dataUrl = await readFileAsDataUrl(file);
       const { url } = await api.uploadImage(projectId, dataUrl, file.name);
-      setFormValues((v) => ({ ...v, [field]: url }));
+      const runtimeUrl = url.startsWith(`/preview-app/${projectId}/uploads/`)
+        ? url.replace(`/preview-app/${projectId}/`, '')
+        : url;
+      setFormValues((v) => ({ ...v, [field]: runtimeUrl }));
     } catch (e: unknown) {
       setFormError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -304,8 +314,16 @@ export default function BlogPanel({ projectId, runPort }: Props) {
           {formError && <Alert severity="error" sx={{ mb: 0.5 }}>{formError}</Alert>}
           {typedFields.map((field) => renderField(
             field,
-            formValues[field.name] ?? '',
-            (v) => setFormValues((prev) => ({ ...prev, [field.name]: v })),
+            (field.type === 'image' || field.type === 'photo')
+              ? previewImageUrl(formValues[field.name] ?? '')
+              : (formValues[field.name] ?? ''),
+            (v) => setFormValues((prev) => ({
+              ...prev,
+              [field.name]:
+                (field.type === 'image' || field.type === 'photo') && v.startsWith(`/preview-app/${projectId}/uploads/`)
+                  ? v.replace(`/preview-app/${projectId}/`, '')
+                  : v,
+            })),
             fieldUploading[field.name] ?? false,
             (file) => handleImageFileSelect(field.name, file),
             { clickToUpload: t('catalog.clickToUpload'), orPasteUrl: t('catalog.orPasteUrl'), imageUrl: t('catalog.imageUrl') },

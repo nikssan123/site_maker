@@ -59,8 +59,15 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken, onData
   // Per-field upload state
   const [fieldUploading, setFieldUploading] = useState<Record<string, boolean>>({});
 
-  const displayImageUrl = (raw: unknown): string => {
+  const runtimeImageUrl = (raw: unknown): string => {
     const url = typeof raw === 'string' ? raw : '';
+    if (!url) return '';
+    if (url.startsWith('uploads/')) return `/preview-app/${projectId}/${url}`;
+    return url;
+  };
+
+  const displayImageUrl = (raw: unknown): string => {
+    const url = runtimeImageUrl(raw);
     if (!url) return '';
     // Avoid browser caching a 404 while the upload is being written / served.
     // Only apply to our own uploaded assets so external URLs stay untouched.
@@ -202,7 +209,10 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken, onData
     try {
       const dataUrl = await readFileAsDataUrl(file);
       const { url } = await api.uploadImage(projectId, dataUrl, file.name);
-      setFormValues((v) => ({ ...v, [field]: url }));
+      const runtimeUrl = url.startsWith(`/preview-app/${projectId}/uploads/`)
+        ? url.replace(`/preview-app/${projectId}/`, '')
+        : url;
+      setFormValues((v) => ({ ...v, [field]: runtimeUrl }));
     } catch (e: unknown) {
       setFormError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -362,8 +372,16 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken, onData
           {formError && <Alert severity="error" sx={{ mb: 0.5 }}>{formError}</Alert>}
           {typedFields.map((field) => renderField(
             field,
-            formValues[field.name] ?? '',
-            (v) => setFormValues((prev) => ({ ...prev, [field.name]: v })),
+            (field.type === 'image' || field.type === 'photo')
+              ? displayImageUrl(formValues[field.name] ?? '')
+              : (formValues[field.name] ?? ''),
+            (v) => setFormValues((prev) => ({
+              ...prev,
+              [field.name]:
+                (field.type === 'image' || field.type === 'photo') && v.startsWith(`/preview-app/${projectId}/uploads/`)
+                  ? v.replace(`/preview-app/${projectId}/`, '')
+                  : v,
+            })),
             fieldUploading[field.name] ?? false,
             (file) => handleImageFileSelect(field.name, file),
             { clickToUpload: t('catalog.clickToUpload'), orPasteUrl: t('catalog.orPasteUrl'), imageUrl: t('catalog.imageUrl') },

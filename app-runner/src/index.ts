@@ -4,7 +4,7 @@ import http from 'http';
 import express from 'express';
 import cors from 'cors';
 
-import { createProxyMiddleware } from 'http-proxy-middleware';
+import { createProxyMiddleware, responseInterceptor } from 'http-proxy-middleware';
 import {
   BASE_DIR,
   install,
@@ -59,6 +59,30 @@ function shouldSendPageViewBeacon(method: string, urlPath: string): boolean {
   if (/^\/api(\/|$)/i.test(p)) return false;
   if (/\.(js|css|map|ico|png|jpg|jpeg|gif|svg|woff2?|ttf|eot|json)$/i.test(p)) return false;
   return true;
+}
+
+function rewriteHostedApiJsonBody(
+  projectId: string,
+  body: Buffer,
+  contentType: string | string[] | undefined,
+): Buffer {
+  const type = Array.isArray(contentType) ? contentType.join(';') : (contentType ?? '');
+  if (!type.toLowerCase().includes('application/json')) return body;
+  const previewUploadsRoot = `/preview-app/${projectId}/uploads/`;
+  const previewApiRoot = `/preview-app/${projectId}/api/`;
+  const text = body.toString('utf8');
+  const rewritten = text
+    .replaceAll(previewUploadsRoot, '/uploads/')
+    .replaceAll(previewApiRoot, '/api/');
+  return rewritten === text ? body : Buffer.from(rewritten, 'utf8');
+}
+
+function hostedUploadFilename(subPath: string, projectId: string): string | null {
+  const clean = subPath.replace(/^\//, '').split('?')[0] ?? '';
+  if (clean.startsWith('uploads/')) return clean.slice('uploads/'.length);
+  const legacyPrefix = `preview-app/${projectId}/uploads/`;
+  if (clean.startsWith(legacyPrefix)) return clean.slice(legacyPrefix.length);
+  return null;
 }
 
 /** In-memory port map is lost on restart; dedupe concurrent auto-starts for the same project. */
@@ -175,6 +199,12 @@ app.post('/build', (req, res) => {
   res.json(result);
 });
 
+app.post('/build-hosted', (req, res) => {
+  const { projectId } = req.body as { projectId: string };
+  const result = buildHostedDist(projectId);
+  res.json(result);
+});
+
 app.post('/run', async (req, res) => {
   const { projectId } = req.body as { projectId: string };
   const result = await run(projectId);
@@ -251,9 +281,11 @@ app.use('/preview/:projectId', async (req, res, next) => {
     const { projectId } = req.params;
     const subPath = (req.url ?? '/').replace(/^\//, '');
 
-    // Serve user-uploaded images stored in projects/:id/uploads/
-    if (subPath.startsWith('uploads/')) {
-      const filename = subPath.slice('uploads/'.length).split('?')[0];
+    // Serve user-uploaded images stored in projects/:id/uploads/.
+    // Accept both hosted-root URLs (/uploads/*) and legacy preview-root URLs
+    // (/preview-app/:id/uploads/*) so older saved content still works on hosted domains.
+    const filename = hostedUploadFilename(subPath, projectId);
+    if (filename !== null) {
       // Path-traversal guard: no slashes or dots beyond a single extension
       if (!filename || filename.includes('/') || filename.includes('..')) {
         res.status(400).send('Bad request');
@@ -578,7 +610,11 @@ app.use('/hosted/', async (req, res, next) => {
     createProxyMiddleware({
       target: `http://127.0.0.1:${port}`,
       changeOrigin: true,
+      selfHandleResponse: true,
       on: {
+        proxyRes: responseInterceptor(async (responseBuffer, proxyRes) => {
+          return rewriteHostedApiJsonBody(projectId, responseBuffer, proxyRes.headers['content-type']);
+        }),
         proxyReq: (proxyReq, req) => {
           const expReq = req as unknown as express.Request;
           const contentType = (expReq.headers['content-type'] ?? '').toLowerCase();

@@ -26,6 +26,15 @@ export async function buildProject(projectId: string): Promise<RunnerResult> {
   return data;
 }
 
+export async function buildHostedProject(projectId: string): Promise<RunnerResult> {
+  const { data } = await axios.post<RunnerResult>(
+    `${APP_RUNNER_URL}/build-hosted`,
+    { projectId },
+    { timeout: 120_000 },
+  );
+  return data;
+}
+
 export async function runProject(projectId: string): Promise<RunnerResult> {
   const { data } = await axios.post<RunnerResult>(
     `${APP_RUNNER_URL}/run`,
