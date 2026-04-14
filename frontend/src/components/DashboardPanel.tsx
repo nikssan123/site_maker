@@ -13,6 +13,7 @@ import {
   TableHead,
   TableRow,
   Typography,
+  alpha,
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import BarChartIcon from '@mui/icons-material/BarChart';
@@ -100,8 +101,9 @@ export default function DashboardPanel({ projectId, runPort }: Props) {
           mt: 1.5,
           p: 2,
           borderRadius: 3,
-          borderColor: 'rgba(59,130,246,0.18)',
-          background: 'linear-gradient(135deg, rgba(239,246,255,0.95), rgba(255,255,255,0.98))',
+          borderColor: (theme) => alpha(theme.palette.primary.main, 0.22),
+          background: (theme) =>
+            `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.14)}, ${alpha(theme.palette.secondary.main, 0.08)})`,
         }}
       >
         <Stack direction={{ xs: 'column', md: 'row' }} gap={1.5} alignItems={{ xs: 'flex-start', md: 'center' }}>
@@ -114,18 +116,18 @@ export default function DashboardPanel({ projectId, runPort }: Props) {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                bgcolor: 'rgba(59,130,246,0.14)',
-                color: '#2563eb',
+                bgcolor: (theme) => alpha(theme.palette.primary.main, 0.18),
+                color: 'primary.main',
               }}
             >
               <BarChartIcon sx={{ fontSize: 20 }} />
             </Box>
             <Box>
               <Typography variant="subtitle1" fontWeight={800}>
-                Overview
+                Общ преглед
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Quick look at the content currently saved in your site.
+                Бърз поглед към съдържанието, което в момента е записано в сайта.
               </Typography>
             </Box>
           </Stack>
@@ -162,11 +164,21 @@ export default function DashboardPanel({ projectId, runPort }: Props) {
               sx={{
                 borderRadius: 3,
                 overflow: 'hidden',
-                borderColor: 'rgba(148,163,184,0.18)',
-                boxShadow: '0 10px 30px rgba(15,23,42,0.04)',
+                borderColor: 'rgba(255,255,255,0.08)',
+                bgcolor: 'rgba(255,255,255,0.02)',
+                boxShadow: 'none',
               }}
             >
-              <Box sx={{ px: 2, py: 1.25, display: 'flex', alignItems: 'center', gap: 1, bgcolor: 'rgba(248,250,252,0.9)' }}>
+              <Box
+                sx={{
+                  px: 2,
+                  py: 1.25,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  bgcolor: (theme) => alpha(theme.palette.common.white, 0.03),
+                }}
+              >
                 <BarChartIcon sx={{ fontSize: 15, color: 'text.secondary' }} />
                 <Typography variant="subtitle2" fontWeight={800} sx={{ flex: 1 }}>
                   {m.name}

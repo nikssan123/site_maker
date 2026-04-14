@@ -8,9 +8,6 @@ import {
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DownloadIcon from '@mui/icons-material/Download';
-import LockIcon from '@mui/icons-material/Lock';
-import CloudIcon from '@mui/icons-material/Cloud';
-import CloudDoneIcon from '@mui/icons-material/CloudDone';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
@@ -26,10 +23,7 @@ import ArticleIcon from '@mui/icons-material/Article';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import HistoryIcon from '@mui/icons-material/History';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import DescriptionIcon from '@mui/icons-material/Description';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import ImageIcon from '@mui/icons-material/Image';
-import WallpaperIcon from '@mui/icons-material/Wallpaper';
 
 import AppLogo from '../components/AppLogo';
 import PreviewFrame from '../components/PreviewFrame';
@@ -402,13 +396,11 @@ export default function PreviewPage() {
     return () => window.removeEventListener('message', handler);
   }, [editToken, projectId]);
 
-  const canDownloadZip = store.projectPaid || store.allowUnpaidDownload;
-  const isProjectLocked = !store.projectPaid && !store.allowUnpaidDownload;
   const workspaceMode = drawerMode === 'improvements' ? null : drawerMode;
   const workspaceOpen = workspaceMode !== null;
 
   const handleDownload = async () => {
-    if (!canDownloadZip) {
+    if (!store.projectPaid && !store.allowUnpaidDownload) {
       setCheckoutReason(t('preview.downloadLockedReason'));
       setCheckoutOpen(true);
       return;
@@ -421,15 +413,6 @@ export default function PreviewPage() {
       alert(msg);
     } finally {
       setDownloadPreparingOpen(false);
-    }
-  };
-
-  const handleHosting = async () => {
-    try {
-      const { url } = await api.post<{ url: string }>('/billing/hosting-checkout', { projectId });
-      window.location.href = url;
-    } catch (err: any) {
-      alert(err.message);
     }
   };
 
@@ -711,86 +694,6 @@ export default function PreviewPage() {
             </Box>
           </Tooltip>
 
-          <Divider sx={{ my: 0.5 }} />
-
-          <Tooltip title={canDownloadZip ? t('preview.downloadZip') : t('preview.downloadLocked')} placement="right">
-            <Box data-tour="action-download">
-              <ActionButton
-                icon={canDownloadZip ? <DownloadIcon fontSize="inherit" /> : <LockIcon fontSize="inherit" />}
-                label={isProjectLocked ? t('preview.purchase') : t('preview.download')}
-                onClick={() => {
-                  if (isProjectLocked) {
-                    setCheckoutReason(t('preview.purchaseTooltip'));
-                    setCheckoutOpen(true);
-                    return;
-                  }
-                  handleDownload();
-                }}
-                disabled={iterating}
-                color={canDownloadZip ? undefined : '#f87171'}
-              />
-            </Box>
-          </Tooltip>
-
-          <Divider sx={{ my: 0.5 }} />
-
-          {projectPaid && (
-            <Box data-tour="action-hosting">
-              {projectHosted ? (
-                <Tooltip title={t('preview.hosted')} placement="right">
-                  <Box>
-                    <ActionButton
-                      icon={<CloudDoneIcon fontSize="inherit" />}
-                      label={t('preview.hosted')}
-                      onClick={() => {
-                        if (workspaceMode === 'hosting') {
-                          setDrawerMode('improvements');
-                        } else {
-                          setDrawerMode('hosting');
-                          setDrawerOpen(false);
-                        }
-                      }}
-                      active={workspaceMode === 'hosting'}
-                      color="#a855f7"
-                    />
-                  </Box>
-                </Tooltip>
-              ) : (
-                <Tooltip title={t('preview.hostTooltip')} placement="right">
-                  <Box>
-                    <ActionButton
-                      icon={<CloudIcon fontSize="inherit" />}
-                      label={t('preview.hostCta')}
-                      onClick={handleHosting}
-                    />
-                  </Box>
-                </Tooltip>
-              )}
-            </Box>
-          )}
-
-          <Divider sx={{ my: 0.5 }} />
-
-          <Tooltip title={t('common.analytics')} placement="right">
-            <Box data-tour="action-analytics">
-              <ActionButton
-                icon={<BarChartIcon fontSize="inherit" />}
-                label={t('common.analytics')}
-                onClick={() => navigate(`/analytics/${projectId}`)}
-              />
-            </Box>
-          </Tooltip>
-
-          <Tooltip title={t('payments.setupTooltip')} placement="right">
-            <Box data-tour="action-payments">
-              <ActionButton
-                icon={<PaymentsIcon fontSize="inherit" />}
-                label={t('payments.setupCta')}
-                onClick={() => setPaymentsOpen(true)}
-              />
-            </Box>
-          </Tooltip>
-
           {planAppType === 'booking' ? (
             <Tooltip title={t('bookingSlots.tooltip')} placement="right">
               <Box data-tour="action-data-panel">
@@ -836,7 +739,22 @@ export default function PreviewPage() {
                 />
               </Box>
             </Tooltip>
-          ) : planAppType === 'portfolio' || planAppType === 'landing_page' || planAppType === 'saas' ? null : (
+          ) : planAppType === 'portfolio' || planAppType === 'landing_page' || planAppType === 'saas' ? (
+            <Tooltip title={t('dashboard.tooltip')} placement="right">
+              <Box data-tour="action-data-panel">
+                <ActionButton
+                  icon={<DashboardIcon fontSize="inherit" />}
+                  label={t('dashboard.label')}
+                  onClick={() => {
+                    if (workspaceMode === 'dashboard') setDrawerMode('improvements');
+                    else { setDrawerMode('dashboard'); setDrawerOpen(false); }
+                  }}
+                  active={workspaceMode === 'dashboard'}
+                  color="#34d399"
+                />
+              </Box>
+            </Tooltip>
+          ) : (
             <Tooltip title={editDynamicError ? t('editMode.useCatalogTooltip') : t('catalog.tooltip')} placement="right">
               <Box data-tour="action-data-panel">
                 <ActionButton
@@ -887,42 +805,46 @@ export default function PreviewPage() {
           </Tooltip>
 
           <Tooltip title={t('logo.tooltip')} placement="right">
-            <Box data-tour="action-logo">
+            <Box data-tour="action-branding">
               <ActionButton
-                icon={<ImageIcon fontSize="inherit" />}
-                label={t('logo.label')}
-                onClick={() => { setLogoDialogOpen(true); setLogoPreview(null); setLogoFile(null); }}
-                color="#f5a97f"
+                icon={<AutoAwesomeIcon fontSize="inherit" />}
+                label="Визия"
+                onClick={() => {
+                  if (workspaceMode === 'branding') setDrawerMode('improvements');
+                  else { setDrawerMode('branding'); setDrawerOpen(false); }
+                }}
+                active={workspaceMode === 'branding'}
+                color="#a78bfa"
               />
             </Box>
           </Tooltip>
 
-          <Tooltip title={t('heroBg.tooltip')} placement="right">
-            <Box data-tour="action-hero">
+          <Divider sx={{ my: 0.5 }} />
+
+          <Tooltip title={t('analytics.title')} placement="right">
+            <Box data-tour="action-analytics">
               <ActionButton
-                icon={<WallpaperIcon fontSize="inherit" />}
-                label={t('heroBg.label')}
-                onClick={() => { setHeroBgDialogOpen(true); setHeroBgPreview(null); setHeroBgFile(null); }}
-                color="#f5a97f"
+                icon={<BarChartIcon fontSize="inherit" />}
+                label="Посещения"
+                onClick={() => navigate(`/analytics/${projectId}`)}
+                color="#60a5fa"
+              />
+            </Box>
+          </Tooltip>
+
+          <Tooltip title={t('payments.setupTooltip')} placement="right">
+            <Box data-tour="action-payments">
+              <ActionButton
+                icon={<PaymentsIcon fontSize="inherit" />}
+                label="Плащания"
+                onClick={() => setPaymentsOpen(true)}
+                color="#f59e0b"
               />
             </Box>
           </Tooltip>
 
           {projectPaid && (
-            <Tooltip title="Редактирай файловете" placement="right">
-              <Box data-tour="action-files">
-                <ActionButton
-                  icon={<DescriptionIcon fontSize="inherit" />}
-                  label="Файлове"
-                  onClick={() => navigate(`/files/${projectId}`)}
-                  color="#60a5fa"
-                />
-              </Box>
-            </Tooltip>
-          )}
-
-          {projectPaid && (
-            <Tooltip title="Настройки за имейли" placement="right">
+            <Tooltip title="Настройки за имейл" placement="right">
               <Box data-tour="action-email">
                 <ActionButton
                   icon={<MailOutlineIcon fontSize="inherit" />}
@@ -934,7 +856,16 @@ export default function PreviewPage() {
             </Tooltip>
           )}
 
-          <Divider sx={{ my: 0.5 }} />
+          <Tooltip title={t('preview.download')} placement="right">
+            <Box data-tour="action-download">
+              <ActionButton
+                icon={<DownloadIcon fontSize="inherit" />}
+                label={t('preview.download')}
+                onClick={handleDownload}
+                color="#f5a97f"
+              />
+            </Box>
+          </Tooltip>
 
           <Tooltip title={t('preview.refresh')} placement="right">
             <Box data-tour="action-refresh">
@@ -966,6 +897,8 @@ export default function PreviewPage() {
               onBackToPreview={() => setDrawerMode('improvements')}
               onRefreshPreview={() => setRefreshKey((k) => k + 1)}
               onHostingUpdated={() => loadProject().catch(() => {})}
+              onOpenLogoUpload={() => setLogoDialogOpen(true)}
+              onOpenHeroUpload={() => setHeroBgDialogOpen(true)}
             />
           ) : (
             <>

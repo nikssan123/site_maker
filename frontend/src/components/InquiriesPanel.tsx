@@ -10,6 +10,7 @@ import {
   Stack,
   Tooltip,
   Typography,
+  alpha,
 } from '@mui/material';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -87,8 +88,9 @@ export default function InquiriesPanel({ projectId }: { projectId: string }) {
         sx={{
           p: 2,
           borderRadius: 3,
-          borderColor: 'rgba(52,211,153,0.22)',
-          background: 'linear-gradient(135deg, rgba(236,253,245,0.92), rgba(255,255,255,0.98))',
+          borderColor: (theme) => alpha(theme.palette.secondary.main, 0.24),
+          background: (theme) =>
+            `linear-gradient(135deg, ${alpha(theme.palette.secondary.main, 0.12)}, ${alpha(theme.palette.primary.main, 0.08)})`,
         }}
       >
         <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} gap={1.25}>
@@ -101,8 +103,8 @@ export default function InquiriesPanel({ projectId }: { projectId: string }) {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                bgcolor: 'rgba(52,211,153,0.14)',
-                color: '#059669',
+                bgcolor: (theme) => alpha(theme.palette.secondary.main, 0.16),
+                color: 'secondary.main',
               }}
             >
               <MailOutlineIcon sx={{ fontSize: 18 }} />
@@ -158,8 +160,9 @@ export default function InquiriesPanel({ projectId }: { projectId: string }) {
                 sx={{
                   p: 1.75,
                   borderRadius: 3,
-                  borderColor: 'rgba(148,163,184,0.20)',
-                  boxShadow: '0 10px 30px rgba(15,23,42,0.04)',
+                  borderColor: 'rgba(255,255,255,0.08)',
+                  bgcolor: 'rgba(255,255,255,0.02)',
+                  boxShadow: 'none',
                 }}
               >
                 <Stack direction="row" alignItems="flex-start" gap={1.25}>
