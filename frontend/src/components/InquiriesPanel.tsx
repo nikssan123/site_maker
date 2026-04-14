@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Box,
-  Typography,
-  Stack,
-  Paper,
   Alert,
+  Box,
   Button,
   Chip,
   CircularProgress,
   IconButton,
+  Paper,
+  Stack,
   Tooltip,
+  Typography,
 } from '@mui/material';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -27,14 +27,13 @@ async function readJsonOrExplain<T>(res: Response): Promise<T> {
   const text = await res.text();
   if (contentType.includes('text/html') || /^\s*</.test(text)) {
     throw new Error(
-      'Този проект не предоставя API `GET /api/inquiries` (връща HTML вместо JSON). ' +
-      'Уверете се, че контактната форма се записва в база данни и че `server.js` има модел/маршрут `inquiries`.',
+      'Този проект не връща правилни данни за запитванията. Проверете дали контактната форма записва съобщенията.',
     );
   }
   try {
     return JSON.parse(text) as T;
   } catch {
-    throw new Error(`Невалиден отговор от сървъра (очаква се JSON): ${text.slice(0, 120)}`);
+    throw new Error(`Невалиден отговор от сървъра: ${text.slice(0, 120)}`);
   }
 }
 
@@ -53,7 +52,7 @@ export default function InquiriesPanel({ projectId }: { projectId: string }) {
       if (!res.ok) throw new Error((await res.text()).slice(0, 300));
       const data = await readJsonOrExplain<Inquiry[]>(res);
       setRows(Array.isArray(data) ? data : []);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError((e instanceof Error ? e.message : String(e)) || 'Грешка при зареждане.');
       setRows([]);
     } finally {
@@ -63,7 +62,6 @@ export default function InquiriesPanel({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [API_BASE]);
 
   const del = async (id: number) => {
@@ -73,7 +71,7 @@ export default function InquiriesPanel({ projectId }: { projectId: string }) {
       const res = await fetch(`${API_BASE}/api/inquiries/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error((await res.text()).slice(0, 300));
       await load();
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError((e instanceof Error ? e.message : String(e)) || 'Грешка при изтриване.');
     } finally {
       setSaving(false);
@@ -84,58 +82,96 @@ export default function InquiriesPanel({ projectId }: { projectId: string }) {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, borderColor: 'rgba(52,211,153,0.25)' }}>
-        <Stack direction="row" alignItems="center" gap={1}>
-          <MailOutlineIcon sx={{ fontSize: 16, color: '#34d399' }} />
-          <Typography variant="subtitle2" fontWeight={800} sx={{ fontSize: 13 }}>
-            Запитвания
-          </Typography>
-          <Chip
-            size="small"
-            label={`${rows.length} общо`}
-            sx={{ ml: 'auto', height: 22, fontSize: 11, bgcolor: 'rgba(52,211,153,0.10)', border: '1px solid rgba(52,211,153,0.22)' }}
-          />
+      <Paper
+        variant="outlined"
+        sx={{
+          p: 2,
+          borderRadius: 3,
+          borderColor: 'rgba(52,211,153,0.22)',
+          background: 'linear-gradient(135deg, rgba(236,253,245,0.92), rgba(255,255,255,0.98))',
+        }}
+      >
+        <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} gap={1.25}>
+          <Stack direction="row" alignItems="center" gap={1}>
+            <Box
+              sx={{
+                width: 38,
+                height: 38,
+                borderRadius: 2.5,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                bgcolor: 'rgba(52,211,153,0.14)',
+                color: '#059669',
+              }}
+            >
+              <MailOutlineIcon sx={{ fontSize: 18 }} />
+            </Box>
+            <Box>
+              <Typography variant="subtitle1" fontWeight={800}>
+                Запитвания
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Тук виждаш новите съобщения от формата за контакт.
+              </Typography>
+            </Box>
+          </Stack>
+          <Stack direction="row" gap={1} sx={{ ml: { sm: 'auto' } }}>
+            <Chip
+              size="small"
+              label={`${rows.length} общо`}
+              sx={{ height: 24, fontSize: 11, bgcolor: 'rgba(52,211,153,0.10)', border: '1px solid rgba(52,211,153,0.22)' }}
+            />
+            <Button size="small" variant="outlined" onClick={load} disabled={loading || saving}>
+              Обнови
+            </Button>
+          </Stack>
         </Stack>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75, lineHeight: 1.5 }}>
-          Показва съобщенията от контактната форма. API: <code>/api/inquiries</code>
-        </Typography>
       </Paper>
 
-      <Box sx={{ flex: 1, overflow: 'auto', mt: 1.5 }}>
+      <Box sx={{ flex: 1, overflow: 'auto', mt: 1.5, pr: 0.25 }}>
         {error && (
           <Alert severity="error" sx={{ mb: 1.5 }}>
             {error}
           </Alert>
         )}
 
-        <Stack direction="row" justifyContent="flex-end" mb={1}>
-          <Button size="small" variant="outlined" onClick={load} disabled={loading || saving}>
-            Обнови
-          </Button>
-        </Stack>
-
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
             <CircularProgress size={18} />
           </Box>
         ) : sorted.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            Все още няма запитвания.
-          </Typography>
+          <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, textAlign: 'center' }}>
+            <Typography variant="body1" fontWeight={700}>
+              Все още няма запитвания
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
+              Когато някой ти пише от формата за контакт, съобщението ще се покаже тук.
+            </Typography>
+          </Paper>
         ) : (
-          <Stack gap={1}>
+          <Stack gap={1.25}>
             {sorted.map((r) => (
-              <Paper key={r.id} variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
+              <Paper
+                key={r.id}
+                variant="outlined"
+                sx={{
+                  p: 1.75,
+                  borderRadius: 3,
+                  borderColor: 'rgba(148,163,184,0.20)',
+                  boxShadow: '0 10px 30px rgba(15,23,42,0.04)',
+                }}
+              >
                 <Stack direction="row" alignItems="flex-start" gap={1.25}>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="subtitle2" fontWeight={800} sx={{ fontSize: 13 }}>
+                    <Typography variant="subtitle2" fontWeight={800} sx={{ fontSize: 14 }}>
                       {r.name || '—'}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
                       {r.email || '—'}
                       {r.createdAt ? ` • ${String(r.createdAt)}` : ''}
                     </Typography>
-                    <Typography variant="body2" color="text.primary" sx={{ mt: 1, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+                    <Typography variant="body2" color="text.primary" sx={{ mt: 1.25, whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
                       {r.message || '—'}
                     </Typography>
                   </Box>
@@ -155,4 +191,3 @@ export default function InquiriesPanel({ projectId }: { projectId: string }) {
     </Box>
   );
 }
-

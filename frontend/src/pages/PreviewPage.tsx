@@ -33,11 +33,7 @@ import WallpaperIcon from '@mui/icons-material/Wallpaper';
 
 import AppLogo from '../components/AppLogo';
 import PreviewFrame from '../components/PreviewFrame';
-import CatalogPanel from '../components/CatalogPanel';
-import BookingSlotsPanel from '../components/BookingSlotsPanel';
-import InquiriesPanel from '../components/InquiriesPanel';
-import BlogPanel from '../components/BlogPanel';
-import DashboardPanel from '../components/DashboardPanel';
+import AdminWorkspace, { type AdminWorkspaceMode } from '../components/AdminWorkspace';
 import IterationBar from '../components/IterationBar';
 import ProjectCheckout from '../components/UpgradeGate';
 import PaymentsSetupDialog from '../components/PaymentsSetupDialog';
@@ -47,7 +43,6 @@ import IterationPlanCard from '../components/IterationPlanCard';
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 import { useProjectStore } from '../store/project';
-import HostingPanel from '../components/HostingPanel';
 import { Joyride } from 'react-joyride';
 import { usePreviewTour } from '../hooks/usePreviewTour';
 
@@ -151,7 +146,7 @@ export default function PreviewPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [downloadPreparingOpen, setDownloadPreparingOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(() => !window.matchMedia('(max-width:899.95px)').matches);
-  const [drawerMode, setDrawerMode] = useState<'improvements' | 'catalog' | 'booking_slots' | 'inquiries' | 'blog' | 'dashboard' | 'hosting'>('improvements');
+  const [drawerMode, setDrawerMode] = useState<'improvements' | AdminWorkspaceMode>('improvements');
   const [iterateChat, setIterateChat] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
   const [pendingIterate, setPendingIterate] = useState<null | {
     summary: string;
@@ -409,6 +404,8 @@ export default function PreviewPage() {
 
   const canDownloadZip = store.projectPaid || store.allowUnpaidDownload;
   const isProjectLocked = !store.projectPaid && !store.allowUnpaidDownload;
+  const workspaceMode = drawerMode === 'improvements' ? null : drawerMode;
+  const workspaceOpen = workspaceMode !== null;
 
   const handleDownload = async () => {
     if (!canDownloadZip) {
@@ -746,14 +743,14 @@ export default function PreviewPage() {
                       icon={<CloudDoneIcon fontSize="inherit" />}
                       label={t('preview.hosted')}
                       onClick={() => {
-                        if (drawerOpen && drawerMode === 'hosting') {
-                          setDrawerOpen(false);
+                        if (workspaceMode === 'hosting') {
+                          setDrawerMode('improvements');
                         } else {
                           setDrawerMode('hosting');
-                          setDrawerOpen(true);
+                          setDrawerOpen(false);
                         }
                       }}
-                      active={drawerOpen && drawerMode === 'hosting'}
+                      active={workspaceMode === 'hosting'}
                       color="#a855f7"
                     />
                   </Box>
@@ -801,10 +798,10 @@ export default function PreviewPage() {
                   icon={<CalendarMonthIcon fontSize="inherit" />}
                   label={t('bookingSlots.label')}
                   onClick={() => {
-                    if (drawerOpen && drawerMode === 'booking_slots') setDrawerOpen(false);
-                    else { setDrawerMode('booking_slots'); setDrawerOpen(true); }
+                    if (workspaceMode === 'booking_slots') setDrawerMode('improvements');
+                    else { setDrawerMode('booking_slots'); setDrawerOpen(false); }
                   }}
-                  active={drawerOpen && drawerMode === 'booking_slots'}
+                  active={workspaceMode === 'booking_slots'}
                   color="#34d399"
                 />
               </Box>
@@ -816,10 +813,10 @@ export default function PreviewPage() {
                   icon={<ArticleIcon fontSize="inherit" />}
                   label={t('blog.label')}
                   onClick={() => {
-                    if (drawerOpen && drawerMode === 'blog') setDrawerOpen(false);
-                    else { setDrawerMode('blog'); setDrawerOpen(true); }
+                    if (workspaceMode === 'blog') setDrawerMode('improvements');
+                    else { setDrawerMode('blog'); setDrawerOpen(false); }
                   }}
-                  active={drawerOpen && drawerMode === 'blog'}
+                  active={workspaceMode === 'blog'}
                   color="#34d399"
                 />
               </Box>
@@ -831,10 +828,10 @@ export default function PreviewPage() {
                   icon={<DashboardIcon fontSize="inherit" />}
                   label={t('dashboard.label')}
                   onClick={() => {
-                    if (drawerOpen && drawerMode === 'dashboard') setDrawerOpen(false);
-                    else { setDrawerMode('dashboard'); setDrawerOpen(true); }
+                    if (workspaceMode === 'dashboard') setDrawerMode('improvements');
+                    else { setDrawerMode('dashboard'); setDrawerOpen(false); }
                   }}
-                  active={drawerOpen && drawerMode === 'dashboard'}
+                  active={workspaceMode === 'dashboard'}
                   color="#34d399"
                 />
               </Box>
@@ -847,10 +844,10 @@ export default function PreviewPage() {
                   label={t('catalog.label')}
                   onClick={() => {
                     setEditDynamicError(false);
-                    if (drawerOpen && drawerMode === 'catalog') setDrawerOpen(false);
-                    else { setDrawerMode('catalog'); setDrawerOpen(true); }
+                    if (workspaceMode === 'catalog') setDrawerMode('improvements');
+                    else { setDrawerMode('catalog'); setDrawerOpen(false); }
                   }}
-                  active={drawerOpen && drawerMode === 'catalog'}
+                  active={workspaceMode === 'catalog'}
                   pulsing={editDynamicError}
                   color="#34d399"
                 />
@@ -865,10 +862,10 @@ export default function PreviewPage() {
                   icon={<MailOutlineIcon fontSize="inherit" />}
                   label={t('inquiries.label')}
                   onClick={() => {
-                    if (drawerOpen && drawerMode === 'inquiries') setDrawerOpen(false);
-                    else { setDrawerMode('inquiries'); setDrawerOpen(true); }
+                    if (workspaceMode === 'inquiries') setDrawerMode('improvements');
+                    else { setDrawerMode('inquiries'); setDrawerOpen(false); }
                   }}
-                  active={drawerOpen && drawerMode === 'inquiries'}
+                  active={workspaceMode === 'inquiries'}
                   color="#34d399"
                 />
               </Box>
@@ -955,56 +952,75 @@ export default function PreviewPage() {
           data-tour="preview-frame"
           sx={{ flex: 1, overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}
         >
-          {planNeedsPayments && !paymentsConfigured && (
-            <Alert
-              severity="warning"
-              sx={{ borderRadius: 0, flexShrink: 0 }}
-              action={
-                <Button size="small" color="inherit" onClick={() => setPaymentsOpen(true)}>
-                  {t('payments.setupCta')}
-                </Button>
-              }
-            >
-              {t('payments.notConfiguredBanner')}
-            </Alert>
-          )}
-          {editToken && (
-            <Box sx={{
-              display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 0.75,
-              background: 'rgba(245,169,127,0.12)', borderBottom: '1px solid rgba(245,169,127,0.3)',
-              flexShrink: 0,
-            }}>
-              <EditIcon sx={{ fontSize: 14, color: '#f5a97f' }} />
-              <Typography variant="caption" sx={{ color: '#f5a97f', fontWeight: 600, flex: 1 }}>
-                {editSaving ? t('editMode.saving') : t('editMode.active')}
-              </Typography>
-              {editSaving && <CircularProgress size={12} sx={{ color: '#f5a97f' }} />}
-              <Button size="small" sx={{ fontSize: 11, color: '#f5a97f', py: 0.25 }} onClick={exitEditMode}>
-                {t('editMode.exit')}
-              </Button>
-            </Box>
-          )}
-          <Box sx={{ flex: 1, overflow: 'hidden' }}>
-            {store.runPort != null ? (
-              <PreviewFrame key={refreshKey} projectId={projectId} port={store.runPort ?? 0} editToken={editToken} />
-            ) : (
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                <CircularProgress />
+          {workspaceOpen ? (
+            <AdminWorkspace
+              mode={workspaceMode}
+              projectId={projectId}
+              planAppType={planAppType}
+              planHasContactForm={planHasContactForm}
+              projectPaid={projectPaid}
+              projectHosted={projectHosted}
+              runPort={store.runPort ?? null}
+              adminApiToken={adminApiToken}
+              onModeChange={setDrawerMode}
+              onBackToPreview={() => setDrawerMode('improvements')}
+              onRefreshPreview={() => setRefreshKey((k) => k + 1)}
+              onHostingUpdated={() => loadProject().catch(() => {})}
+            />
+          ) : (
+            <>
+              {planNeedsPayments && !paymentsConfigured && (
+                <Alert
+                  severity="warning"
+                  sx={{ borderRadius: 0, flexShrink: 0 }}
+                  action={
+                    <Button size="small" color="inherit" onClick={() => setPaymentsOpen(true)}>
+                      {t('payments.setupCta')}
+                    </Button>
+                  }
+                >
+                  {t('payments.notConfiguredBanner')}
+                </Alert>
+              )}
+              {editToken && (
+                <Box sx={{
+                  display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 0.75,
+                  background: 'rgba(245,169,127,0.12)', borderBottom: '1px solid rgba(245,169,127,0.3)',
+                  flexShrink: 0,
+                }}>
+                  <EditIcon sx={{ fontSize: 14, color: '#f5a97f' }} />
+                  <Typography variant="caption" sx={{ color: '#f5a97f', fontWeight: 600, flex: 1 }}>
+                    {editSaving ? t('editMode.saving') : t('editMode.active')}
+                  </Typography>
+                  {editSaving && <CircularProgress size={12} sx={{ color: '#f5a97f' }} />}
+                  <Button size="small" sx={{ fontSize: 11, color: '#f5a97f', py: 0.25 }} onClick={exitEditMode}>
+                    {t('editMode.exit')}
+                  </Button>
+                </Box>
+              )}
+              <Box sx={{ flex: 1, overflow: 'hidden' }}>
+                {store.runPort != null ? (
+                  <PreviewFrame key={refreshKey} projectId={projectId} port={store.runPort ?? 0} editToken={editToken} />
+                ) : (
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                    <CircularProgress />
+                  </Box>
+                )}
               </Box>
-            )}
-          </Box>
+            </>
+          )}
         </Box>
 
         {/* ── Right drawer (collapsible on desktop, overlay on mobile) ── */}
         <Box
           sx={{
             display: { xs: 'none', md: 'flex' },
-            width: drawerOpen ? DRAWER_WIDTH : 0,
+            width: drawerOpen && !workspaceOpen ? DRAWER_WIDTH : 0,
             flexShrink: 0,
             overflow: 'hidden',
             transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
             flexDirection: 'column',
-            borderLeft: drawerOpen ? '1px solid' : 'none',
+            borderLeft: drawerOpen && !workspaceOpen ? '1px solid' : 'none',
             borderColor: 'divider',
             bgcolor: 'background.paper',
           }}
@@ -1012,98 +1028,17 @@ export default function PreviewPage() {
           <Box sx={{ width: DRAWER_WIDTH, display: 'flex', flexDirection: 'column', height: '100%' }}>
 
 
-            {/* Panel header */}
             <Box sx={{ px: 2, py: 1.25, display: 'flex', alignItems: 'center', gap: 1, borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
-              {drawerMode === 'catalog' ? (
-                <StorefrontIcon sx={{ fontSize: 15, color: '#34d399' }} />
-              ) : drawerMode === 'booking_slots' ? (
-                <CalendarMonthIcon sx={{ fontSize: 15, color: '#34d399' }} />
-              ) : drawerMode === 'inquiries' ? (
-                <MailOutlineIcon sx={{ fontSize: 15, color: '#34d399' }} />
-              ) : drawerMode === 'blog' ? (
-                <ArticleIcon sx={{ fontSize: 15, color: '#34d399' }} />
-              ) : drawerMode === 'dashboard' ? (
-                <DashboardIcon sx={{ fontSize: 15, color: '#34d399' }} />
-              ) : drawerMode === 'hosting' ? (
-                <CloudDoneIcon sx={{ fontSize: 15, color: '#a855f7' }} />
-              ) : (
-                <AutoFixHighIcon sx={{ fontSize: 15, color: 'primary.main' }} />
-              )}
+              <AutoFixHighIcon sx={{ fontSize: 15, color: 'primary.main' }} />
               <Typography variant="subtitle2" fontWeight={700} sx={{ fontSize: 13, flex: 1 }}>
-                {drawerMode === 'catalog'
-                  ? t('catalog.label')
-                  : drawerMode === 'booking_slots'
-                  ? t('bookingSlots.label')
-                  : drawerMode === 'inquiries'
-                  ? t('inquiries.label')
-                  : drawerMode === 'blog'
-                  ? t('blog.label')
-                  : drawerMode === 'dashboard'
-                  ? t('dashboard.label')
-                  : drawerMode === 'hosting'
-                  ? t('preview.hosted')
-                  : t('iteration.barLabel')}
+                {t('iteration.barLabel')}
               </Typography>
               <IconButton size="small" onClick={() => setDrawerOpen(false)} sx={{ mr: -0.5 }}>
                 <ChevronRightIcon fontSize="small" />
               </IconButton>
             </Box>
 
-            {/* Catalog mode */}
-            {drawerMode === 'catalog' && (
-              <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                <CatalogPanel
-                  projectId={projectId}
-                  runPort={store.runPort ?? null}
-                  adminApiToken={adminApiToken}
-                  onDataChange={() => setRefreshKey((k) => k + 1)}
-                />
-              </Box>
-            )}
-
-            {/* Booking slots mode */}
-            {drawerMode === 'booking_slots' && (
-              <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', p: 1.5 }}>
-                <BookingSlotsPanel projectId={projectId} adminApiToken={adminApiToken} />
-              </Box>
-            )}
-
-            {/* Inquiries mode */}
-            {drawerMode === 'inquiries' && (
-              <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', p: 1.5 }}>
-                <InquiriesPanel projectId={projectId} />
-              </Box>
-            )}
-
-            {/* Blog mode */}
-            {drawerMode === 'blog' && (
-              <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                <BlogPanel projectId={projectId} runPort={store.runPort ?? null} />
-              </Box>
-            )}
-
-            {/* Dashboard mode */}
-            {drawerMode === 'dashboard' && (
-              <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                <DashboardPanel projectId={projectId} runPort={store.runPort ?? null} />
-              </Box>
-            )}
-
-            {/* Hosting mode */}
-            {drawerMode === 'hosting' && (
-              <Box sx={{ flex: 1, overflow: 'auto' }}>
-                <HostingPanel
-                  projectId={projectId}
-                  hosted={projectHosted}
-                  paid={projectPaid}
-                  onUpdated={() => loadProject().catch(() => {})}
-                />
-              </Box>
-            )}
-
-            {/* Improvements mode */}
-            {drawerMode === 'improvements' && (
-              <>
+            <>
                 {/* Scrollable middle */}
                 <Box
                   data-tour="drawer-improvements"
@@ -1251,14 +1186,13 @@ export default function PreviewPage() {
                     onBuyIteration={handleBuyIteration}
                   />
                 </Box>
-              </>
-            )}
+            </>
           </Box>
         </Box>
         {pvMobile && (
           <Drawer
             anchor="right"
-            open={drawerOpen}
+            open={drawerOpen && !workspaceOpen}
             onClose={() => setDrawerOpen(false)}
             PaperProps={{ sx: { width: '85vw', maxWidth: DRAWER_WIDTH, bgcolor: 'background.paper', backgroundImage: 'none' } }}
           >
@@ -1352,7 +1286,7 @@ export default function PreviewPage() {
                   : planAppType === 'dashboard' ? 'dashboard'
                   : 'catalog',
                 );
-                setDrawerOpen(true);
+                setDrawerOpen(false);
               }}
               sx={{ fontWeight: 700, whiteSpace: 'nowrap', ml: 1 }}
             >

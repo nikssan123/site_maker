@@ -1,7 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Box, Typography, Button, CircularProgress, Alert, Stack, Divider,
-  Table, TableBody, TableCell, TableHead, TableRow, Paper, Chip,
+  Alert,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Paper,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Typography,
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import BarChartIcon from '@mui/icons-material/BarChart';
@@ -78,22 +89,61 @@ export default function DashboardPanel({ projectId, runPort }: Props) {
     );
   }
 
+  const totalRecords = Object.values(modelData).reduce((sum, rows) => sum + rows.length, 0);
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      <Paper
+        variant="outlined"
+        sx={{
+          mx: 1.5,
+          mt: 1.5,
+          p: 2,
+          borderRadius: 3,
+          borderColor: 'rgba(59,130,246,0.18)',
+          background: 'linear-gradient(135deg, rgba(239,246,255,0.95), rgba(255,255,255,0.98))',
+        }}
+      >
+        <Stack direction={{ xs: 'column', md: 'row' }} gap={1.5} alignItems={{ xs: 'flex-start', md: 'center' }}>
+          <Stack direction="row" alignItems="center" gap={1}>
+            <Box
+              sx={{
+                width: 40,
+                height: 40,
+                borderRadius: 2.5,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                bgcolor: 'rgba(59,130,246,0.14)',
+                color: '#2563eb',
+              }}
+            >
+              <BarChartIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Box>
+              <Typography variant="subtitle1" fontWeight={800}>
+                Overview
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Quick look at the content currently saved in your site.
+              </Typography>
+            </Box>
+          </Stack>
 
-      <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
-        <Typography variant="body2" color="text.secondary" sx={{ flex: 1, fontWeight: 600 }}>
-          {models.length} {t('dashboard.models')}
-        </Typography>
-        <Button
-          size="small" startIcon={<RefreshIcon sx={{ fontSize: 14 }} />}
-          onClick={() => fetchAll(models)}
-          sx={{ fontSize: 11, py: 0.4 }}
-        >
-          {t('dashboard.refresh')}
-        </Button>
-      </Box>
-      <Divider />
+          <Stack direction="row" gap={1} sx={{ ml: { md: 'auto' }, flexWrap: 'wrap' }}>
+            <Chip label={`${models.length} ${t('dashboard.models')}`} size="small" />
+            <Chip label={`${totalRecords} ${t('dashboard.records')}`} size="small" />
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<RefreshIcon sx={{ fontSize: 14 }} />}
+              onClick={() => fetchAll(models)}
+            >
+              {t('dashboard.refresh')}
+            </Button>
+          </Stack>
+        </Stack>
+      </Paper>
 
       <Box sx={{ flex: 1, overflow: 'auto', p: 1.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
         {models.map((m) => {
@@ -106,22 +156,33 @@ export default function DashboardPanel({ projectId, runPort }: Props) {
           const displayCols = allKeys.slice(0, 4);
 
           return (
-            <Paper key={m.name} variant="outlined" sx={{ borderRadius: 1.5, overflow: 'hidden' }}>
-              <Box sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 1, bgcolor: 'action.hover' }}>
-                <BarChartIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-                <Typography variant="caption" fontWeight={700} sx={{ flex: 1, fontSize: 12 }}>
+            <Paper
+              key={m.name}
+              variant="outlined"
+              sx={{
+                borderRadius: 3,
+                overflow: 'hidden',
+                borderColor: 'rgba(148,163,184,0.18)',
+                boxShadow: '0 10px 30px rgba(15,23,42,0.04)',
+              }}
+            >
+              <Box sx={{ px: 2, py: 1.25, display: 'flex', alignItems: 'center', gap: 1, bgcolor: 'rgba(248,250,252,0.9)' }}>
+                <BarChartIcon sx={{ fontSize: 15, color: 'text.secondary' }} />
+                <Typography variant="subtitle2" fontWeight={800} sx={{ flex: 1 }}>
                   {m.name}
                 </Typography>
                 <Chip
                   label={`${rows.length} ${t('dashboard.records')}`}
                   size="small"
-                  sx={{ height: 18, fontSize: 10, '& .MuiChip-label': { px: 0.75 } }}
+                  sx={{ height: 22, fontSize: 11, '& .MuiChip-label': { px: 0.9 } }}
                 />
               </Box>
 
               {rows.length === 0 ? (
-                <Box sx={{ px: 1.5, py: 1.5 }}>
-                  <Typography variant="caption" color="text.disabled">{t('dashboard.noData')}</Typography>
+                <Box sx={{ px: 2, py: 2 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    {t('dashboard.noData')}
+                  </Typography>
                 </Box>
               ) : displayCols.length === 0 ? null : (
                 <Box sx={{ overflowX: 'auto' }}>
@@ -129,7 +190,7 @@ export default function DashboardPanel({ projectId, runPort }: Props) {
                     <TableHead>
                       <TableRow>
                         {displayCols.map((col) => (
-                          <TableCell key={col} sx={{ py: 0.5, fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                          <TableCell key={col} sx={{ py: 1, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap' }}>
                             {col}
                           </TableCell>
                         ))}
@@ -142,8 +203,18 @@ export default function DashboardPanel({ projectId, runPort }: Props) {
                             const fieldDef = m.fields?.find((f) => f.name === col);
                             const type = fieldDef?.type ?? inferFieldType(col);
                             return (
-                              <TableCell key={col} sx={{ py: 0.5, fontSize: 11, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                                align={type === 'number' ? 'right' : 'left'}>
+                              <TableCell
+                                key={col}
+                                sx={{
+                                  py: 1,
+                                  fontSize: 12,
+                                  maxWidth: 180,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                                align={type === 'number' ? 'right' : 'left'}
+                              >
                                 {formatCell(row[col], type)}
                               </TableCell>
                             );
@@ -153,7 +224,7 @@ export default function DashboardPanel({ projectId, runPort }: Props) {
                     </TableBody>
                   </Table>
                   {rows.length > MAX_ROWS && (
-                    <Box sx={{ px: 1.5, py: 0.75 }}>
+                    <Box sx={{ px: 2, py: 1 }}>
                       <Typography variant="caption" color="text.disabled">
                         +{rows.length - MAX_ROWS} {t('dashboard.moreRows')}
                       </Typography>
