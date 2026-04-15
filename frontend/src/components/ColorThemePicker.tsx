@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import {
-  Box, Typography, Stack, Button, CircularProgress, Tooltip, Popper, Paper, ClickAwayListener,
+  Box, Typography, Stack, Button, CircularProgress, Popper, Paper, ClickAwayListener, InputBase,
 } from '@mui/material';
 import { HexColorPicker } from 'react-colorful';
 import CheckIcon from '@mui/icons-material/Check';
@@ -16,20 +16,28 @@ export interface ColorTheme {
 }
 
 export const THEME_PRESETS: ColorTheme[] = [
-  { name: 'Midnight',  primary: '#818cf8', secondary: '#c084fc', background: '#0f0b1e' },
-  { name: 'Noir',      primary: '#f1f5f9', secondary: '#64748b', background: '#0a0a0a' },
-  { name: 'Ocean',     primary: '#22d3ee', secondary: '#6366f1', background: '#0a0f1a' },
-  { name: 'Sunset',    primary: '#f97316', secondary: '#ec4899', background: '#120b0a' },
-  { name: 'Mint',      primary: '#34d399', secondary: '#2dd4bf', background: '#0a1210' },
-  { name: 'Rose',      primary: '#fb7185', secondary: '#f0abfc', background: '#130a10' },
+  { name: 'Midnight', primary: '#818cf8', secondary: '#c084fc', background: '#0f0b1e' },
+  { name: 'Noir', primary: '#f1f5f9', secondary: '#64748b', background: '#0a0a0a' },
+  { name: 'Ocean', primary: '#22d3ee', secondary: '#6366f1', background: '#0a0f1a' },
+  { name: 'Sunset', primary: '#f97316', secondary: '#ec4899', background: '#120b0a' },
+  { name: 'Mint', primary: '#34d399', secondary: '#2dd4bf', background: '#0a1210' },
+  { name: 'Rose', primary: '#fb7185', secondary: '#f0abfc', background: '#130a10' },
 ];
+
+interface Props {
+  value: ColorTheme;
+  onChange: (theme: ColorTheme) => void;
+  onExtractFromImage: (dataUrl: string) => Promise<ColorTheme>;
+}
+
+type PickerKey = 'primary' | 'secondary' | 'background';
 
 function compressImage(dataUrl: string): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
-      const MAX = 512;
-      const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+      const maxSide = 512;
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
       const canvas = document.createElement('canvas');
       canvas.width = Math.round(img.width * scale);
       canvas.height = Math.round(img.height * scale);
@@ -41,34 +49,107 @@ function compressImage(dataUrl: string): Promise<string> {
   });
 }
 
-interface Props {
-  value: ColorTheme;
-  onChange: (theme: ColorTheme) => void;
-  onExtractFromImage: (dataUrl: string) => Promise<ColorTheme>;
+function expandHex(hex: string): string {
+  if (hex.length === 4) {
+    return `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`.toLowerCase();
+  }
+  return hex.toLowerCase();
 }
 
-type PickerKey = 'primary' | 'secondary' | 'background';
+function rgbStringToHex(value: string): string | null {
+  const match = value.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*[\d.]+\s*)?\)$/i);
+  if (!match) return null;
+  const rgb = match.slice(1, 4).map((part) => Math.max(0, Math.min(255, Math.round(Number(part)))));
+  if (rgb.some((part) => Number.isNaN(part))) return null;
+  return `#${rgb.map((part) => part.toString(16).padStart(2, '0')).join('')}`;
+}
+
+function normalizeColorValue(input: string): string | null {
+  const value = input.trim();
+  if (!value) return null;
+  if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value)) return expandHex(value);
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  const sentinel = '#010203';
+  ctx.fillStyle = sentinel;
+  ctx.fillStyle = value;
+  const normalized = String(ctx.fillStyle).trim().toLowerCase();
+
+  if (normalized === sentinel && value.toLowerCase() !== sentinel) return null;
+  if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(normalized)) return expandHex(normalized);
+  return rgbStringToHex(normalized);
+}
 
 export default function ColorThemePicker({ value, onChange, onExtractFromImage }: Props) {
   const { t } = useTranslation();
   const [showCustom, setShowCustom] = useState(false);
-  const [customPrimary, setCustomPrimary] = useState(value.primary);
-  const [customSecondary, setCustomSecondary] = useState(value.secondary);
-  const [customBg, setCustomBg] = useState(value.background);
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
   const [openPicker, setOpenPicker] = useState<PickerKey | null>(null);
+  const [customColors, setCustomColors] = useState<Record<PickerKey, string>>({
+    primary: value.primary,
+    secondary: value.secondary,
+    background: value.background,
+  });
+  const [customInputs, setCustomInputs] = useState<Record<PickerKey, string>>({
+    primary: value.primary,
+    secondary: value.secondary,
+    background: value.background,
+  });
+  const fileRef = useRef<HTMLInputElement>(null);
   const anchorRefs = useRef<Partial<Record<PickerKey, HTMLElement | null>>>({});
 
-  const isPreset = THEME_PRESETS.some((p) => p.name === value.name);
+  const isPreset = THEME_PRESETS.some((preset) => preset.name === value.name);
   const isCustom = value.name === 'Custom';
   const isExtracted = !isPreset && !isCustom;
+  const customTheme: ColorTheme = {
+    name: 'Custom',
+    primary: customColors.primary,
+    secondary: customColors.secondary,
+    background: customColors.background,
+  };
+
+  useEffect(() => {
+    setCustomColors({
+      primary: value.primary,
+      secondary: value.secondary,
+      background: value.background,
+    });
+    setCustomInputs({
+      primary: value.primary,
+      secondary: value.secondary,
+      background: value.background,
+    });
+  }, [value.background, value.primary, value.secondary]);
+
+  useEffect(() => {
+    if (!showCustom) setOpenPicker(null);
+  }, [showCustom]);
+
+  const setCustomColor = (key: PickerKey, nextValue: string) => {
+    setCustomInputs((prev) => ({ ...prev, [key]: nextValue }));
+    const normalized = normalizeColorValue(nextValue);
+    if (!normalized) return;
+    setCustomColors((prev) => ({ ...prev, [key]: normalized }));
+  };
+
+  const colorInputValid = (key: PickerKey) => Boolean(normalizeColorValue(customInputs[key]));
 
   const renderThemeTile = (theme: ColorTheme, selected: boolean, label: string, key: string) => (
     <Box
       key={key}
-      onClick={() => { onChange(theme); setShowCustom(false); }}
+      onClick={() => {
+        if (theme.name === 'Custom') {
+          setShowCustom(true);
+          onChange(customTheme);
+          return;
+        }
+        onChange(theme);
+        setShowCustom(false);
+      }}
       sx={{
         cursor: 'pointer',
         borderRadius: 2,
@@ -110,20 +191,6 @@ export default function ColorThemePicker({ value, onChange, onExtractFromImage }
     </Box>
   );
 
-  // Close picker when custom panel is hidden
-  useEffect(() => { if (!showCustom) setOpenPicker(null); }, [showCustom]);
-
-  const applyCustom = () => {
-    onChange({ name: 'Custom', primary: customPrimary, secondary: customSecondary, background: customBg });
-    setShowCustom(false);
-  };
-
-  const colorState: Record<PickerKey, { val: string; set: (v: string) => void }> = {
-    primary:    { val: customPrimary,    set: setCustomPrimary },
-    secondary:  { val: customSecondary,  set: setCustomSecondary },
-    background: { val: customBg,         set: setCustomBg },
-  };
-
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -146,6 +213,11 @@ export default function ColorThemePicker({ value, onChange, onExtractFromImage }
     reader.readAsDataURL(file);
   };
 
+  const applyCustom = () => {
+    onChange(customTheme);
+    setShowCustom(false);
+  };
+
   return (
     <Box>
       <Typography
@@ -155,15 +227,14 @@ export default function ColorThemePicker({ value, onChange, onExtractFromImage }
         {t('theme.sectionTitle')}
       </Typography>
 
-      {/* Preset grid — 3 columns × 2 rows */}
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, mt: 1 }}>
         {isExtracted && renderThemeTile(value, true, value.name, '__extracted')}
         {THEME_PRESETS.map((preset) => (
           renderThemeTile(preset, value.name === preset.name, t(`theme.presets.${preset.name}`), preset.name)
         ))}
+        {renderThemeTile(customTheme, isCustom || showCustom, t('theme.customColors'), '__custom')}
       </Box>
 
-      {/* Logo upload zone — primary affordance */}
       <Box
         component="label"
         sx={{
@@ -216,13 +287,12 @@ export default function ColorThemePicker({ value, onChange, onExtractFromImage }
         />
       </Box>
 
-      {/* Secondary action */}
       <Box mt={0.75}>
         <Button
           size="small"
           variant="outlined"
           startIcon={<ColorLensIcon sx={{ fontSize: '14px !important' }} />}
-          onClick={() => setShowCustom((v) => !v)}
+          onClick={() => setShowCustom((prev) => !prev)}
           sx={{
             fontSize: 12,
             py: 0.5,
@@ -244,16 +314,15 @@ export default function ColorThemePicker({ value, onChange, onExtractFromImage }
         </Typography>
       )}
 
-      {/* Custom color pickers */}
       {showCustom && (
         <Box mt={1.25}>
           <Stack direction="row" gap={1.5} mb={1.25}>
             {(['primary', 'secondary', 'background'] as PickerKey[]).map((key) => {
               const label = t(`theme.${key}`);
-              const { val } = colorState[key];
+              const colorValue = customColors[key];
               const isOpen = openPicker === key;
               return (
-                <Box key={key} sx={{ textAlign: 'center' }}>
+                <Box key={key} sx={{ textAlign: 'center', flex: 1, minWidth: 0 }}>
                   <Typography variant="caption" sx={{ color: '#64748b', fontSize: 10, display: 'block', mb: 0.5 }}>
                     {label}
                   </Typography>
@@ -261,26 +330,44 @@ export default function ColorThemePicker({ value, onChange, onExtractFromImage }
                     ref={(el) => { anchorRefs.current[key] = el as HTMLElement | null; }}
                     onClick={() => setOpenPicker(isOpen ? null : key)}
                     sx={{
-                      width: 52,
+                      width: '100%',
                       height: 36,
                       borderRadius: 1.5,
-                      bgcolor: val,
+                      bgcolor: colorValue,
                       border: `2px solid ${isOpen ? 'rgba(99,102,241,0.7)' : 'rgba(255,255,255,0.15)'}`,
                       cursor: 'pointer',
                       transition: 'border-color 0.15s',
-                      boxShadow: isOpen ? `0 0 0 2px rgba(99,102,241,0.3)` : 'none',
+                      boxShadow: isOpen ? '0 0 0 2px rgba(99,102,241,0.3)' : 'none',
                       '&:hover': { borderColor: 'rgba(255,255,255,0.4)' },
                     }}
                   />
                   <Typography variant="caption" sx={{ color: '#475569', fontSize: 9, mt: 0.4, display: 'block', fontFamily: 'monospace' }}>
-                    {val}
+                    {colorValue}
                   </Typography>
+                  <InputBase
+                    value={customInputs[key]}
+                    onChange={(e) => setCustomColor(key, e.target.value)}
+                    placeholder="#6366f1 / rgb(99,102,241)"
+                    sx={{
+                      mt: 0.75,
+                      width: '100%',
+                      fontSize: 11,
+                      color: colorInputValid(key) ? '#e2e8f0' : '#fca5a5',
+                      borderRadius: 1.25,
+                      px: 1,
+                      py: 0.55,
+                      bgcolor: 'rgba(255,255,255,0.04)',
+                      border: '1px solid',
+                      borderColor: colorInputValid(key) ? 'rgba(255,255,255,0.1)' : 'rgba(248,113,113,0.4)',
+                      '& input': { p: 0, fontFamily: 'monospace' },
+                      '& input::placeholder': { color: '#64748b', opacity: 1 },
+                    }}
+                  />
                 </Box>
               );
             })}
           </Stack>
 
-          {/* Floating picker popover */}
           {(['primary', 'secondary', 'background'] as PickerKey[]).map((key) => (
             <Popper
               key={key}
@@ -293,8 +380,8 @@ export default function ColorThemePicker({ value, onChange, onExtractFromImage }
               <ClickAwayListener onClickAway={() => setOpenPicker(null)}>
                 <Paper elevation={8} sx={{ p: 1, borderRadius: 2, border: '1px solid rgba(255,255,255,0.1)' }}>
                   <HexColorPicker
-                    color={colorState[key].val}
-                    onChange={colorState[key].set}
+                    color={customColors[key]}
+                    onChange={(next) => setCustomColor(key, next)}
                     style={{ width: 180, height: 160 }}
                   />
                 </Paper>
@@ -307,6 +394,7 @@ export default function ColorThemePicker({ value, onChange, onExtractFromImage }
             variant="contained"
             fullWidth
             onClick={applyCustom}
+            disabled={!colorInputValid('primary') || !colorInputValid('secondary') || !colorInputValid('background')}
             sx={{ fontSize: 11, py: 0.6, bgcolor: 'rgba(99,102,241,0.8)', '&:hover': { bgcolor: '#6366f1' } }}
           >
             {t('theme.apply')}
@@ -314,7 +402,6 @@ export default function ColorThemePicker({ value, onChange, onExtractFromImage }
         </Box>
       )}
 
-      {/* Badge for non-preset themes */}
       {!isPreset && !isExtracted && (
         <Stack direction="row" gap={0.75} mt={0.75} alignItems="center">
           <Box sx={{ width: 8, height: 8, borderRadius: 0.4, bgcolor: value.background, border: '1px solid rgba(255,255,255,0.2)' }} />

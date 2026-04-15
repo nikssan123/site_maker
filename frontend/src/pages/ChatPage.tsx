@@ -148,6 +148,7 @@ export default function ChatPage() {
 
   const { logout, user, updateUser } = useAuthStore();
   const store = useProjectStore();
+  const shouldAutoStartGeneration = searchParams.get('generate') === 'true';
 
   const normalizePlanLanguages = useCallback((languages: unknown): string[] => {
     const values = Array.isArray(languages) ? languages : [];
@@ -162,6 +163,15 @@ export default function ChatPage() {
 
     return normalized.includes('bg') ? normalized : ['bg', ...normalized];
   }, []);
+
+  const isSessionGenerating = useCallback((session: any) => (
+    session?.status === 'generating' ||
+    session?.project?.status === 'generating' ||
+    session?.project?.status === 'building' ||
+    session?.project?.status === 'running' ||
+    session?.status === 'error' ||
+    session?.project?.status === 'error'
+  ), []);
 
   const emitGenerationEvent = useCallback(
     (sessionId: string, event: any) => {
@@ -243,29 +253,46 @@ export default function ChatPage() {
     api.get<any>(`/sessions/${paramSessionId}`)
       .then((session) => {
         applySessionFromApi(session);
-        const isSessionGenerating =
-          session.status === 'generating' ||
-          session.project?.status === 'generating' ||
-          session.project?.status === 'building' ||
-          session.project?.status === 'running' ||
-          session.status === 'error' ||
-          session.project?.status === 'error';
+        const sessionHasGenerationState = isSessionGenerating(session);
+        const preservePendingGenerationUi =
+          shouldAutoStartGeneration &&
+          !sessionHasGenerationState &&
+          buildStartedInTabRef.current;
+
+        if (preservePendingGenerationUi) {
+          setPlanVisible(false);
+          setChatUnlockedForEditing(false);
+          store.setPhase('generating');
+          store.setIsStreaming(true);
+          store.clearStreamBuffer();
+          useProjectStore.setState({
+            generationSteps: INITIAL_STEPS.map((step) => (
+              step.step === 1
+                ? { ...step, status: 'running' as const }
+                : { ...step, status: 'pending' as const }
+            )),
+            fixAttempts: [],
+          });
+          store.setGenerationFriendlyMessage(t('chat.buildStarted'));
+          return;
+        }
+
         if (session.plan) {
-          setPlanVisible(!isSessionGenerating);
+          setPlanVisible(!sessionHasGenerationState);
           setChatUnlockedForEditing(false);
         } else {
           setChatUnlockedForEditing(true);
         }
       })
       .catch(() => {});
-  }, [paramSessionId]);
+  }, [isSessionGenerating, paramSessionId, shouldAutoStartGeneration, store, t]);
 
   useEffect(() => {
-    if (searchParams.get('generate') === 'true' && paramSessionId) {
+    if (shouldAutoStartGeneration && paramSessionId) {
       store.setSessionId(paramSessionId);
       startGeneration(paramSessionId);
     }
-  }, []);
+  }, [paramSessionId, shouldAutoStartGeneration]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

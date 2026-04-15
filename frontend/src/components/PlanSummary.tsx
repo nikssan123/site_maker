@@ -188,12 +188,67 @@ const LANGUAGE_OPTIONS = [
 ] as const;
 
 export default function PlanSummary({ plan, onConfirm, onEdit, onLanguagesChange, onSocialLinksChange, loading, ctaLabel, colorTheme, onThemeChange, onExtractFromImage }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const data = normalizePlanData(plan?.data);
   const hasStructured =
     !!(data.appType || data.style || data.tech || data.hasDatabase || data.pages.length || data.features.length);
   const selectedLanguages = data.languages ?? ['bg'];
   const links = data.socialLinks ?? {};
+  const getLanguageLabel = (code: string) => {
+    const bgLabels: Record<string, string> = {
+      bg: 'Български',
+      en: 'Английски',
+      de: 'Немски',
+      fr: 'Френски',
+      es: 'Испански',
+      it: 'Италиански',
+      pt: 'Португалски',
+      ro: 'Румънски',
+      nl: 'Нидерландски',
+      el: 'Гръцки',
+      pl: 'Полски',
+      cs: 'Чешки',
+      sk: 'Словашки',
+      hu: 'Унгарски',
+      hr: 'Хърватски',
+      sl: 'Словенски',
+      sr: 'Сръбски',
+      da: 'Датски',
+      sv: 'Шведски',
+      fi: 'Финландски',
+      et: 'Естонски',
+      lv: 'Латвийски',
+      lt: 'Литовски',
+    };
+    const enLabels: Record<string, string> = {
+      bg: 'Bulgarian',
+      en: 'English',
+      de: 'German',
+      fr: 'French',
+      es: 'Spanish',
+      it: 'Italian',
+      pt: 'Portuguese',
+      ro: 'Romanian',
+      nl: 'Dutch',
+      el: 'Greek',
+      pl: 'Polish',
+      cs: 'Czech',
+      sk: 'Slovak',
+      hu: 'Hungarian',
+      hr: 'Croatian',
+      sl: 'Slovenian',
+      sr: 'Serbian',
+      da: 'Danish',
+      sv: 'Swedish',
+      fi: 'Finnish',
+      et: 'Estonian',
+      lv: 'Latvian',
+      lt: 'Lithuanian',
+    };
+
+    if (i18n.resolvedLanguage === 'bg') return bgLabels[code] ?? code.toUpperCase();
+    return t(`plan.languageNames.${code}`, { defaultValue: enLabels[code] ?? code.toUpperCase() });
+  };
 
   return (
     <Box
@@ -348,7 +403,7 @@ export default function PlanSummary({ plan, onConfirm, onEdit, onLanguagesChange
                 onChange={(event) => onLanguagesChange(normalizeLanguages(event.target.value))}
                 renderValue={(selected) =>
                   normalizeLanguages(selected)
-                    .map((code) => LANGUAGE_OPTIONS.find((option) => option.code === code)?.label ?? code.toUpperCase())
+                    .map(getLanguageLabel)
                     .join(', ')
                 }
                 sx={{
@@ -379,7 +434,7 @@ export default function PlanSummary({ plan, onConfirm, onEdit, onLanguagesChange
                       sx={{ color: 'rgba(255,255,255,0.45)', '&.Mui-checked': { color: '#10b981' } }}
                     />
                     <ListItemText
-                      primary={option.label}
+                      primary={getLanguageLabel(option.code)}
                       secondary={option.code === 'bg'
                         ? t('plan.languagesBulgarianDefault', { defaultValue: 'Preselected by default' })
                         : undefined}
