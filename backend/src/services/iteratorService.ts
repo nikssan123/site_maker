@@ -360,8 +360,4 @@ Rules:
   await publishEvent(sessionId, { type: 'user_progress', message: ITERATE_FINISHING });
   await publishEvent(sessionId, { type: 'preview_updated', port: runResult.port, projectId: project.id });
 
-  await prisma.message.create({ data: { sessionId, role: 'user', content: changeRequest } });
-  await prisma.message.create({
-    data: { sessionId, role: 'assistant', content: 'Промените са приложени успешно.' },
-  });
 }
