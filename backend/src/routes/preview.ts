@@ -422,7 +422,51 @@ function applyContentPatch(projectId: string, original: string, replacement: str
     }
   }
 
-  // Pass 3 â€” rendered-text JSX match for multiline hero copy split by inline tags or <br/>.
+  // Pass 3 — rendered-text JSX match for multiline hero copy split by inline tags or <br/>.
+  // When the body contains inline children (<span>, <a>, …), we MUST NOT replace the whole
+  // body — that erases those elements and their attributes. Instead, locate the single
+  // JSXText segment whose normalized value equals the normalized `original` and replace only
+  // that segment. If no single segment accounts for the match, refuse with 422.
+  const hasInlineJsxChildren = (body: string): boolean => /<[A-Za-z]/.test(body);
+  // Split a JSX body into text segments, skipping over tags and {expressions}. Returns
+  // [{ text, start, end }] where start/end are offsets within `body`.
+  const splitJsxTextSegments = (body: string): Array<{ text: string; start: number; end: number }> => {
+    const segments: Array<{ text: string; start: number; end: number }> = [];
+    let i = 0;
+    let segStart = 0;
+    let braceDepth = 0;
+    while (i < body.length) {
+      const ch = body[i];
+      if (braceDepth === 0 && ch === '<') {
+        if (i > segStart) segments.push({ text: body.slice(segStart, i), start: segStart, end: i });
+        const tagEnd = body.indexOf('>', i);
+        if (tagEnd === -1) { i = body.length; break; }
+        i = tagEnd + 1;
+        segStart = i;
+        continue;
+      }
+      if (ch === '{') {
+        if (braceDepth === 0 && i > segStart) {
+          segments.push({ text: body.slice(segStart, i), start: segStart, end: i });
+        }
+        braceDepth++;
+        i++;
+        continue;
+      }
+      if (ch === '}') {
+        braceDepth = Math.max(0, braceDepth - 1);
+        i++;
+        if (braceDepth === 0) segStart = i;
+        continue;
+      }
+      i++;
+    }
+    if (braceDepth === 0 && segStart < body.length) {
+      segments.push({ text: body.slice(segStart), start: segStart, end: body.length });
+    }
+    return segments;
+  };
+
   for (const { path: fp, content } of jsxFirst) {
     if (!/\.[jt]sx$/i.test(fp)) continue;
     const elementRegex = /<([A-Za-z][\w.]*)\b[^>]*>([\s\S]*?)<\/\1>/g;
@@ -432,9 +476,36 @@ function applyContentPatch(projectId: string, original: string, replacement: str
       const body = match[2] ?? '';
       if (!body.trim() || !canReplaceInlineJsxBody(body)) continue;
       if (normalizeRenderedJsxText(body) !== norm) continue;
-      const updated = full.replace(body, replacementExpression);
-      fs.writeFileSync(fp, content.slice(0, match.index) + updated + content.slice(match.index + full.length), 'utf8');
-      return;
+
+      const bodyStart = match.index + full.indexOf(body);
+
+      if (!hasInlineJsxChildren(body)) {
+        // Pure text body — safe to replace the whole body with a JSX string literal.
+        const updated = full.replace(body, replacementExpression);
+        fs.writeFileSync(fp, content.slice(0, match.index) + updated + content.slice(match.index + full.length), 'utf8');
+        return;
+      }
+
+      // Body contains inline children. Find the single JSXText segment whose normalized
+      // value equals `norm`. If found, replace only that segment; otherwise refuse.
+      const segments = splitJsxTextSegments(body);
+      const matchingSegments = segments.filter((s) => normalizePatchText(s.text) === norm);
+      if (matchingSegments.length === 1) {
+        const seg = matchingSegments[0];
+        // Preserve leading/trailing whitespace of the segment so JSX formatting stays intact.
+        const leading = seg.text.match(/^\s*/)?.[0] ?? '';
+        const trailing = seg.text.match(/\s*$/)?.[0] ?? '';
+        const replaced = leading + replacement + trailing;
+        const absStart = bodyStart + seg.start;
+        const absEnd = bodyStart + seg.end;
+        fs.writeFileSync(fp, content.slice(0, absStart) + replaced + content.slice(absEnd), 'utf8');
+        return;
+      }
+
+      throw new AppError(
+        422,
+        'This text is split across inline elements (e.g. <span>). Click directly on the specific word you want to change and edit it alone.',
+      );
     }
   }
 

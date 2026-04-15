@@ -176,6 +176,7 @@ export default function PreviewPage() {
   const [editToken, setEditToken] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [editDynamicError, setEditDynamicError] = useState(false);
+  const [editError, setEditError] = useState<{ message: string; severity: 'error' | 'warning' } | null>(null);
   const [logoDialogOpen, setLogoDialogOpen] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -249,7 +250,7 @@ export default function PreviewPage() {
       const { token } = await api.getEditToken(projectId);
       setEditToken(token);
     } catch (e: any) {
-      alert(e.message ?? t('errors.generic'));
+      setEditError({ message: e.message ?? t('errors.generic'), severity: 'error' });
     }
   };
 
@@ -388,7 +389,13 @@ export default function PreviewPage() {
         if (status === 409) {
           setEditDynamicError(true);
         } else {
-          alert(msg || t('errors.generic'));
+          // 404 (original text not found) and 422 (split across inline elements) carry
+          // user-facing messages from the backend. 5xx fall back to generic.
+          const userFacing = status === 404 || status === 422;
+          setEditError({
+            message: userFacing && msg ? msg : t('editMode.patchFailed'),
+            severity: status === 422 ? 'warning' : 'error',
+          });
         }
       } finally {
         setEditSaving(false);
@@ -412,7 +419,7 @@ export default function PreviewPage() {
       await api.download(`/preview/${projectId}/download`, `project-${projectId}.zip`);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : t('preview.downloadFailed');
-      alert(msg);
+      setEditError({ message: msg, severity: 'error' });
     } finally {
       setDownloadPreparingOpen(false);
     }
@@ -424,7 +431,7 @@ export default function PreviewPage() {
       const { url } = await api.post<{ url: string }>('/billing/iteration-checkout', { projectId, quantity });
       window.location.href = url;
     } catch (err: any) {
-      alert(err.message);
+      setEditError({ message: err.message ?? t('errors.generic'), severity: 'error' });
     }
   };
 
@@ -1243,6 +1250,27 @@ export default function PreviewPage() {
           }
         >
           {t('editMode.dynamicContentError')}
+        </Alert>
+      </Snackbar>
+
+      {/* Generic edit / preview error — replaces browser alert() */}
+      <Snackbar
+        open={editError !== null}
+        autoHideDuration={8000}
+        onClose={(_, reason) => {
+          if (reason === 'clickaway') return;
+          setEditError(null);
+        }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        sx={{ mb: 2 }}
+      >
+        <Alert
+          severity={editError?.severity ?? 'error'}
+          variant="filled"
+          onClose={() => setEditError(null)}
+          sx={{ alignItems: 'center', maxWidth: 520 }}
+        >
+          {editError?.message}
         </Alert>
       </Snackbar>
 

@@ -251,6 +251,7 @@ const en = {
     saving: 'Saving changes…',
     openCatalog: 'Open content',
     dynamicContentError: 'This content is managed from the admin workspace. Open the correct panel to edit it safely.',
+    patchFailed: 'The change could not be saved. Try again or edit via chat.',
   },
   payments: {
     setupTooltip: 'Set up payments',

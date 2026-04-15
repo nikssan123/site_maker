@@ -15,6 +15,9 @@ export const EDIT_OVERLAY_SCRIPT = `
   // ── Hover highlight ──────────────────────────────────────────────────────────
   var _hlEl = null;
   var _hlSaved = {};
+  // Overlay rect (div) used when we want to highlight a specific text-node range
+  // rather than a whole element — e.g. when the element has inline <span> children.
+  var _hlRect = null;
 
   function isEditable(el) {
     if (!el || el === document.body || el === document.documentElement) return false;
@@ -24,6 +27,38 @@ export const EDIT_OVERLAY_SCRIPT = `
     if (el.tagName === 'UL' || el.tagName === 'OL' || el.tagName === 'DL') return false;
     var hasText = el.textContent && el.textContent.trim().length > 0;
     return hasText && isLeafLike(el);
+  }
+
+  // True when the element contains element children (not just text nodes).
+  // In that case we want to scope edits to a single text node to preserve inline JSX.
+  function hasInlineChildElements(el) {
+    if (!el || !el.childNodes) return false;
+    for (var i = 0; i < el.childNodes.length; i++) {
+      if (el.childNodes[i].nodeType === 1) return true;
+    }
+    return false;
+  }
+
+  // Resolve the text node under a point, if any. Uses caretPositionFromPoint
+  // (Firefox/modern) with a caretRangeFromPoint fallback (WebKit/Chromium).
+  function textNodeFromPoint(x, y) {
+    try {
+      if (document.caretPositionFromPoint) {
+        var pos = document.caretPositionFromPoint(x, y);
+        if (pos && pos.offsetNode && pos.offsetNode.nodeType === 3) return pos.offsetNode;
+      } else if (document.caretRangeFromPoint) {
+        var rng = document.caretRangeFromPoint(x, y);
+        if (rng && rng.startContainer && rng.startContainer.nodeType === 3) return rng.startContainer;
+      }
+    } catch (_) { /* ignore */ }
+    return null;
+  }
+
+  // Build a Range covering the entire text content of a text node.
+  function rangeForTextNode(textNode) {
+    var r = document.createRange();
+    r.selectNodeContents(textNode);
+    return r;
   }
 
   function applyHighlight(el) {
@@ -42,12 +77,49 @@ export const EDIT_OVERLAY_SCRIPT = `
     el.style.setProperty('box-shadow',     '0 0 0 4px rgba(99,102,241,.15)', 'important');
   }
 
+  // Highlight a specific text node's bounding rect (overlay div, no layout impact).
+  function applyRangeHighlight(textNode) {
+    clearHighlight();
+    try {
+      var rect = rangeForTextNode(textNode).getBoundingClientRect();
+      if (!rect || (rect.width === 0 && rect.height === 0)) return;
+      var div = document.createElement('div');
+      div.setAttribute('data-edit-overlay-rect', '1');
+      div.setAttribute('style',
+        'all:initial!important;' +
+        'position:fixed!important;' +
+        'pointer-events:none!important;' +
+        'z-index:2147483645!important;' +
+        'left:' + (rect.left - 2) + 'px!important;' +
+        'top:' + (rect.top - 2) + 'px!important;' +
+        'width:' + (rect.width + 4) + 'px!important;' +
+        'height:' + (rect.height + 4) + 'px!important;' +
+        'border:2px solid #6366f1!important;' +
+        'border-radius:4px!important;' +
+        'box-shadow:0 0 0 4px rgba(99,102,241,.15)!important;'
+      );
+      document.body.appendChild(div);
+      _hlRect = div;
+      // Show pointer cursor on the parent element while the rect is up
+      var parent = textNode.parentElement;
+      if (parent) {
+        _hlEl = parent;
+        _hlSaved = { cursor: parent.style.cursor };
+        parent.style.setProperty('cursor', 'pointer', 'important');
+      }
+    } catch (_) { /* ignore */ }
+  }
+
   function clearHighlight() {
+    if (_hlRect) {
+      try { _hlRect.remove(); } catch (_) { /* ignore */ }
+      _hlRect = null;
+    }
     if (!_hlEl) return;
-    _hlEl.style.outline       = _hlSaved.outline       || '';
-    _hlEl.style.outlineOffset = _hlSaved.outlineOffset || '';
-    _hlEl.style.cursor        = _hlSaved.cursor        || '';
-    _hlEl.style.boxShadow     = _hlSaved.boxShadow     || '';
+    if (_hlSaved.outline !== undefined)       _hlEl.style.outline       = _hlSaved.outline       || '';
+    if (_hlSaved.outlineOffset !== undefined) _hlEl.style.outlineOffset = _hlSaved.outlineOffset || '';
+    if (_hlSaved.cursor !== undefined)        _hlEl.style.cursor        = _hlSaved.cursor        || '';
+    if (_hlSaved.boxShadow !== undefined)     _hlEl.style.boxShadow     = _hlSaved.boxShadow     || '';
     _hlEl = null;
     _hlSaved = {};
   }
@@ -56,11 +128,21 @@ export const EDIT_OVERLAY_SCRIPT = `
     if (!window.__editActive) { clearHighlight(); return; }
     var card = document.getElementById(CARD_ID);
     if (card && card.contains(e.target)) { clearHighlight(); return; }
-    if (isEditable(e.target)) {
-      applyHighlight(e.target);
-    } else {
+    if (!isEditable(e.target)) { clearHighlight(); return; }
+    // If element has inline children (<span>, <a>, …), highlight only the text node
+    // under the cursor — that's what we'll actually edit on click.
+    if (e.target.tagName !== 'IMG' && hasInlineChildElements(e.target)) {
+      var tn = textNodeFromPoint(e.clientX, e.clientY);
+      if (tn && tn.nodeValue && tn.nodeValue.trim()) {
+        applyRangeHighlight(tn);
+        return;
+      }
+      // Cursor is over an inline child (e.g. directly on <span>). If that child
+      // itself is an editable leaf we'll highlight it normally — otherwise clear.
       clearHighlight();
+      return;
     }
+    applyHighlight(e.target);
   }, true);
 
   document.addEventListener('mouseleave', function () {
@@ -91,10 +173,18 @@ export const EDIT_OVERLAY_SCRIPT = `
     if (b) b.remove();
   }
 
-  function showCard(target, isImg) {
+  function showCard(target, isImg, explicitOriginal) {
     removeCard();
     clearHighlight(); // remove hover ring before the card opens
-    var original = isImg ? (target.getAttribute('src') || '') : target.innerText.trim();
+    var original;
+    if (isImg) {
+      original = target.getAttribute('src') || '';
+    } else if (typeof explicitOriginal === 'string') {
+      // Scoped edit: the original is a single text node's value (preserves inline siblings).
+      original = explicitOriginal;
+    } else {
+      original = target.innerText.trim();
+    }
 
     // Backdrop
     var backdrop = document.createElement('div');
@@ -328,6 +418,19 @@ export const EDIT_OVERLAY_SCRIPT = `
 
     if (!isImg && !isText) {
       // Non-editable click: swallowed (keeps edit mode active) but DON'T close card
+      return;
+    }
+
+    // If element has inline children, scope the edit to the single text node under the cursor.
+    if (!isImg && hasInlineChildElements(t)) {
+      var tn = textNodeFromPoint(e.clientX, e.clientY);
+      if (tn && tn.nodeValue && tn.nodeValue.trim()) {
+        // Pass the exact text node content (trimmed of leading/trailing whitespace
+        // only — interior whitespace is preserved to match source JSXText).
+        showCard(t, false, tn.nodeValue.replace(/^\s+|\s+$/g, ''));
+        return;
+      }
+      // No text node under the cursor (clicked gap between children) — ignore.
       return;
     }
 
