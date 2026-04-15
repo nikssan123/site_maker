@@ -332,6 +332,18 @@ FRONTEND (always):
 - All styling via sx={{}} prop — no CSS files, no Tailwind, no inline style={{}}
 - Use @mui/icons-material for all icons
 - React state for UI (useState, useEffect); no Redux or Zustand
+- Branding markers are REQUIRED so the platform can replace assets reliably:
+  - Every visible logo/brand slot in the app shell (navbar, footer, header, mobile drawer, etc.) MUST be wrapped exactly like:
+    {/* APPMAKER_LOGO_SLOT_START */}
+    <Box data-appmaker-logo-slot="true" sx={{ display: 'flex', alignItems: 'center' }}>
+      ...existing logo/brand JSX...
+    </Box>
+    {/* APPMAKER_LOGO_SLOT_END */}
+  - The main hero section MUST use a top-level Box with data-appmaker-hero="true" and its sx prop MUST contain this exact marker pair:
+    /* APPMAKER_HERO_BG_START */
+    ...hero background styles here...
+    /* APPMAKER_HERO_BG_END */
+  - Do NOT rename, remove, or alter these marker strings.
 - If hasDatabase: API calls MUST use fetch(import.meta.env.BASE_URL + 'api/products') — NEVER fetch('/api/products') with a leading slash (that bypasses the preview proxy). Define const API = import.meta.env.BASE_URL.replace(/\/$/, '') at the top of each file that calls the backend, then call fetch(API + '/api/products'). Show Skeleton during loading, Alert on error.
 - The "/" route MUST render meaningful content immediately (no blank/empty dark screen). The landing view should include real UI and, when hasDatabase is true, it should trigger the initial data fetch on first load (useEffect on mount) instead of only after the user clicks a navigation link.
 - If hasDatabase: ALL dynamic/business data shown in the UI (products, services, bookings, listings, prices, descriptions, etc.) MUST be fetched from the backend via server.js REST endpoints. The frontend MUST NOT contain hardcoded arrays/objects of domain data (no "const products = [...]", no inline lists of items, no JSON files with seed rows rendered by the UI). The only acceptable hardcoded frontend data is UI-only (labels, navigation structure, enums for filters, etc.).
@@ -767,6 +779,7 @@ server.js requirements (MUST follow the exact skeleton from the system prompt):
     prompt += `\n\nPAYMENTS: This app needs a real checkout flow. Use the PAYMENTS pattern from the system prompt (VITE_PAYMENTS_ENABLED + VITE_PAYMENTS_URL). Show the "not configured" Alert when PAYMENTS_ENABLED is false.`;
   }
 
+  prompt += `\n\nBRANDING MARKERS (REQUIRED): mark every visible logo/brand render with the exact APPMAKER_LOGO_SLOT_START/END JSX comments and use <Box data-appmaker-logo-slot="true"> as the wrapper. Mark the main hero root with data-appmaker-hero="true" and include the exact APPMAKER_HERO_BG_START/END comments inside its sx object around the hero background styles. Do not rename or omit these markers.`;
   prompt += `\n\nOutput: ONE JSON object {"files":{...}} — no markdown, no prose, no code fences.`;
   prompt += `\n\nЛокализация: всички потребителски низове в приложението на български език.`;
 
@@ -789,7 +802,7 @@ CRITICAL for "failed to resolve import" errors:
 4. ALWAYS return the updated package.json when you add or change any dependency — deps will be re-installed automatically.
 5. For @mui/icons-material: stick to common, well-known icons (Home, Search, Menu, Person, Settings, Phone, Email, Star, Favorite, ShoppingCart, ArrowForward, ArrowBack, Close, Check, Add, Delete, Edit, LocationOn, AccessTime, CalendarToday, etc.). Avoid obscure icons that may not exist.`
       : '';
-  return `Build/runtime error:\n\`\`\`\n${errorLog}\n\`\`\`${stepHint}\n\nCurrent source files:\n\n${fileList}`;
+  return `Build/runtime error:\n\`\`\`\n${errorLog}\n\`\`\`${stepHint}\n\nCurrent source files:\n\n${fileList}\n\nPreserve any APPMAKER_LOGO_SLOT_START/END and APPMAKER_HERO_BG_START/END markers that already exist; do not remove or rename them.`;
 }
 
 export function buildIteratorPrompt(
@@ -805,5 +818,5 @@ export function buildIteratorPrompt(
   const notes = notesRaw.length > 12000 ? `${notesRaw.slice(0, 12000)}\n\n…(truncated)…` : notesRaw;
   return `Plan:\n${JSON.stringify(plan, null, 2)}\n\nChange request: "${changeRequest}"\n\n` +
     (notes ? `Extra exploration context (internal):\n${notes}\n\n` : '') +
-    `Current files (SCOPED SUBSET):\n\n${fileList}\n\nHard constraints:\n- Keep UI/layout stable; do not restyle unrelated areas.\n- No surprise features; implement only what is requested.\n- Keep all existing Bulgarian user-visible strings Bulgarian; any new user-visible strings must be Bulgarian.\n- Prefer minimal diffs; avoid broad refactors.\n- You MAY create new frontend files when needed for the requested change, especially under src/components, src/pages, src/hooks, src/lib, src/features, src/styles, src/assets, or src/data.\n- Only create backend or config files when the request clearly requires them and the spec/exploration context points to the exact path.\n- If creating a new file, wire it into the existing scoped files instead of rewriting unrelated areas.\n\nЛокализация: запази и допълни потребителските текстове на български език.`;
+    `Current files (SCOPED SUBSET):\n\n${fileList}\n\nHard constraints:\n- Keep UI/layout stable; do not restyle unrelated areas.\n- No surprise features; implement only what is requested.\n- Keep all existing Bulgarian user-visible strings Bulgarian; any new user-visible strings must be Bulgarian.\n- Prefer minimal diffs; avoid broad refactors.\n- You MAY create new frontend files when needed for the requested change, especially under src/components, src/pages, src/hooks, src/lib, src/features, src/styles, src/assets, or src/data.\n- Only create backend or config files when the request clearly requires them and the spec/exploration context points to the exact path.\n- If creating a new file, wire it into the existing scoped files instead of rewriting unrelated areas.\n- Preserve any APPMAKER_LOGO_SLOT_START/END and APPMAKER_HERO_BG_START/END markers that already exist; do not remove or rename them.\n\nЛокализация: запази и допълни потребителските текстове на български език.`;
 }

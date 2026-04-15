@@ -251,6 +251,44 @@ function walkSourceFiles(projectDir: string): string[] {
   return results;
 }
 
+function ensureMuiBoxImport(content: string): string {
+  if (/import[^;]*\bBox\b[^;]*from\s+['"]@mui\/material['"]/.test(content)) return content;
+  const muiImportRegex = /(import\s*\{[^}]*)(}\s*from\s*['"]@mui\/material['"])/;
+  if (muiImportRegex.test(content)) {
+    return content.replace(muiImportRegex, '$1, Box $2');
+  }
+  return content;
+}
+
+function replaceMarkedLogoSlots(content: string, logoSrc: string): { content: string; count: number } {
+  const logoSlotRegex = /\{\/\*\s*APPMAKER_LOGO_SLOT_START\s*\*\/\}[\s\S]*?\{\/\*\s*APPMAKER_LOGO_SLOT_END\s*\*\/\}/g;
+  let count = 0;
+  const replaced = content.replace(logoSlotRegex, () => {
+    count += 1;
+    return `{/* APPMAKER_LOGO_SLOT_START */}
+<Box data-appmaker-logo-slot="true" sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+  <Box component="img" src="${logoSrc}" alt="Лого" sx={{ height: 36, width: 'auto', maxWidth: '100%', objectFit: 'contain', display: 'block' }} />
+</Box>
+{/* APPMAKER_LOGO_SLOT_END */}`;
+  });
+  return { content: count > 0 ? ensureMuiBoxImport(replaced) : content, count };
+}
+
+function replaceMarkedHeroBackground(content: string, bgSrc: string): { content: string; replaced: boolean } {
+  const heroBgRegex = /(\/\*\s*APPMAKER_HERO_BG_START\s*\*\/)([\s\S]*?)(\/\*\s*APPMAKER_HERO_BG_END\s*\*\/)/;
+  if (!heroBgRegex.test(content)) return { content, replaced: false };
+  const heroBgBlock = `/* APPMAKER_HERO_BG_START */
+backgroundImage: 'linear-gradient(rgba(0,0,0,0.55), rgba(0,0,0,0.55)), url(${bgSrc})',
+backgroundSize: 'cover',
+backgroundPosition: 'center',
+backgroundRepeat: 'no-repeat',
+/* APPMAKER_HERO_BG_END */`;
+  return {
+    content: content.replace(heroBgRegex, heroBgBlock),
+    replaced: true,
+  };
+}
+
 import {
   validateUserHostname,
   newVerificationToken,
@@ -808,6 +846,20 @@ router.post('/:projectId/replace-logo', requireAuth, async (req, res, next) => {
 
     for (const file of tsxFiles) {
       const content = fs.readFileSync(file, 'utf8');
+      const marked = replaceMarkedLogoSlots(content, logoSrc);
+      if (marked.count > 0) {
+        fs.writeFileSync(file, marked.content, 'utf8');
+        replaced = true;
+      }
+    }
+
+    if (replaced) {
+      await triggerRebuildAsync(project.id, 'logo-replace');
+      return res.json({ ok: true, autoPlaced: true, logoUrl: logoSrc });
+    }
+
+    for (const file of tsxFiles) {
+      const content = fs.readFileSync(file, 'utf8');
       if (!/<Toolbar/i.test(content) && !/<AppBar/i.test(content)) continue;
 
       // Pattern 1: <Typography ... component="..." ...>SiteName</Typography> inside toolbar area
@@ -910,6 +962,21 @@ router.post('/:projectId/replace-hero-bg', requireAuth, async (req, res, next) =
     // background/gradient that lives in the main page or App component (not the AppBar).
     // Common markers: minHeight: '...vh', background: 'linear-gradient', py: {xs: 8+}
     let replaced = false;
+
+    for (const file of tsxFiles) {
+      const content = fs.readFileSync(file, 'utf8');
+      const marked = replaceMarkedHeroBackground(content, bgSrc);
+      if (marked.replaced) {
+        fs.writeFileSync(file, marked.content, 'utf8');
+        replaced = true;
+        break;
+      }
+    }
+
+    if (replaced) {
+      await triggerRebuildAsync(project.id, 'hero-bg-replace');
+      return res.json({ ok: true, autoPlaced: true, imageUrl: bgSrc });
+    }
 
     for (const file of tsxFiles) {
       const content = fs.readFileSync(file, 'utf8');
