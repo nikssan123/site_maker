@@ -56,6 +56,7 @@ function WorkspaceNavButton({
         alignItems: 'center',
         gap: 1.25,
         p: 1.25,
+        minWidth: { xs: 220, md: 0 },
         borderRadius: 2.5,
         border: '1px solid',
         borderColor: (theme) =>
@@ -308,6 +309,7 @@ export default function AdminWorkspace({
         minHeight: 0,
         display: 'flex',
         flexDirection: { xs: 'column', md: 'row' },
+        overflow: 'auto',
         bgcolor: 'background.default',
         background:
           'radial-gradient(circle at top left, rgba(99,102,241,0.10), transparent 28%), radial-gradient(circle at bottom right, rgba(16,185,129,0.08), transparent 24%)',
@@ -325,7 +327,7 @@ export default function AdminWorkspace({
           display: 'flex',
           flexDirection: 'column',
           gap: 2,
-          overflow: 'auto',
+          overflow: { xs: 'visible', md: 'auto' },
         }}
       >
         <Box>
@@ -340,7 +342,18 @@ export default function AdminWorkspace({
           </Typography>
         </Box>
 
-        <Stack gap={1}>
+        <Stack
+          direction={{ xs: 'row', md: 'column' }}
+          gap={1}
+          sx={{
+            overflowX: { xs: 'auto', md: 'visible' },
+            overflowY: 'visible',
+            pb: { xs: 0.5, md: 0 },
+            pr: { xs: 0.5, md: 0 },
+            scrollbarWidth: 'thin',
+            '&::-webkit-scrollbar': { height: 6, width: 6 },
+          }}
+        >
           <WorkspaceNavButton
             icon={<DashboardIcon fontSize="small" />}
             title="Общ преглед"
@@ -421,7 +434,7 @@ export default function AdminWorkspace({
         <Paper
           variant="outlined"
           sx={{
-            mt: 'auto',
+            mt: { xs: 0, md: 'auto' },
             p: 1.5,
             borderRadius: 3,
             bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08),
@@ -440,7 +453,7 @@ export default function AdminWorkspace({
         </Paper>
       </Box>
 
-      <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, p: { xs: 1.25, md: 2 }, display: 'flex' }}>
+      <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, p: { xs: 1, md: 2 }, display: 'flex' }}>
         <Paper
           elevation={0}
           sx={{
@@ -475,7 +488,8 @@ export default function AdminWorkspace({
             sx={{
               flex: 1,
               minHeight: 0,
-              overflow: 'hidden',
+              overflow: 'auto',
+              WebkitOverflowScrolling: 'touch',
               p: mode === 'hosting' || mode === 'booking_slots' || mode === 'inquiries'
                 ? { xs: 1, md: 1.5 }
                 : 0,
