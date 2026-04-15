@@ -24,6 +24,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import HistoryIcon from '@mui/icons-material/History';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import DescriptionIcon from '@mui/icons-material/Description';
 
 import AppLogo from '../components/AppLogo';
 import PreviewFrame from '../components/PreviewFrame';
@@ -827,6 +828,17 @@ export default function PreviewPage() {
                 label={t('preview.download')}
                 onClick={handleDownload}
                 color="#f5a97f"
+              />
+            </Box>
+          </Tooltip>
+
+          <Tooltip title={t('files.title')} placement="right">
+            <Box data-tour="action-files">
+              <ActionButton
+                icon={<DescriptionIcon fontSize="inherit" />}
+                label={t('files.title')}
+                onClick={() => navigate(`/files/${projectId}`)}
+                color="#7dd3fc"
               />
             </Box>
           </Tooltip>
