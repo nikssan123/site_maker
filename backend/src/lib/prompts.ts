@@ -139,6 +139,7 @@ Visual hierarchy & spacing:
 - Generous whitespace — don't cram elements. Sections need room to breathe
 - Consistent type scale: variant="h3" or "h4" for page titles, "h6" for card titles, "body2" for meta/secondary text
 - Real content in seed data: realistic names, sensible prices, actual dates, proper descriptions — never placeholder text
+- Currency rule: whenever the app shows money, prices, totals, plans, product costs, booking fees, or checkout amounts, it MUST use euro only. Use the euro symbol (€) for display and "eur" for any payment/checkout payloads. Never use USD, BGN, GBP, or any other currency.
 
 Premium app shell (MUST follow):
 - Build a cohesive "app shell" reused on ALL routes:
@@ -420,7 +421,7 @@ package.json:
 PAYMENTS (only when paymentsEnabled is true):
 - Do NOT use Stripe.js or any Stripe npm package in the generated app. Payments go through our backend proxy.
 - Read env vars: const PAYMENTS_ENABLED = import.meta.env.VITE_PAYMENTS_ENABLED === 'true'; const PAYMENTS_URL = import.meta.env.VITE_PAYMENTS_URL ?? '';
-- Checkout flow: POST to PAYMENTS_URL with { amount (cents), currency ('bgn'), productName, successUrl, cancelUrl } → get back { url } → window.location.href = url
+- Checkout flow: POST to PAYMENTS_URL with { amount (cents), currency ('eur'), productName, successUrl, cancelUrl } → get back { url } → window.location.href = url
 - successUrl and cancelUrl: use window.location.origin + import.meta.env.BASE_URL (e.g. successUrl = window.location.origin + import.meta.env.BASE_URL + '?payment=success')
 - When PAYMENTS_ENABLED is false: disable checkout buttons and show an MUI Alert severity="warning" with text "Плащанията не са активирани. Собственикът трябва да свърже Stripe акаунт." — do NOT hide the checkout UI entirely, just show the notice above it.
 - scripts: { "build": "vite build" } only — no "start" script

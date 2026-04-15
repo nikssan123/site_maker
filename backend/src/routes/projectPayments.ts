@@ -193,7 +193,7 @@ router.post('/create-checkout-session/:projectId', async (req, res, next) => {
         mode: 'payment',
         line_items: [{
           price_data: {
-            currency: body.currency,
+            currency: 'eur',
             product_data: { name: body.productName },
             unit_amount: body.amount,
           },
