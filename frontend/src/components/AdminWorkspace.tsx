@@ -243,7 +243,7 @@ function BrandingPanel({
 function workspaceTitle(mode: AdminWorkspaceMode): string {
   switch (mode) {
     case 'catalog':
-      return 'Каталог';
+      return '\u041f\u0440\u043e\u0434\u0443\u043a\u0442\u0438';
     case 'booking_slots':
       return 'Свободни часове';
     case 'inquiries':
@@ -266,7 +266,7 @@ function workspaceTitle(mode: AdminWorkspaceMode): string {
 function workspaceSubtitle(mode: AdminWorkspaceMode): string {
   switch (mode) {
     case 'catalog':
-      return 'Управлявай данните и записите в приложението.';
+      return '\u0423\u043f\u0440\u0430\u0432\u043b\u044f\u0432\u0430\u0439 \u043f\u0440\u043e\u0434\u0443\u043a\u0442\u0438\u0442\u0435 \u0438 \u0437\u0430\u043f\u0438\u0441\u0438\u0442\u0435 \u0432 \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0435\u0442\u043e.';
     case 'booking_slots':
       return 'Поддържай графика си винаги актуален.';
     case 'inquiries':
@@ -371,7 +371,7 @@ export default function AdminWorkspace({
           {planAppType !== 'portfolio' && planAppType !== 'landing_page' && planAppType !== 'saas' && (
             <WorkspaceNavButton
               icon={<StorefrontIcon fontSize="small" />}
-              title="Каталог"
+              title="\u041f\u0440\u043e\u0434\u0443\u043a\u0442\u0438"
               subtitle="Управлявай продуктите, записите и съдържанието."
               active={mode === 'catalog'}
               onClick={() => onModeChange('catalog')}

@@ -14,17 +14,15 @@ import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
-import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import EditIcon from '@mui/icons-material/Edit';
 import StorefrontIcon from '@mui/icons-material/Storefront';
-import ArticleIcon from '@mui/icons-material/Article';
-import DashboardIcon from '@mui/icons-material/Dashboard';
 import HistoryIcon from '@mui/icons-material/History';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import DescriptionIcon from '@mui/icons-material/Description';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 
 import AppLogo from '../components/AppLogo';
 import PreviewFrame from '../components/PreviewFrame';
@@ -699,77 +697,85 @@ export default function PreviewPage() {
           </Tooltip>
 
           {planAppType === 'booking' ? (
-            <Tooltip title={t('bookingSlots.tooltip')} placement="right">
+            <Tooltip title="Admin" placement="right">
               <Box data-tour="action-data-panel">
                 <ActionButton
-                  icon={<CalendarMonthIcon fontSize="inherit" />}
-                  label={t('bookingSlots.label')}
+                  icon={<AdminPanelSettingsIcon fontSize="inherit" />}
+                  label="Admin"
                   onClick={() => {
-                    if (workspaceMode === 'booking_slots') setDrawerMode('improvements');
-                    else { setDrawerMode('booking_slots'); setDrawerOpen(false); }
+                    setEditDynamicError(false);
+                    if (workspaceOpen) setDrawerMode('improvements');
+                    else { setDrawerMode('dashboard'); setDrawerOpen(false); }
                   }}
-                  active={workspaceMode === 'booking_slots'}
+                  active={workspaceOpen}
+                  pulsing={editDynamicError}
                   color="#34d399"
                 />
               </Box>
             </Tooltip>
           ) : planAppType === 'blog' ? (
-            <Tooltip title={t('blog.tooltip')} placement="right">
+            <Tooltip title="Admin" placement="right">
               <Box data-tour="action-data-panel">
                 <ActionButton
-                  icon={<ArticleIcon fontSize="inherit" />}
-                  label={t('blog.label')}
+                  icon={<AdminPanelSettingsIcon fontSize="inherit" />}
+                  label="Admin"
                   onClick={() => {
-                    if (workspaceMode === 'blog') setDrawerMode('improvements');
-                    else { setDrawerMode('blog'); setDrawerOpen(false); }
+                    setEditDynamicError(false);
+                    if (workspaceOpen) setDrawerMode('improvements');
+                    else { setDrawerMode('dashboard'); setDrawerOpen(false); }
                   }}
-                  active={workspaceMode === 'blog'}
+                  active={workspaceOpen}
+                  pulsing={editDynamicError}
                   color="#34d399"
                 />
               </Box>
             </Tooltip>
           ) : planAppType === 'dashboard' ? (
-            <Tooltip title={t('dashboard.tooltip')} placement="right">
+            <Tooltip title="Admin" placement="right">
               <Box data-tour="action-data-panel">
                 <ActionButton
-                  icon={<DashboardIcon fontSize="inherit" />}
-                  label={t('dashboard.label')}
+                  icon={<AdminPanelSettingsIcon fontSize="inherit" />}
+                  label="Admin"
                   onClick={() => {
-                    if (workspaceMode === 'dashboard') setDrawerMode('improvements');
+                    setEditDynamicError(false);
+                    if (workspaceOpen) setDrawerMode('improvements');
                     else { setDrawerMode('dashboard'); setDrawerOpen(false); }
                   }}
-                  active={workspaceMode === 'dashboard'}
+                  active={workspaceOpen}
+                  pulsing={editDynamicError}
                   color="#34d399"
                 />
               </Box>
             </Tooltip>
           ) : planAppType === 'portfolio' || planAppType === 'landing_page' || planAppType === 'saas' ? (
-            <Tooltip title={t('dashboard.tooltip')} placement="right">
+            <Tooltip title="Admin" placement="right">
               <Box data-tour="action-data-panel">
                 <ActionButton
-                  icon={<DashboardIcon fontSize="inherit" />}
-                  label={t('dashboard.label')}
+                  icon={<AdminPanelSettingsIcon fontSize="inherit" />}
+                  label="Admin"
                   onClick={() => {
-                    if (workspaceMode === 'dashboard') setDrawerMode('improvements');
+                    setEditDynamicError(false);
+                    if (workspaceOpen) setDrawerMode('improvements');
                     else { setDrawerMode('dashboard'); setDrawerOpen(false); }
                   }}
-                  active={workspaceMode === 'dashboard'}
+                  active={workspaceOpen}
+                  pulsing={editDynamicError}
                   color="#34d399"
                 />
               </Box>
             </Tooltip>
           ) : (
-            <Tooltip title={editDynamicError ? 'Отвори панела Каталог за динамично съдържание' : 'Панел Каталог'} placement="right">
+            <Tooltip title="Admin" placement="right">
               <Box data-tour="action-data-panel">
                 <ActionButton
-                  icon={<StorefrontIcon fontSize="inherit" />}
-                  label="Каталог"
+                  icon={<AdminPanelSettingsIcon fontSize="inherit" />}
+                  label="Admin"
                   onClick={() => {
                     setEditDynamicError(false);
-                    if (workspaceMode === 'catalog') setDrawerMode('improvements');
-                    else { setDrawerMode('catalog'); setDrawerOpen(false); }
+                    if (workspaceOpen) setDrawerMode('improvements');
+                    else { setDrawerMode('dashboard'); setDrawerOpen(false); }
                   }}
-                  active={workspaceMode === 'catalog'}
+                  active={workspaceOpen}
                   pulsing={editDynamicError}
                   color="#34d399"
                 />
