@@ -318,7 +318,9 @@ Footer + social links (MUST):
 - The footer MUST show social media icons for the most popular platforms: Facebook, Instagram, TikTok, LinkedIn, YouTube, X (Twitter).
 - Read social links from the plan JSON: plan.socialLinks.{facebook,instagram,tiktok,linkedin,youtube,x}.
 - If a link is provided (non-empty), the icon MUST link to it.
-- If missing/empty, still render the icon but use href='#' (do not hide icons).
+- If a link is missing/empty, DO NOT render that platform at all.
+- Never render placeholder social icons, disabled social icons, or href='#' fallback links for missing networks.
+- The footer should only show the subset of social platforms that actually have links in plan.socialLinks.
 - Use @mui/icons-material icons for each platform and keep the footer visually consistent with the app style.
 This includes: button labels, page titles, navigation links, form placeholders, helper text, Snackbar/Alert/Dialog messages, empty-state copy, table column headers, loading messages, error messages, and ALL seed/sample data (names, descriptions, addresses, products, categories, etc.).
 The app MUST include a visible language switcher/dropdown so end users can change the active language.
