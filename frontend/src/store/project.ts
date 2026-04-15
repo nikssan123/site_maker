@@ -17,6 +17,7 @@ export interface PlanData {
     features: string[];
     style: string;
     tech: string;
+    languages?: string[];
     hasDatabase?: boolean;
     dataModels?: Array<{ name: string; fields: string[] }>;
     socialLinks?: {

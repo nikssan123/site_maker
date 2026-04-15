@@ -127,6 +127,7 @@ export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(() => !window.matchMedia('(max-width:899.95px)').matches);
   const [colorTheme, setColorTheme] = useState<ColorTheme>(THEME_PRESETS[0]); // Indigo default
   const [planVisible, setPlanVisible] = useState(false);
+  const [appLanguages, setAppLanguages] = useState<string[]>(['bg']);
   const [socialLinks, setSocialLinks] = useState<{
     facebook?: string;
     instagram?: string;
@@ -147,6 +148,20 @@ export default function ChatPage() {
 
   const { logout, user, updateUser } = useAuthStore();
   const store = useProjectStore();
+
+  const normalizePlanLanguages = useCallback((languages: unknown): string[] => {
+    const values = Array.isArray(languages) ? languages : [];
+    const normalized = Array.from(
+      new Set(
+        values
+          .filter((value): value is string => typeof value === 'string')
+          .map((value) => value.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    );
+
+    return normalized.includes('bg') ? normalized : ['bg', ...normalized];
+  }, []);
 
   const emitGenerationEvent = useCallback(
     (sessionId: string, event: any) => {
@@ -265,6 +280,10 @@ export default function ChatPage() {
     }
   }, [store.plan?.id]);
 
+  useEffect(() => {
+    setAppLanguages(normalizePlanLanguages(store.plan?.data?.languages));
+  }, [normalizePlanLanguages, store.plan?.id, store.plan?.data?.languages]);
+
   /** Reattach SSE + ask backend to continue install/build after refresh or server restart. */
   useEffect(() => {
     if (!paramSessionId || store.phase !== 'generating') return;
@@ -370,7 +389,7 @@ export default function ChatPage() {
 
     try {
       // Persist selected color theme into the plan before locking
-      await api.patch(`/plan/${store.plan.id}`, { colorTheme });
+      await api.patch(`/plan/${store.plan.id}`, { colorTheme, languages: appLanguages });
     } catch {
       // Non-fatal — generation can still proceed with a default theme
     }
@@ -586,6 +605,14 @@ export default function ChatPage() {
               setPlanVisible(false);
               // Keep focus behavior for quick edits
               inputRef.current?.focus();
+            }}
+            onLanguagesChange={(languages) => {
+              const normalized = normalizePlanLanguages(languages);
+              setAppLanguages(normalized);
+              if (!store.plan) return;
+              api.patch<any>(`/plan/${store.plan.id}`, { languages: normalized })
+                .then((p) => { store.setPlan(p); })
+                .catch(() => {});
             }}
             onSocialLinksChange={(links) => {
               setSocialLinks(links);

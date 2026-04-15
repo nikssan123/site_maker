@@ -31,6 +31,7 @@ The block is machine-readable and hidden from the user. Do NOT mention or explai
   "pages": ["home", "services", "book", "confirmation"],
   "features": ["service showcase", "online booking form", "booking confirmation"],
   "style": "modern clean",
+  "languages": ["bg"],
   "socialLinks": {
     "facebook": "",
     "instagram": "",
@@ -306,8 +307,11 @@ Theme polish (MUST):
     - MuiCssBaseline: add global @keyframes (fadeInUp, fadeIn) here so all components can use them
 - Reuse these tokens everywhere; do not invent random radii/spacing per component.
 
-═══ ЕЗИК: БЪЛГАРСКИ — ЗАДЪЛЖИТЕЛНО ═══
-Every single user-visible string in the generated app MUST be in Bulgarian.
+═══ ЕЗИК И ЛОКАЛИЗАЦИЯ ═══
+The generated app MUST support every language listed in plan.languages.
+Bulgarian ("bg") is ALWAYS included and MUST be the default/preselected language.
+If plan.languages is missing, default to Bulgarian-only support.
+Every single user-visible string in the generated app MUST exist in all selected languages.
 
 Footer + social links (MUST):
 - The app MUST always have a footer on every screen (or a shared layout footer).
@@ -317,6 +321,7 @@ Footer + social links (MUST):
 - If missing/empty, still render the icon but use href='#' (do not hide icons).
 - Use @mui/icons-material icons for each platform and keep the footer visually consistent with the app style.
 This includes: button labels, page titles, navigation links, form placeholders, helper text, Snackbar/Alert/Dialog messages, empty-state copy, table column headers, loading messages, error messages, and ALL seed/sample data (names, descriptions, addresses, products, categories, etc.).
+The app MUST include a visible language switcher/dropdown so end users can change the active language.
 English is allowed ONLY for: code identifiers, variable names, JSON keys, URL path segments, and code comments.
 Violation examples (NEVER do): "Submit", "Loading…", "No data", "Error", "Save", "Cancel", "Name", "Email".
 Correct examples: "Изпрати", "Зареждане…", "Няма данни", "Грешка", "Запази", "Отказ", "Име", "Имейл".
@@ -709,12 +714,57 @@ function planHasContactForm(plan: Record<string, unknown>): boolean {
   return /(contact|inquiry|inquiries|message|messages|контакт|запит|запитван)/i.test(hay);
 }
 
+function normalizeGeneratedLanguages(value: unknown): string[] {
+  const values = Array.isArray(value) ? value : [];
+  const normalized = Array.from(
+    new Set(
+      values
+        .filter((item): item is string => typeof item === 'string')
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  );
+
+  return normalized.includes('bg') ? normalized : ['bg', ...normalized];
+}
+
+function describeGeneratedLanguages(languages: string[]): string {
+  const names: Record<string, string> = {
+    bg: 'Bulgarian',
+    en: 'English',
+    de: 'German',
+    fr: 'French',
+    es: 'Spanish',
+    it: 'Italian',
+    pt: 'Portuguese',
+    ro: 'Romanian',
+    nl: 'Dutch',
+    el: 'Greek',
+    pl: 'Polish',
+    cs: 'Czech',
+    sk: 'Slovak',
+    hu: 'Hungarian',
+    hr: 'Croatian',
+    sl: 'Slovenian',
+    sr: 'Serbian',
+    da: 'Danish',
+    sv: 'Swedish',
+    fi: 'Finnish',
+    et: 'Estonian',
+    lv: 'Latvian',
+    lt: 'Lithuanian',
+  };
+
+  return languages.map((code) => `${names[code] ?? code.toUpperCase()} (${code})`).join(', ');
+}
+
 export function buildCodeGenPrompt(plan: Record<string, unknown>, designDNA?: DesignDNA): string {
   const hasDatabase = plan.hasDatabase === true;
   const paymentsEnabled = plan.paymentsEnabled === true;
   const appType = typeof plan.appType === 'string' ? plan.appType : 'other';
   const dataModels = plan.dataModels as Array<{ name: string; fields: string[] }> | undefined;
   const colorTheme = plan.colorTheme as { name?: string; primary?: string; secondary?: string; background?: string } | undefined;
+  const selectedLanguages = normalizeGeneratedLanguages(plan.languages);
   const dna = designDNA ?? pickDesignDNA();
 
   let prompt = `Build a ${hasDatabase ? 'full-stack React + SQLite' : 'React'} app for: ${typeof plan.description === 'string' ? plan.description : appType}\n\nFull specification:\n${JSON.stringify(plan, null, 2)}`;
@@ -776,6 +826,15 @@ server.js requirements (MUST follow the exact skeleton from the system prompt):
     prompt += `\n\nPAYMENTS: This app needs a real checkout flow. Use the PAYMENTS pattern from the system prompt (VITE_PAYMENTS_ENABLED + VITE_PAYMENTS_URL). Show the "not configured" Alert when PAYMENTS_ENABLED is false.`;
   }
 
+  prompt += `\n\nMULTILANGUAGE SUPPORT (REQUIRED):
+- Selected app languages: ${describeGeneratedLanguages(selectedLanguages)}
+- Bulgarian (bg) MUST be the default/preselected locale on first load.
+- Build the app so all selected languages are fully supported from day one.
+- Add a clearly visible language switcher/dropdown in the shared app shell or header.
+- Translate all user-visible UI copy for every selected language: navigation, headings, buttons, forms, helper text, alerts, empty states, validation, checkout text, footer, and seeded content.
+- Do NOT leave fallback text, placeholders, or untranslated strings in only one language.
+- Keep route paths and code identifiers in English if needed, but the visible UI must switch languages correctly.
+- A simple in-app translation dictionary/i18n setup is acceptable, but it must cover the full generated app.`;
   prompt += `\n\nBRANDING MARKERS (REQUIRED): mark every visible logo/brand render with the exact APPMAKER_LOGO_SLOT_START/END JSX comments and use <Box data-appmaker-logo-slot="true"> as the wrapper. Mark the main hero root with data-appmaker-hero="true" and include the exact APPMAKER_HERO_BG_START/END comments inside its sx object around the hero background styles. Do not rename or omit these markers.`;
   prompt += `\n\nOutput: ONE JSON object {"files":{...}} — no markdown, no prose, no code fences.`;
   prompt += `\n\nЛокализация: всички потребителски низове в приложението на български език.`;

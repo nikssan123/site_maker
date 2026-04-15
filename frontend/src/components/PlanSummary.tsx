@@ -1,4 +1,4 @@
-import { Box, Typography, Chip, Button, Stack, Tooltip, Divider, InputBase } from '@mui/material';
+import { Box, Typography, Chip, Button, Stack, Tooltip, Divider, InputBase, FormControl, Select, MenuItem, Checkbox, ListItemText } from '@mui/material';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import EditIcon from '@mui/icons-material/Edit';
 import StorageIcon from '@mui/icons-material/Storage';
@@ -24,6 +24,7 @@ interface Props {
   plan: PlanData;
   onConfirm: () => void;
   onEdit: () => void;
+  onLanguagesChange: (languages: string[]) => void;
   onSocialLinksChange: (links: NonNullable<PlanData['data']['socialLinks']>) => void;
   loading: boolean;
   ctaLabel?: string;
@@ -48,6 +49,20 @@ function pickStringArray(v: unknown): string[] {
     }
   }
   return out;
+}
+
+function normalizeLanguages(v: unknown): string[] {
+  const values = Array.isArray(v) ? v : [];
+  const normalized = Array.from(
+    new Set(
+      values
+        .filter((value): value is string => typeof value === 'string')
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  );
+
+  return normalized.includes('bg') ? normalized : ['bg', ...normalized];
 }
 
 /** Unwrap string JSON and common nesting shapes from the API / model. */
@@ -120,6 +135,7 @@ function normalizePlanData(raw: unknown): PlanData['data'] {
     features,
     style: typeof o.style === 'string' ? o.style : base.style,
     tech: typeof o.tech === 'string' ? o.tech : base.tech,
+    languages: normalizeLanguages(o.languages),
     hasDatabase: o.hasDatabase === true,
     dataModels,
     socialLinks:
@@ -145,11 +161,38 @@ const SOCIAL_FIELDS = [
   { key: 'x', label: 'X', icon: XIcon, color: '#fff' },
 ] as const;
 
-export default function PlanSummary({ plan, onConfirm, onEdit, onSocialLinksChange, loading, ctaLabel, colorTheme, onThemeChange, onExtractFromImage }: Props) {
+const LANGUAGE_OPTIONS = [
+  { code: 'bg', label: 'Bulgarian' },
+  { code: 'en', label: 'English' },
+  { code: 'de', label: 'Deutsch' },
+  { code: 'fr', label: 'Français' },
+  { code: 'es', label: 'Español' },
+  { code: 'it', label: 'Italiano' },
+  { code: 'pt', label: 'Português' },
+  { code: 'ro', label: 'Română' },
+  { code: 'nl', label: 'Nederlands' },
+  { code: 'el', label: 'Ελληνικά' },
+  { code: 'pl', label: 'Polski' },
+  { code: 'cs', label: 'Čeština' },
+  { code: 'sk', label: 'Slovenčina' },
+  { code: 'hu', label: 'Magyar' },
+  { code: 'hr', label: 'Hrvatski' },
+  { code: 'sl', label: 'Slovenščina' },
+  { code: 'sr', label: 'Srpski' },
+  { code: 'da', label: 'Dansk' },
+  { code: 'sv', label: 'Svenska' },
+  { code: 'fi', label: 'Suomi' },
+  { code: 'et', label: 'Eesti' },
+  { code: 'lv', label: 'Latviešu' },
+  { code: 'lt', label: 'Lietuvių' },
+] as const;
+
+export default function PlanSummary({ plan, onConfirm, onEdit, onLanguagesChange, onSocialLinksChange, loading, ctaLabel, colorTheme, onThemeChange, onExtractFromImage }: Props) {
   const { t } = useTranslation();
   const data = normalizePlanData(plan?.data);
   const hasStructured =
     !!(data.appType || data.style || data.tech || data.hasDatabase || data.pages.length || data.features.length);
+  const selectedLanguages = data.languages ?? ['bg'];
   const links = data.socialLinks ?? {};
 
   return (
@@ -258,6 +301,97 @@ export default function PlanSummary({ plan, onConfirm, onEdit, onSocialLinksChan
             </Stack>
           </Box>
         )}
+
+        <Box mb={2}>
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'stretch',
+              gap: 1,
+              py: 1.25,
+              px: 1.25,
+              borderRadius: 2,
+              border: '1px solid',
+              borderColor: 'rgba(16,185,129,0.35)',
+              bgcolor: 'rgba(16,185,129,0.07)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
+            }}
+          >
+            <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
+              <Typography
+                variant="caption"
+                sx={{ color: '#86efac', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11, fontWeight: 700 }}
+              >
+                {t('plan.languages', { defaultValue: 'App languages' })}
+              </Typography>
+              <Chip
+                label={selectedLanguages.length}
+                size="small"
+                sx={{ height: 18, fontSize: 10, bgcolor: 'rgba(16,185,129,0.2)', color: '#86efac', '& .MuiChip-label': { px: 0.75 } }}
+              />
+            </Stack>
+            <Typography variant="body2" sx={{ color: '#cbd5e1', fontSize: 13, lineHeight: 1.55 }}>
+              {t('plan.languagesHint', {
+                defaultValue: 'Choose the European languages the generated app should support. The app will be created with a language switcher and full UI translations for the selected locales.',
+              })}
+            </Typography>
+            <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: 11 }}>
+              {t('plan.languagesDefault', {
+                defaultValue: 'Bulgarian is always included and stays the default language.',
+              })}
+            </Typography>
+            <FormControl fullWidth size="small">
+              <Select
+                multiple
+                value={selectedLanguages}
+                onChange={(event) => onLanguagesChange(normalizeLanguages(event.target.value))}
+                renderValue={(selected) =>
+                  normalizeLanguages(selected)
+                    .map((code) => LANGUAGE_OPTIONS.find((option) => option.code === code)?.label ?? code.toUpperCase())
+                    .join(', ')
+                }
+                sx={{
+                  mt: 0.25,
+                  color: '#e2e8f0',
+                  borderRadius: 1.5,
+                  bgcolor: 'rgba(255,255,255,0.04)',
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.12)' },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(16,185,129,0.3)' },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(16,185,129,0.45)' },
+                  '& .MuiSelect-icon': { color: '#94a3b8' },
+                }}
+                MenuProps={{
+                  PaperProps: {
+                    sx: {
+                      bgcolor: '#0f172a',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      mt: 0.5,
+                    },
+                  },
+                }}
+              >
+                {LANGUAGE_OPTIONS.map((option) => (
+                  <MenuItem key={option.code} value={option.code}>
+                    <Checkbox
+                      checked={selectedLanguages.includes(option.code)}
+                      disabled={option.code === 'bg'}
+                      sx={{ color: 'rgba(255,255,255,0.45)', '&.Mui-checked': { color: '#10b981' } }}
+                    />
+                    <ListItemText
+                      primary={option.label}
+                      secondary={option.code === 'bg'
+                        ? t('plan.languagesBulgarianDefault', { defaultValue: 'Always included by default' })
+                        : undefined}
+                      primaryTypographyProps={{ fontSize: 13, color: '#e2e8f0' }}
+                      secondaryTypographyProps={{ fontSize: 11, color: '#94a3b8' }}
+                    />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+        </Box>
 
         {/* Social links */}
         <Box mb={2}>

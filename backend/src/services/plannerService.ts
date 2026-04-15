@@ -114,17 +114,7 @@ export async function chat(
   history.push({ role: 'user', content: userMessage });
 
   const ai = getChatClient();
-  const askedSocialBefore = history.some(
-    (m) => m.role === 'assistant' && /\b(Facebook|Instagram|TikTok|LinkedIn|YouTube|Twitter|X)\b/i.test(m.content),
-  );
-  const socialAnswered = history.some((m) => m.role === 'user' && userProvidedAnySocialLink(m.content));
-
-  let system = PLANNER_SYSTEM_LOCALIZED;
-  if (!askedSocialBefore && !socialAnswered) {
-    system += `\n\nIMPORTANT:\nBefore you finalize the plan, you MUST ask the user for their social media links.\nAsk for: Facebook, Instagram, TikTok, LinkedIn, YouTube, X (Twitter).\nIf they don't have some, they can say \"none\".\nAsk ONE short question only. Do NOT output the plan block in this turn unless the user already provided the social links.`;
-  }
-
-  let response = await ai.complete(history, system);
+  let response = await ai.complete(history, PLANNER_SYSTEM_LOCALIZED);
 
   if (shouldRetryForPlanBlock(userMessage, response)) {
     const forcePlanSystem = `${PLANNER_SYSTEM_LOCALIZED}${FORCE_PLAN_APPENDIX}`;
@@ -198,15 +188,6 @@ export async function chatStream(
   history.push({ role: 'user', content: userMessage });
 
   const ai = getChatClient();
-  const askedSocialBefore = history.some(
-    (m) => m.role === 'assistant' && /\b(Facebook|Instagram|TikTok|LinkedIn|YouTube|Twitter|X)\b/i.test(m.content),
-  );
-  const socialAnswered = history.some((m) => m.role === 'user' && userProvidedAnySocialLink(m.content));
-
-  let system = PLANNER_SYSTEM_LOCALIZED;
-  if (!askedSocialBefore && !socialAnswered) {
-    system += `\n\nIMPORTANT:\nBefore you finalize the plan, you MUST ask the user for their social media links.\nAsk for: Facebook, Instagram, TikTok, LinkedIn, YouTube, X (Twitter).\nIf they don't have some, they can say \"none\".\nAsk ONE short question only. Do NOT output the plan block in this turn unless the user already provided the social links.`;
-  }
 
   // Stream the first attempt.
   // Intercept tokens so the ```plan ... ``` JSON block is never sent to the client.
@@ -249,7 +230,7 @@ export async function chatStream(
     }
   };
 
-  let response = await ai.stream(history, system, filteredOnToken);
+  let response = await ai.stream(history, PLANNER_SYSTEM_LOCALIZED, filteredOnToken);
 
   // Flush any held buffer that wasn't actually a fence
   if (!insidePlanFence && planFenceBuffer) {

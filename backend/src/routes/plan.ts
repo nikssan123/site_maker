@@ -6,6 +6,20 @@ import { prisma } from '../index';
 
 const router = Router();
 
+function normalizePlanLanguages(languages: unknown): string[] {
+  const values = Array.isArray(languages) ? languages : [];
+  const normalized = Array.from(
+    new Set(
+      values
+        .filter((value): value is string => typeof value === 'string')
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  );
+
+  return normalized.includes('bg') ? normalized : ['bg', ...normalized];
+}
+
 router.get('/:sessionId', requireAuth, async (req, res, next) => {
   try {
     const plan = await prisma.plan.findUniqueOrThrow({
@@ -31,6 +45,7 @@ router.patch('/:planId', requireAuth, async (req, res, next) => {
             background: z.string(),
           })
           .optional(),
+        languages: z.array(z.string()).optional(),
         socialLinks: z
           .object({
             facebook: z.string().optional(),
@@ -53,9 +68,14 @@ router.patch('/:planId', requireAuth, async (req, res, next) => {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
+    const normalizedUpdates = {
+      ...updates,
+      ...(updates.languages ? { languages: normalizePlanLanguages(updates.languages) } : {}),
+    };
+
     const updated = await prisma.plan.update({
       where: { id: planId },
-      data: { data: { ...(plan.data as object), ...updates } },
+      data: { data: { ...(plan.data as object), ...normalizedUpdates } },
     });
     return res.json(updated);
   } catch (err) {
