@@ -67,7 +67,10 @@ export async function requestRegistration(rawEmail: string, password: string) {
   if (!email) throw new AppError(400, 'Email is required');
 
   const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) return { pending: true as const, email };
+  if (existing) {
+    await prisma.pendingRegistration.delete({ where: { email } }).catch(() => undefined);
+    throw new AppError(409, 'Email already registered');
+  }
 
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
   const code = generateCode();
@@ -133,6 +136,12 @@ export async function verifyRegistration(rawEmail: string, rawCode: string) {
 export async function resendVerification(rawEmail: string) {
   const email = normalizeEmail(rawEmail);
   if (!email) throw new AppError(400, 'Email is required');
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    await prisma.pendingRegistration.delete({ where: { email } }).catch(() => undefined);
+    throw new AppError(409, 'Email already registered');
+  }
 
   const pending = await prisma.pendingRegistration.findUnique({ where: { email } });
   if (!pending) throw new AppError(400, 'No pending verification for this email');
