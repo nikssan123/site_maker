@@ -104,7 +104,7 @@ export default function HostingPanel({ projectId, hosted, paid, onUpdated }: Pro
         <>
           <Paper variant="outlined" sx={{ p: 1.75, borderRadius: 2 }}>
             <Typography variant="subtitle2" fontWeight={800} mb={0.75}>
-              Вариант 1: адрес към нашия домейн
+              Вариант 1: Адрес към нашия домейн
             </Typography>
             <Typography variant="body2" color="text.secondary" mb={1.25}>
               Изберете кратко име, а ние ще го пуснем като адрес към вашия сайт без допълнителни DNS
@@ -171,7 +171,7 @@ export default function HostingPanel({ projectId, hosted, paid, onUpdated }: Pro
             sx={{ p: 1.75, borderRadius: 2, borderColor: 'rgba(99,102,241,0.35)' }}
           >
             <Typography variant="subtitle2" fontWeight={800} mb={0.75}>
-              Вариант 2: собствен домейн
+              Вариант 2: Собствен домейн
             </Typography>
             <Typography variant="body2" color="text.secondary" mb={1.25}>
               Можете да свържете и собствен домейн, например <b>www.yourbrand.com</b>. За това ще

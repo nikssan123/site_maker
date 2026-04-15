@@ -47,6 +47,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import Editor, { BeforeMount } from '@monaco-editor/react';
 import { api } from '../lib/api';
 import AppLogo from '../components/AppLogo';
+import ProjectCheckout from '../components/UpgradeGate';
 
 type FsNode =
   | { type: 'dir'; name: string; path: string; children: FsNode[] }
@@ -154,6 +155,8 @@ export default function FilesPage() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [errorToast, setErrorToast] = useState<string | null>(null);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [paywallLocked, setPaywallLocked] = useState(false);
 
   const [confirmServerAck, setConfirmServerAck] = useState(false);
 
@@ -170,19 +173,41 @@ export default function FilesPage() {
     return p === 'server.js' || p.endsWith('/server.js');
   }, [selectedPath]);
 
+  const openPaywall = useCallback(() => {
+    setPaywallLocked(true);
+    setCheckoutOpen(true);
+    setTreeError(null);
+    setSelectedPath(null);
+    setSelectedEncoding(null);
+    setSelectedSize(null);
+    setSelectedImagePreview(null);
+    setContent('');
+    setDirty(false);
+  }, []);
+
+  const isPaymentRequired = useCallback((e: any) => (
+    e?.status === 402 || e?.code === 'payment_required'
+  ), []);
+
   const reloadTree = useCallback(async () => {
     if (!projectId) return;
     setLoadingTree(true);
     setTreeError(null);
     try {
       const res = await api.fsTree(projectId);
+      setPaywallLocked(false);
       setTree(res.children as FsNode[]);
     } catch (e: any) {
+      if (isPaymentRequired(e)) {
+        setTree([]);
+        openPaywall();
+        return;
+      }
       setTreeError(e.message ?? 'Failed to load file tree');
     } finally {
       setLoadingTree(false);
     }
-  }, [projectId]);
+  }, [projectId, isPaymentRequired, openPaywall]);
 
   useEffect(() => {
     reloadTree();
@@ -213,9 +238,13 @@ export default function FilesPage() {
       }
       setContent(res.encoding === 'utf8' ? (res.content ?? '') : '');
     } catch (e: any) {
+      if (isPaymentRequired(e)) {
+        openPaywall();
+        return;
+      }
       setErrorToast(e.message ?? 'Неуспешно отваряне на файл');
     }
-  }, [projectId, dirty, selectedPath]);
+  }, [projectId, dirty, selectedPath, fMobile, isPaymentRequired, openPaywall]);
 
   const saveFile = useCallback(async () => {
     if (!projectId || !selectedPath) return;
@@ -239,11 +268,15 @@ export default function FilesPage() {
       setToast('Запазено. Рестартирам preview…');
       await reloadTree();
     } catch (e: any) {
+      if (isPaymentRequired(e)) {
+        openPaywall();
+        return;
+      }
       setErrorToast(e.message ?? 'Грешка при запазване');
     } finally {
       setSaving(false);
     }
-  }, [projectId, selectedPath, content, selectedEncoding, isServerJs, confirmServerAck, reloadTree]);
+  }, [projectId, selectedPath, content, selectedEncoding, isServerJs, confirmServerAck, reloadTree, isPaymentRequired, openPaywall]);
 
   const allNodes = useMemo(() => flattenTree(tree), [tree]);
   const selectedNode = useMemo(() => allNodes.find((n) => n.path === selectedPath) ?? null, [allNodes, selectedPath]);
@@ -270,13 +303,17 @@ export default function FilesPage() {
       await promptAction(value);
       await reloadTree();
     } catch (e: any) {
+      if (isPaymentRequired(e)) {
+        openPaywall();
+        return;
+      }
       setErrorToast(e.message ?? 'Операцията не успя');
     } finally {
       setPromptAction(null);
       setPromptValue('');
       setPromptHint(null);
     }
-  }, [promptAction, promptValue, reloadTree]);
+  }, [promptAction, promptValue, reloadTree, isPaymentRequired, openPaywall]);
 
   const createFile = useCallback(() => {
     if (!projectId) return;
@@ -343,9 +380,13 @@ export default function FilesPage() {
       }
       await reloadTree();
     } catch (e: any) {
+      if (isPaymentRequired(e)) {
+        openPaywall();
+        return;
+      }
       setErrorToast(e.message ?? 'Неуспешно изтриване');
     }
-  }, [projectId, selectedNode, reloadTree]);
+  }, [projectId, selectedNode, reloadTree, isPaymentRequired, openPaywall]);
 
   const breadcrumbs = useMemo(() => {
     if (!selectedPath) return [];
@@ -410,6 +451,19 @@ export default function FilesPage() {
           <Box sx={{ flex: 1, overflow: 'auto' }}>
             {loadingTree ? (
               <Box sx={{ p: 2, display: 'flex', justifyContent: 'center' }}><CircularProgress size={22} /></Box>
+            ) : paywallLocked ? (
+              <Box sx={{ p: 2 }}>
+                <Alert
+                  severity="warning"
+                  action={(
+                    <Button size="small" color="inherit" onClick={() => setCheckoutOpen(true)}>
+                      Отключи
+                    </Button>
+                  )}
+                >
+                  Отключете проекта, за да имате достъп до файловата система и редакцията на кода.
+                </Alert>
+              </Box>
             ) : treeError ? (
               <Box sx={{ p: 2 }}>
                 <Alert severity="error">{treeError}</Alert>
@@ -515,7 +569,18 @@ export default function FilesPage() {
           ) : null}
 
           <Box sx={{ flex: 1, minHeight: 0 }}>
-            {selectedPath && selectedEncoding === 'binary' && selectedImagePreview?.dataUrl ? (
+            {paywallLocked ? (
+              <Box sx={{ p: 3, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Stack spacing={2} sx={{ maxWidth: 420, textAlign: 'center' }}>
+                  <Alert severity="warning">
+                    Файловата система е достъпна само след покупка на проекта.
+                  </Alert>
+                  <Button variant="contained" onClick={() => setCheckoutOpen(true)}>
+                    Отключи проекта
+                  </Button>
+                </Stack>
+              </Box>
+            ) : selectedPath && selectedEncoding === 'binary' && selectedImagePreview?.dataUrl ? (
               <Box sx={{ p: 2, height: '100%', overflow: 'auto' }}>
                 <Box
                   component="img"
@@ -602,6 +667,13 @@ export default function FilesPage() {
           {errorToast}
         </Alert>
       </Snackbar>
+
+      <ProjectCheckout
+        open={checkoutOpen}
+        onClose={() => setCheckoutOpen(false)}
+        projectId={projectId}
+        reason="Unlock the project to access and edit files."
+      />
     </Box>
   );
 }
@@ -663,4 +735,3 @@ function TreeList(props: {
     </>
   );
 }
-
