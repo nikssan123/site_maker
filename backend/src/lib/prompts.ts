@@ -416,16 +416,19 @@ KEY RULES FOR server.js ROBUSTNESS:
 - Serve frontend: app.use(express.static(path.join(__dirname, 'dist'))); app.get('*', …)
 - PORT = process.env.PORT || 3000
 
-EMAIL EVENTS (required for apps with contact forms or bookings):
+EMAIL EVENTS (required for apps with contact forms, bookings, orders, or payments):
 - The generated server.js MUST trigger platform email events on key actions by calling the internal platform endpoint:
   POST (process.env.BACKEND_INTERNAL_URL + '/api/internal/project-email')
 - The request body MUST be JSON:
-  { projectId: process.env.PROJECT_ID, eventType: 'form.submitted'|'booking.created', data: { ... } }
+  { projectId: process.env.PROJECT_ID, eventType: 'form.submitted'|'booking.created'|'order.created'|'payment.received', data: { ... } }
 - This call MUST be fire-and-forget and MUST NOT break the user request:
   fetch(...).catch(() => {})
-- Trigger after successful writes:
-  - After creating an inquiry via POST /api/inquiries -> eventType 'form.submitted' with data { name, email, message }
-  - After creating a booking via POST /api/bookings -> eventType 'booking.created' with data { name/customerName, email/customerEmail, date, time, note/notes }
+- Trigger after successful writes or successful payment confirmation:
+  - Contact / inquiry apps: after creating an inquiry via POST /api/inquiries -> eventType 'form.submitted' with data { name, email, message }
+  - Booking / reservation apps: after creating a booking via POST /api/bookings -> eventType 'booking.created' with data { name/customerName, email/customerEmail, date, time, note/notes }
+  - Ecommerce / ordering apps: after creating an order via POST /api/orders (or the app's canonical order submit route) -> eventType 'order.created' with data { name/customerName, email/customerEmail, amount, currency, items }
+  - Apps with payments enabled: after successful payment confirmation -> eventType 'payment.received' with data { amount, currency, email/customerEmail }
+- Do not send placeholder events. Only trigger the event types that actually match the app's features and user action.
 - Do NOT include any Resend API key or email sending logic in the generated app; the platform handles email delivery.
 
 package.json:
@@ -897,3 +900,6 @@ export function buildIteratorPrompt(
     (notes ? `Extra exploration context (internal):\n${notes}\n\n` : '') +
     `Current files (SCOPED SUBSET):\n\n${fileList}\n\nHard constraints:\n- Keep UI/layout stable; do not restyle unrelated areas.\n- No surprise features; implement only what is requested.\n- Keep all existing Bulgarian user-visible strings Bulgarian; any new user-visible strings must be Bulgarian.\n- Prefer minimal diffs; avoid broad refactors.\n- You MAY create new frontend files when needed for the requested change, especially under src/components, src/pages, src/hooks, src/lib, src/features, src/styles, src/assets, or src/data.\n- Only create backend or config files when the request clearly requires them and the spec/exploration context points to the exact path.\n- If creating a new file, wire it into the existing scoped files instead of rewriting unrelated areas.\n- Preserve any APPMAKER_LOGO_SLOT_START/END and APPMAKER_HERO_BG_START/END markers that already exist; do not remove or rename them.\n\nЛокализация: запази и допълни потребителските текстове на български език.`;
 }
+
+
+

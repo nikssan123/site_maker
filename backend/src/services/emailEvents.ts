@@ -2,7 +2,7 @@ import { prisma } from '../index';
 import { AppError } from '../middleware/errorHandler';
 import { sendProjectEmail } from './emailQueue';
 
-export type EmailEventType = 'user.signup' | 'form.submitted' | 'booking.created' | 'payment.received';
+export type EmailEventType = 'user.signup' | 'form.submitted' | 'booking.created' | 'order.created' | 'payment.received';
 
 function interpolate(template: string, data: Record<string, string>): string {
   return template.replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (_m, key) => data[key] ?? '');
@@ -44,6 +44,21 @@ function defaultTemplate(eventType: EmailEventType): { subject: string; html: st
             <p><strong>Дата:</strong> {{date}}</p>
             <p><strong>Час:</strong> {{time}}</p>
             <p><strong>Бележка:</strong> {{note}}</p>
+          </div>
+        `.trim(),
+      };
+    case 'order.created':
+      return {
+        subject: '\u041d\u043e\u0432\u0430 \u043f\u043e\u0440\u044a\u0447\u043a\u0430',
+        html: `
+          <div style="font-family:Arial,sans-serif">
+            <h2>\u041d\u043e\u0432\u0430 \u043f\u043e\u0440\u044a\u0447\u043a\u0430</h2>
+            <p><strong>\u0418\u043c\u0435:</strong> {{name}}</p>
+            <p><strong>\u0418\u043c\u0435\u0439\u043b:</strong> {{email}}</p>
+            <p><strong>\u0421\u0443\u043c\u0430:</strong> {{amount}}</p>
+            <p><strong>\u0412\u0430\u043b\u0443\u0442\u0430:</strong> {{currency}}</p>
+            <p><strong>\u041f\u0440\u043e\u0434\u0443\u043a\u0442\u0438 / \u0434\u0435\u0442\u0430\u0439\u043b\u0438:</strong></p>
+            <div style="white-space:pre-wrap;border:1px solid #eee;padding:12px;border-radius:8px">{{items}}</div>
           </div>
         `.trim(),
       };
@@ -106,4 +121,5 @@ export async function triggerEmailEvent(
     templateId: templateRow?.id,
   });
 }
+
 

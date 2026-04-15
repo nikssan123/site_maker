@@ -53,6 +53,7 @@ const EVENT_TYPES: Array<{ key: string; label: string }> = [
   { key: 'user.signup', label: 'Регистрация на потребител' },
   { key: 'form.submitted', label: 'Ново запитване (контактна форма)' },
   { key: 'booking.created', label: 'Нова резервация' },
+  { key: 'order.created', label: 'Нова поръчка' },
   { key: 'payment.received', label: 'Получено плащане' },
 ];
 
@@ -439,3 +440,6 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
     </Box>
   );
 }
+
+
+
