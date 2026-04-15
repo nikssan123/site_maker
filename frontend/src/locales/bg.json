@@ -536,6 +536,28 @@
     "useCatalogTooltip": "Отвори каталога — редактирай динамичното съдържание тук",
     "patchFailed": "Промяната не можа да се запази. Опитайте отново или редактирайте през чата."
   },
+  "iconPicker": {
+    "title": "Избери иконка",
+    "tabLibrary": "Библиотека",
+    "tabUpload": "Качи SVG",
+    "searchPlaceholder": "Търси иконка…",
+    "noResults": "Няма резултати за това търсене.",
+    "catAll": "Всички",
+    "catNavigation": "Навигация",
+    "catActions": "Действия",
+    "catContent": "Съдържание",
+    "catStatus": "Статус",
+    "catCommerce": "Търговия",
+    "catSocial": "Социални",
+    "catFood": "Храна",
+    "catBeauty": "Красота",
+    "catServices": "Услуги",
+    "catMisc": "Други",
+    "uploadHint": "Качи SVG файл, за да замениш тази иконка с персонализиран графичен елемент.",
+    "uploadCta": "Избери файл или пусни тук",
+    "uploadHelp": "SVG, PNG или JPG",
+    "useThis": "Използвай"
+  },
   "payments": {
     "setupCta": "Плащания",
     "setupTooltip": "Настройте Stripe плащания за вашето приложение",

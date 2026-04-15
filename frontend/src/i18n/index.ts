@@ -1,7 +1,7 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import bg from '../locales/bg.json';
-import en from '../locales/en';
+import en from '../locales/en.json';
 
 const STORAGE_KEY = 'appmaker-language';
 

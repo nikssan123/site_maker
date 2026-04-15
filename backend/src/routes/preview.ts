@@ -14,6 +14,7 @@ import { projectPath } from '../lib/fileWriter';
 import { deriveAdminToken, writeAdminTokenFile } from '../lib/adminToken';
 import { FREE_ITERATION_LIMIT } from './iterate';
 import { isHostingActive } from '../lib/hostingActive';
+import { resolveIconName } from '../lib/iconFingerprint';
 
 const EDIT_TOKEN_TTL_MS = 3_600_000; // 1 hour
 
@@ -518,6 +519,289 @@ function applyContentPatch(projectId: string, original: string, replacement: str
   }
 
   throw new AppError(404, 'Original text not found in any source file');
+}
+
+// ─── Icon swap / upload helpers ──────────────────────────────────────────────
+
+/** Matches a self-closing JSX tag: <Name ... /> */
+function jsxSelfClosingRegex(name: string): RegExp {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`<${escaped}\\b[^>]*/\\s*>`, 'g');
+}
+/** Matches a JSX element with children: <Name ...>...</Name>  (non-greedy, single line of props) */
+function jsxPairRegex(name: string): RegExp {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`<${escaped}\\b[^>]*>[\\s\\S]*?</${escaped}>`, 'g');
+}
+
+function findIconUsages(content: string, iconName: string): Array<{ start: number; end: number; match: string; selfClosing: boolean }> {
+  const usages: Array<{ start: number; end: number; match: string; selfClosing: boolean }> = [];
+  let m: RegExpExecArray | null;
+  const rxSelf = jsxSelfClosingRegex(iconName);
+  while ((m = rxSelf.exec(content)) !== null) {
+    usages.push({ start: m.index, end: m.index + m[0].length, match: m[0], selfClosing: true });
+  }
+  const rxPair = jsxPairRegex(iconName);
+  while ((m = rxPair.exec(content)) !== null) {
+    // Don't double-count an element matched by both regexes (shouldn't happen but guard).
+    if (!usages.some((u) => u.start === m!.index)) {
+      usages.push({ start: m.index, end: m.index + m[0].length, match: m[0], selfClosing: false });
+    }
+  }
+  return usages.sort((a, b) => a.start - b.start);
+}
+
+function hasIconImport(content: string, iconName: string): boolean {
+  const escaped = iconName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const rx = new RegExp(`import\\s+${escaped}\\s+from\\s+['"]@mui/icons-material/${escaped}['"]`);
+  return rx.test(content);
+}
+
+function addIconImport(content: string, iconName: string): string {
+  if (hasIconImport(content, iconName)) return content;
+  const line = `import ${iconName} from '@mui/icons-material/${iconName}';\n`;
+  // Insert after the last existing @mui/icons-material import if any, otherwise after the first import block.
+  const existingIconImport = /import\s+\w+\s+from\s+['"]@mui\/icons-material\/[^'"]+['"];?\s*\n/g;
+  let lastEnd = -1;
+  let m: RegExpExecArray | null;
+  while ((m = existingIconImport.exec(content)) !== null) lastEnd = m.index + m[0].length;
+  if (lastEnd >= 0) return content.slice(0, lastEnd) + line + content.slice(lastEnd);
+  // Fallback: after the first import statement
+  const firstImport = /^(import[^;]+;\s*\n)/m.exec(content);
+  if (firstImport) {
+    const end = firstImport.index + firstImport[0].length;
+    return content.slice(0, end) + line + content.slice(end);
+  }
+  return line + content;
+}
+
+function removeIconImportIfUnused(content: string, iconName: string): string {
+  if (findIconUsages(content, iconName).length > 0) return content;
+  const escaped = iconName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const rx = new RegExp(`^\\s*import\\s+${escaped}\\s+from\\s+['"]@mui/icons-material/${escaped}['"];?\\s*\\n`, 'm');
+  return content.replace(rx, '');
+}
+
+/**
+ * Replace a MUI icon JSX element identified by its rendered path-d.
+ * If newIconName is provided → rename the tag + update imports.
+ * If replacementJsx is provided → replace the tag entirely (used for upload→img).
+ *
+ * Finds the single file+usage that owns the icon. Refuses if multiple usages exist
+ * across files or within the same file (ambiguous).
+ */
+function applyIconPatch(
+  projectId: string,
+  sourcePathD: string,
+  newIconName: string | null,
+  replacementJsx: string | null,
+): void {
+  const projectDir = projectPath(projectId);
+  const oldIconName = resolveIconName(projectDir, sourcePathD);
+  if (!oldIconName) {
+    throw new AppError(422, 'Иконката не може да бъде разпозната. Опитай отново или редактирай през чата.');
+  }
+
+  const files = walkSourceFiles(projectDir).filter((f) => /\.[jt]sx$/i.test(f));
+  const matches: Array<{ path: string; content: string; usages: ReturnType<typeof findIconUsages> }> = [];
+  for (const fp of files) {
+    const content = fs.readFileSync(fp, 'utf8');
+    if (!hasIconImport(content, oldIconName)) continue;
+    const usages = findIconUsages(content, oldIconName);
+    if (usages.length > 0) matches.push({ path: fp, content, usages });
+  }
+
+  const totalUsages = matches.reduce((n, m) => n + m.usages.length, 0);
+  if (totalUsages === 0) throw new AppError(404, 'Иконката не е намерена в изходния код.');
+  if (totalUsages > 1) {
+    throw new AppError(
+      422,
+      'Тази иконка се използва на повече от едно място и не може да се редактира автоматично. Редактирай през чата.',
+    );
+  }
+
+  const { path: fp, content, usages } = matches[0];
+  const usage = usages[0];
+
+  let updated: string;
+  if (newIconName) {
+    // Rename the JSX tag (open + optional close), update imports.
+    const renamed = usage.selfClosing
+      ? usage.match.replace(new RegExp(`^<${oldIconName}\\b`), `<${newIconName}`)
+      : usage.match
+          .replace(new RegExp(`^<${oldIconName}\\b`), `<${newIconName}`)
+          .replace(new RegExp(`</${oldIconName}>$`), `</${newIconName}>`);
+    updated = content.slice(0, usage.start) + renamed + content.slice(usage.end);
+    updated = addIconImport(updated, newIconName);
+    updated = removeIconImportIfUnused(updated, oldIconName);
+  } else if (replacementJsx) {
+    updated = content.slice(0, usage.start) + replacementJsx + content.slice(usage.end);
+    updated = removeIconImportIfUnused(updated, oldIconName);
+  } else {
+    throw new AppError(400, 'Missing newIconName or replacementJsx');
+  }
+
+  fs.writeFileSync(fp, updated, 'utf8');
+}
+
+// ─── Element deletion helpers ────────────────────────────────────────────────
+
+const STRUCTURAL_TAG_DENYLIST = new Set([
+  'Box', 'Stack', 'Container', 'Grid', 'Paper', 'Card', 'CardContent', 'CardActions', 'CardHeader',
+  'Drawer', 'AppBar', 'Toolbar', 'Dialog', 'DialogContent', 'Modal', 'Menu', 'Popover',
+  'html', 'body', 'main', 'section', 'article', 'aside', 'header', 'footer', 'nav', 'form',
+  'table', 'tbody', 'thead', 'tr', 'tfoot',
+]);
+
+/**
+ * Given an index inside `content` that falls within a JSX element body, return
+ * the [start, end] offsets of that element's outermost tag pair (or self-closing tag).
+ * Returns null if the enclosing element cannot be identified (e.g. we're at top level).
+ *
+ * Heuristic-based; not a full JSX parser. Adequate for leaf-element deletion.
+ */
+function findEnclosingJsxElement(content: string, anchorIndex: number): { start: number; end: number; tagName: string } | null {
+  // Scan backwards from anchorIndex for the nearest '<' that starts a JSX tag (not `</` or `{`).
+  let i = anchorIndex;
+  while (i > 0) {
+    i--;
+    if (content[i] !== '<') continue;
+    // Skip closing tags and comments/fragments
+    const next = content[i + 1];
+    if (next === '/' || next === '!' || next === '>') continue;
+    const tagMatch = /^<([A-Za-z][\w.]*)\b/.exec(content.slice(i));
+    if (!tagMatch) continue;
+    const tagName = tagMatch[1];
+
+    // Find end of opening tag
+    let j = i;
+    let inStr: string | null = null;
+    let braceDepth = 0;
+    while (j < content.length) {
+      const ch = content[j];
+      if (inStr) {
+        if (ch === '\\') { j += 2; continue; }
+        if (ch === inStr) inStr = null;
+      } else if (ch === '"' || ch === "'") {
+        inStr = ch;
+      } else if (ch === '{') {
+        braceDepth++;
+      } else if (ch === '}') {
+        braceDepth--;
+      } else if (ch === '>' && braceDepth === 0) {
+        break;
+      }
+      j++;
+    }
+    if (j >= content.length) return null;
+    const selfClosing = content[j - 1] === '/';
+    if (selfClosing) {
+      return { start: i, end: j + 1, tagName };
+    }
+    // Find the matching close tag, tracking nested same-name opens.
+    let depth = 1;
+    const open = new RegExp(`<${tagName}\\b[^>]*>`, 'g');
+    const close = new RegExp(`</${tagName}>`, 'g');
+    open.lastIndex = j + 1;
+    close.lastIndex = j + 1;
+    while (depth > 0) {
+      open.lastIndex = Math.max(open.lastIndex, j + 1);
+      close.lastIndex = Math.max(close.lastIndex, j + 1);
+      const o = open.exec(content);
+      const c = close.exec(content);
+      if (!c) return null;
+      if (o && o.index < c.index) {
+        depth++;
+        j = o.index + o[0].length;
+        close.lastIndex = j;
+      } else {
+        depth--;
+        j = c.index + c[0].length;
+        open.lastIndex = j;
+        if (depth === 0) return { start: i, end: j, tagName };
+      }
+    }
+    return null;
+  }
+  return null;
+}
+
+/** Remove an element range from `content`, also consuming the preceding indent + trailing newline so we don't leave a gap. */
+function sliceOutElement(content: string, start: number, end: number): string {
+  // Extend start left to include leading whitespace on the same line
+  let s = start;
+  while (s > 0 && (content[s - 1] === ' ' || content[s - 1] === '\t')) s--;
+  // Extend end right to consume trailing newline when the whole line was just this element
+  let e = end;
+  if (s === 0 || content[s - 1] === '\n') {
+    if (content[e] === '\r') e++;
+    if (content[e] === '\n') e++;
+  }
+  return content.slice(0, s) + content.slice(e);
+}
+
+/**
+ * Delete the element matching the given anchor. `kind` picks how to locate it.
+ * Refuses on ambiguity or structural containers.
+ */
+function applyElementDelete(
+  projectId: string,
+  kind: 'text' | 'image' | 'icon',
+  anchor: string,
+): void {
+  const projectDir = projectPath(projectId);
+
+  if (kind === 'icon') {
+    const iconName = resolveIconName(projectDir, anchor);
+    if (!iconName) throw new AppError(422, 'Иконката не може да бъде разпозната.');
+    const files = walkSourceFiles(projectDir).filter((f) => /\.[jt]sx$/i.test(f));
+    const matches: Array<{ path: string; content: string; usages: ReturnType<typeof findIconUsages> }> = [];
+    for (const fp of files) {
+      const content = fs.readFileSync(fp, 'utf8');
+      if (!hasIconImport(content, iconName)) continue;
+      const usages = findIconUsages(content, iconName);
+      if (usages.length > 0) matches.push({ path: fp, content, usages });
+    }
+    const total = matches.reduce((n, m) => n + m.usages.length, 0);
+    if (total === 0) throw new AppError(404, 'Иконката не е намерена.');
+    if (total > 1) throw new AppError(422, 'Иконката се използва на повече от едно място.');
+    const { path: fp, content, usages } = matches[0];
+    const usage = usages[0];
+    let updated = sliceOutElement(content, usage.start, usage.end);
+    updated = removeIconImportIfUnused(updated, iconName);
+    fs.writeFileSync(fp, updated, 'utf8');
+    return;
+  }
+
+  // text / image: find the anchor in source, then the enclosing JSX element.
+  const files = walkSourceFiles(projectDir).filter(
+    (f) => /\.[jt]sx$/i.test(f) && path.basename(f).toLowerCase() !== 'server.js',
+  );
+  type Hit = { path: string; content: string; index: number };
+  const hits: Hit[] = [];
+  for (const fp of files) {
+    const content = fs.readFileSync(fp, 'utf8');
+    let from = 0;
+    while (true) {
+      const idx = content.indexOf(anchor, from);
+      if (idx === -1) break;
+      hits.push({ path: fp, content, index: idx });
+      from = idx + anchor.length;
+    }
+  }
+  if (hits.length === 0) throw new AppError(404, 'Елементът не е намерен в изходния код.');
+  if (hits.length > 1) throw new AppError(422, 'Елементът се среща на повече от едно място. Редактирай през чата.');
+
+  const { path: fp, content, index } = hits[0];
+  const enclosing = findEnclosingJsxElement(content, index);
+  if (!enclosing) throw new AppError(422, 'Не можах да открия обграждащия JSX елемент.');
+
+  if (STRUCTURAL_TAG_DENYLIST.has(enclosing.tagName)) {
+    throw new AppError(422, `Не може да бъде изтрит структурен елемент (<${enclosing.tagName}>). Редактирай през чата.`);
+  }
+
+  const updated = sliceOutElement(content, enclosing.start, enclosing.end);
+  fs.writeFileSync(fp, updated, 'utf8');
 }
 
 const router = Router();
@@ -1249,6 +1533,74 @@ router.patch('/:projectId/content', requireAuth, async (req, res, next) => {
 
     await triggerRebuildAsync(project.id, 'content-patch');
 
+    return res.json({ ok: true });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// Swap a MUI icon for another icon, or replace it with an uploaded image.
+router.patch('/:projectId/icon', requireAuth, async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId);
+    const body = z.object({
+      token: z.string(),
+      sourcePathD: z.string().min(1),
+      newIconName: z.string().regex(/^[A-Z][A-Za-z0-9]*$/).optional(),
+      uploadedUrl: z.string().optional(),
+      width: z.number().positive().optional(),
+      height: z.number().positive().optional(),
+    }).refine(
+      (v) => Boolean(v.newIconName) !== Boolean(v.uploadedUrl),
+      { message: 'Provide exactly one of newIconName or uploadedUrl' },
+    ).parse(req.body);
+
+    verifyEditToken(body.token, projectId);
+
+    const project = await prisma.project.findFirstOrThrow({
+      where: { id: projectId, session: { userId: req.user.userId } },
+    });
+    if (project.status === 'building' || project.status === 'generating') {
+      throw new AppError(409, 'A rebuild is already in progress. Please wait and try again.');
+    }
+
+    let replacementJsx: string | null = null;
+    if (body.uploadedUrl) {
+      const w = body.width ?? 24;
+      const h = body.height ?? 24;
+      const esc = body.uploadedUrl.replace(/"/g, '&quot;');
+      replacementJsx = `<img src="${esc}" alt="" width={${w}} height={${h}} style={{ verticalAlign: 'middle' }} />`;
+    }
+
+    applyIconPatch(projectId, body.sourcePathD, body.newIconName ?? null, replacementJsx);
+    await triggerRebuildAsync(project.id, 'icon-patch');
+    return res.json({ ok: true });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// Delete a JSX element (text leaf, image, or icon) from the source.
+router.patch('/:projectId/delete-element', requireAuth, async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId);
+    const body = z.object({
+      token: z.string(),
+      kind: z.enum(['text', 'image', 'icon']),
+      anchor: z.string().min(1),
+    }).parse(req.body);
+
+    verifyEditToken(body.token, projectId);
+
+    const project = await prisma.project.findFirstOrThrow({
+      where: { id: projectId, session: { userId: req.user.userId } },
+    });
+    if (project.status === 'building' || project.status === 'generating') {
+      throw new AppError(409, 'A rebuild is already in progress. Please wait and try again.');
+    }
+
+    applyElementDelete(projectId, body.kind, body.anchor);
+    await triggerRebuildAsync(project.id, 'element-delete');
     return res.json({ ok: true });
   } catch (err) {
     return next(err);

@@ -22,11 +22,31 @@ export const EDIT_OVERLAY_SCRIPT = `
   function isEditable(el) {
     if (!el || el === document.body || el === document.documentElement) return false;
     if (el.tagName === 'IMG') return true;
+    if (findOwningIconSvg(el)) return true;
     // List containers aggregate text from all children — patching that blob always fails.
     // Individual items (LI, DT, DD) are still editable via the normal leaf check below.
     if (el.tagName === 'UL' || el.tagName === 'OL' || el.tagName === 'DL') return false;
     var hasText = el.textContent && el.textContent.trim().length > 0;
     return hasText && isLeafLike(el);
+  }
+
+  // Walk up to the nearest MUI SVG icon (<svg class="MuiSvgIcon-root">). Returns null if none.
+  function findOwningIconSvg(el) {
+    var cur = el;
+    for (var i = 0; cur && i < 4; i++) {
+      if (cur.nodeType === 1 && cur.tagName && cur.tagName.toLowerCase() === 'svg') {
+        var cls = cur.getAttribute('class') || '';
+        if (cls.indexOf('MuiSvgIcon-root') !== -1) return cur;
+      }
+      cur = cur.parentNode;
+    }
+    return null;
+  }
+
+  function getIconPathD(svg) {
+    if (!svg) return '';
+    var p = svg.querySelector('path');
+    return p ? (p.getAttribute('d') || '') : '';
   }
 
   // True when the element contains element children (not just text nodes).
@@ -129,6 +149,9 @@ export const EDIT_OVERLAY_SCRIPT = `
     var card = document.getElementById(CARD_ID);
     if (card && card.contains(e.target)) { clearHighlight(); return; }
     if (!isEditable(e.target)) { clearHighlight(); return; }
+    // Icon hover: highlight the owning <svg> rather than a child <path>.
+    var iconSvg = findOwningIconSvg(e.target);
+    if (iconSvg) { applyHighlight(iconSvg); return; }
     // If element has inline children (<span>, <a>, …), highlight only the text node
     // under the cursor — that's what we'll actually edit on click.
     if (e.target.tagName !== 'IMG' && hasInlineChildElements(e.target)) {
@@ -275,13 +298,19 @@ export const EDIT_OVERLAY_SCRIPT = `
 
     // Footer
     var footerStyle =
-      'display:flex!important;gap:10px!important;justify-content:flex-end!important;' +
+      'display:flex!important;gap:10px!important;align-items:center!important;' +
       'padding:14px 20px 18px!important;border-top:1px solid #27272a!important;';
     var cancelStyle =
       'all:initial!important;padding:9px 20px!important;background:#27272a!important;' +
       'border-radius:10px!important;color:#a1a1aa!important;cursor:pointer!important;' +
       'font-size:13px!important;font-weight:600!important;font-family:system-ui,sans-serif!important;' +
       'transition:background .15s!important;';
+    var deleteStyle =
+      'all:initial!important;padding:9px 14px!important;background:transparent!important;' +
+      'border:1px solid rgba(239,68,68,.35)!important;border-radius:10px!important;' +
+      'color:#f87171!important;cursor:pointer!important;' +
+      'font-size:13px!important;font-weight:600!important;font-family:system-ui,sans-serif!important;' +
+      'transition:background .15s,border-color .15s!important;';
     var saveStyle =
       'all:initial!important;padding:9px 24px!important;' +
       'background:linear-gradient(135deg,#6366f1,#8b5cf6)!important;' +
@@ -311,6 +340,8 @@ export const EDIT_OVERLAY_SCRIPT = `
       '</div>' +
       '<div style="' + bodyStyle + '">' + inputHtml + '</div>' +
       '<div style="' + footerStyle + '">' +
+        '<button id="__eo-delete" style="' + deleteStyle + '">🗑 Изтрий</button>' +
+        '<div style="flex:1!important;"></div>' +
         '<button id="__eo-cancel" style="' + cancelStyle + '">Отказ</button>' +
         '<button id="__eo-save" style="' + saveStyle + '">Запази промените</button>' +
       '</div>';
@@ -377,6 +408,16 @@ export const EDIT_OVERLAY_SCRIPT = `
       removeCard();
     });
 
+    document.getElementById('__eo-delete').addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (!window.confirm('Сигурен ли си, че искаш да изтриеш този елемент?')) return;
+      window.parent.postMessage({
+        type: 'EDIT_DELETE',
+        patch: { kind: isImg ? 'image' : 'text', anchor: original },
+      }, window.location.origin || '*');
+      removeCard();
+    });
+
     document.getElementById('__eo-save').addEventListener('click', function(e) {
       e.stopPropagation();
       var inp = document.getElementById('__eo-input');
@@ -411,6 +452,24 @@ export const EDIT_OVERLAY_SCRIPT = `
 
     var t = e.target;
     if (!t || t === document.body || t === document.documentElement) return;
+
+    // Icon click: delegate to parent (React) which opens the picker dialog.
+    var iconSvg = findOwningIconSvg(t);
+    if (iconSvg) {
+      var pathD = getIconPathD(iconSvg);
+      if (pathD) {
+        var rect = iconSvg.getBoundingClientRect();
+        window.parent.postMessage({
+          type: 'EDIT_ICON_CLICK',
+          patch: {
+            sourcePathD: pathD,
+            width: Math.round(rect.width) || 24,
+            height: Math.round(rect.height) || 24,
+          },
+        }, window.location.origin || '*');
+        return;
+      }
+    }
 
     var isImg = t.tagName === 'IMG';
     var hasText = !isImg && t.textContent && t.textContent.trim().length > 0;

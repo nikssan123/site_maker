@@ -32,6 +32,7 @@ import IterationPlanCard from '../components/IterationPlanCard';
 import ProjectCheckout from '../components/UpgradeGate';
 import PaymentsSetupDialog from '../components/PaymentsSetupDialog';
 import MessageBubble from '../components/MessageBubble';
+import IconPickerDialog, { type IconPickResult } from '../components/IconPickerDialog';
 
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
@@ -177,6 +178,7 @@ export default function PreviewPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [editDynamicError, setEditDynamicError] = useState(false);
   const [editError, setEditError] = useState<{ message: string; severity: 'error' | 'warning' } | null>(null);
+  const [iconPicker, setIconPicker] = useState<{ sourcePathD: string; width: number; height: number } | null>(null);
   const [logoDialogOpen, setLogoDialogOpen] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -342,8 +344,67 @@ export default function PreviewPage() {
 
   useEffect(() => {
     if (!editToken) return;
+
+    // Shared: apply a patch call with rebuild-busy retry, then poll for ready and refresh.
+    const applyWithRetryAndReload = async (call: () => Promise<unknown>) => {
+      const MAX_RETRIES = 3;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await call();
+          break;
+        } catch (retryErr: any) {
+          const busy = retryErr.status === 409 && /rebuild|in progress/i.test(retryErr.message ?? '');
+          if (busy && attempt < MAX_RETRIES) {
+            await new Promise((r) => setTimeout(r, 3000));
+            continue;
+          }
+          throw retryErr;
+        }
+      }
+      await pollUntilRunning(projectId!);
+      setRefreshKey((k) => k + 1);
+      await loadProject();
+    };
+
+    const reportError = (err: any) => {
+      const msg: string = err.message ?? '';
+      const status: number | undefined = err.status;
+      if (status === 409) {
+        setEditDynamicError(true);
+      } else {
+        const userFacing = status === 404 || status === 422;
+        setEditError({
+          message: userFacing && msg ? msg : t('editMode.patchFailed'),
+          severity: status === 422 ? 'warning' : 'error',
+        });
+      }
+    };
+
     const handler = async (e: MessageEvent) => {
-      if (!e.data || e.data.type !== 'EDIT_SAVED') return;
+      if (!e.data) return;
+
+      if (e.data.type === 'EDIT_ICON_CLICK') {
+        const { patch } = e.data as { patch: { sourcePathD: string; width: number; height: number } };
+        setIconPicker(patch);
+        return;
+      }
+
+      if (e.data.type === 'EDIT_DELETE') {
+        const { patch } = e.data as { patch: { kind: 'text' | 'image' | 'icon'; anchor: string } };
+        setEditSaving(true);
+        try {
+          await applyWithRetryAndReload(() =>
+            api.deleteElement(projectId!, { token: editToken, kind: patch.kind, anchor: patch.anchor }),
+          );
+        } catch (err: any) {
+          reportError(err);
+        } finally {
+          setEditSaving(false);
+        }
+        return;
+      }
+
+      if (e.data.type !== 'EDIT_SAVED') return;
       const { patch } = e.data as {
         patch: {
           original: string;
@@ -356,47 +417,15 @@ export default function PreviewPage() {
       setEditSaving(true);
       try {
         let replacement = patch.replacement ?? '';
-        // If the user uploaded a file, send it to the backend first and get back a URL
         if (patch.imageDataUrl) {
           const { url } = await api.uploadImage(projectId!, patch.imageDataUrl, patch.imageFilename ?? 'image.jpg');
           replacement = url;
         }
-
-        // Retry loop: if a rebuild is already in progress, wait and retry
-        const MAX_PATCH_RETRIES = 3;
-        for (let attempt = 0; ; attempt++) {
-          try {
-            await api.patchContent(projectId!, { token: editToken, original: patch.original, replacement });
-            break;
-          } catch (retryErr: any) {
-            const isRebuildBusy = retryErr.status === 409 && /rebuild|in progress/i.test(retryErr.message ?? '');
-            if (isRebuildBusy && attempt < MAX_PATCH_RETRIES) {
-              await new Promise((r) => setTimeout(r, 3000));
-              continue;
-            }
-            throw retryErr;
-          }
-        }
-
-        await pollUntilRunning(projectId!);
-        // Reload the preview iframe after rebuild
-        setRefreshKey((k) => k + 1);
-        await loadProject();
+        await applyWithRetryAndReload(() =>
+          api.patchContent(projectId!, { token: editToken, original: patch.original, replacement }),
+        );
       } catch (err: any) {
-        const msg: string = err.message ?? '';
-        const status: number | undefined = err.status;
-        // Dynamic content (catalog) or blocked targets (e.g. server.js) should guide user to Catalog.
-        if (status === 409) {
-          setEditDynamicError(true);
-        } else {
-          // 404 (original text not found) and 422 (split across inline elements) carry
-          // user-facing messages from the backend. 5xx fall back to generic.
-          const userFacing = status === 404 || status === 422;
-          setEditError({
-            message: userFacing && msg ? msg : t('editMode.patchFailed'),
-            severity: status === 422 ? 'warning' : 'error',
-          });
-        }
+        reportError(err);
       } finally {
         setEditSaving(false);
       }
@@ -404,6 +433,58 @@ export default function PreviewPage() {
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
   }, [editToken, projectId]);
+
+  // Apply an icon pick (library swap or uploaded SVG) — called by the picker dialog.
+  const handleIconPicked = async (result: IconPickResult) => {
+    if (!iconPicker || !editToken || !projectId) return;
+    const { sourcePathD, width, height } = iconPicker;
+    setIconPicker(null);
+    setEditSaving(true);
+    try {
+      let uploadedUrl: string | undefined;
+      if (result.kind === 'upload' && result.dataUrl) {
+        const { url } = await api.uploadImage(projectId, result.dataUrl, result.filename ?? 'icon.svg');
+        uploadedUrl = url;
+      }
+      const MAX_RETRIES = 3;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await api.patchIcon(projectId, {
+            token: editToken,
+            sourcePathD,
+            newIconName: result.kind === 'library' ? result.name : undefined,
+            uploadedUrl,
+            width: uploadedUrl ? width : undefined,
+            height: uploadedUrl ? height : undefined,
+          });
+          break;
+        } catch (retryErr: any) {
+          const busy = retryErr.status === 409 && /rebuild|in progress/i.test(retryErr.message ?? '');
+          if (busy && attempt < MAX_RETRIES) {
+            await new Promise((r) => setTimeout(r, 3000));
+            continue;
+          }
+          throw retryErr;
+        }
+      }
+      await pollUntilRunning(projectId);
+      setRefreshKey((k) => k + 1);
+      await loadProject();
+    } catch (err: any) {
+      const msg: string = err.message ?? '';
+      const status: number | undefined = err.status;
+      if (status === 409) setEditDynamicError(true);
+      else {
+        const userFacing = status === 404 || status === 422;
+        setEditError({
+          message: userFacing && msg ? msg : t('editMode.patchFailed'),
+          severity: status === 422 ? 'warning' : 'error',
+        });
+      }
+    } finally {
+      setEditSaving(false);
+    }
+  };
 
   const workspaceMode = drawerMode === 'improvements' ? null : drawerMode;
   const workspaceOpen = workspaceMode !== null;
@@ -1252,6 +1333,12 @@ export default function PreviewPage() {
           {t('editMode.dynamicContentError')}
         </Alert>
       </Snackbar>
+
+      <IconPickerDialog
+        open={iconPicker !== null}
+        onClose={() => setIconPicker(null)}
+        onPick={handleIconPicked}
+      />
 
       {/* Generic edit / preview error — replaces browser alert() */}
       <Snackbar

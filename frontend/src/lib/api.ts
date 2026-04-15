@@ -145,6 +145,23 @@ export const api = {
   patchContent: (projectId: string, body: { token: string; original: string; replacement: string }) =>
     request<{ ok: boolean }>('PATCH', `/preview/${projectId}/content`, body),
 
+  patchIcon: (
+    projectId: string,
+    body: {
+      token: string;
+      sourcePathD: string;
+      newIconName?: string;
+      uploadedUrl?: string;
+      width?: number;
+      height?: number;
+    },
+  ) => request<{ ok: boolean }>('PATCH', `/preview/${projectId}/icon`, body),
+
+  deleteElement: (
+    projectId: string,
+    body: { token: string; kind: 'text' | 'image' | 'icon'; anchor: string },
+  ) => request<{ ok: boolean }>('PATCH', `/preview/${projectId}/delete-element`, body),
+
   // Filesystem editor (paid projects)
   fsTree: (projectId: string, dir?: string) =>
     request<{ dir: string; children: unknown[] }>('GET', `/preview/${projectId}/fs/tree${dir ? `?dir=${encodeURIComponent(dir)}` : ''}`),
