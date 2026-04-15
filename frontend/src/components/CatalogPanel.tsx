@@ -4,6 +4,7 @@ import {
   DialogActions, List, ListItem, ListItemText, ListItemAvatar,
   Avatar, Divider, CircularProgress, Alert, Stack, Tooltip, Select,
   MenuItem, FormControl, InputLabel,
+  Pagination,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -14,6 +15,7 @@ import { api } from '../lib/api';
 import { AdminField, inferFieldType, renderField } from '../lib/adminFields';
 
 const MAX_FILE_BYTES = 7 * 1024 * 1024; // 7 MB
+const ROWS_PER_PAGE = 25;
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -48,6 +50,7 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken, onData
   const [rows, setRows] = useState<Row[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -98,9 +101,11 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken, onData
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: unknown = await res.json();
       setRows(Array.isArray(data) ? (data as Row[]) : []);
+      setPage(1);
     } catch (e: unknown) {
       setFetchError(e instanceof Error ? e.message : String(e));
       setRows([]);
+      setPage(1);
     } finally {
       setLoading(false);
     }
@@ -121,6 +126,9 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken, onData
       : []);
 
   const fields = typedFields.map((f) => f.name);
+  const totalPages = Math.max(1, Math.ceil((rows?.length ?? 0) / ROWS_PER_PAGE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedRows = rows?.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE) ?? [];
 
   const nameField =
     fields.find((f) => /name|title|label|make|brand|model/.test(f.toLowerCase())) ??
@@ -252,6 +260,7 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken, onData
               onChange={(e) => {
                 setActiveModel(e.target.value);
                 setRows(null);
+                setPage(1);
               }}
             >
               {models.map((m) => (
@@ -322,7 +331,7 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken, onData
       {/* Product list */}
       {!loading && !fetchError && rows && rows.length > 0 && (
         <List dense disablePadding sx={{ flex: 1, overflow: 'auto' }}>
-          {rows.map((row, i) => (
+          {pagedRows.map((row, i) => (
             <Box key={String(row.id ?? i)}>
               <ListItem
                 sx={{ py: 1, pr: 10 }}
@@ -356,10 +365,36 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken, onData
                   secondaryTypographyProps={{ variant: 'caption' }}
                 />
               </ListItem>
-              {i < rows.length - 1 && <Divider component="li" />}
+              {i < pagedRows.length - 1 && <Divider component="li" />}
             </Box>
           ))}
         </List>
+      )}
+      {!loading && !fetchError && rows && rows.length > 0 && totalPages > 1 && (
+        <Box
+          sx={{
+            px: 2,
+            py: 1.25,
+            borderTop: '1px solid',
+            borderColor: 'divider',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 1,
+            flexWrap: 'wrap',
+          }}
+        >
+          <Typography variant="caption" color="text.secondary">
+            {`${(currentPage - 1) * ROWS_PER_PAGE + 1}-${Math.min(currentPage * ROWS_PER_PAGE, rows.length)} / ${rows.length}`}
+          </Typography>
+          <Pagination
+            count={totalPages}
+            page={currentPage}
+            onChange={(_, value) => setPage(value)}
+            size="small"
+            color="primary"
+          />
+        </Box>
       )}
 
       {/* Add / Edit dialog */}

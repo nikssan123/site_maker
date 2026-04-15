@@ -6,6 +6,7 @@ import {
   Chip,
   CircularProgress,
   Paper,
+  Pagination,
   Stack,
   Table,
   TableBody,
@@ -45,6 +46,7 @@ export default function DashboardPanel({ projectId, runPort }: Props) {
   const [modelsError, setModelsError] = useState(false);
   const [modelData, setModelData] = useState<Record<string, Row[]>>({});
   const [loading, setLoading] = useState(false);
+  const [modelPages, setModelPages] = useState<Record<string, number>>({});
 
   useEffect(() => {
     api.getCatalogModels(projectId)
@@ -67,6 +69,11 @@ export default function DashboardPanel({ projectId, runPort }: Props) {
       }
     }));
     setModelData(results);
+    setModelPages((prev) => {
+      const next: Record<string, number> = {};
+      for (const m of ms) next[m.name] = prev[m.name] ?? 1;
+      return next;
+    });
     setLoading(false);
   }, [projectId, runPort]);
 
@@ -150,6 +157,9 @@ export default function DashboardPanel({ projectId, runPort }: Props) {
       <Box sx={{ flex: 1, overflow: 'auto', p: 1.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
         {models.map((m) => {
           const rows = modelData[m.name] ?? [];
+          const totalPages = Math.max(1, Math.ceil(rows.length / MAX_ROWS));
+          const currentPage = Math.min(modelPages[m.name] ?? 1, totalPages);
+          const visibleRows = rows.slice((currentPage - 1) * MAX_ROWS, currentPage * MAX_ROWS);
           const allKeys = m.fields
             ? m.fields.map((f) => f.name)
             : rows.length > 0
@@ -209,7 +219,7 @@ export default function DashboardPanel({ projectId, runPort }: Props) {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {rows.slice(0, MAX_ROWS).map((row, i) => (
+                      {visibleRows.map((row, i) => (
                         <TableRow key={String(row.id ?? i)}>
                           {displayCols.map((col) => {
                             const fieldDef = m.fields?.find((f) => f.name === col);
@@ -236,10 +246,27 @@ export default function DashboardPanel({ projectId, runPort }: Props) {
                     </TableBody>
                   </Table>
                   {rows.length > MAX_ROWS && (
-                    <Box sx={{ px: 2, py: 1 }}>
+                    <Box
+                      sx={{
+                        px: 2,
+                        py: 1,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: 1,
+                        flexWrap: 'wrap',
+                      }}
+                    >
                       <Typography variant="caption" color="text.disabled">
-                        +{rows.length - MAX_ROWS} {t('dashboard.moreRows')}
+                        {`${(currentPage - 1) * MAX_ROWS + 1}-${Math.min(currentPage * MAX_ROWS, rows.length)} / ${rows.length}`}
                       </Typography>
+                      <Pagination
+                        count={totalPages}
+                        page={currentPage}
+                        onChange={(_, value) => setModelPages((prev) => ({ ...prev, [m.name]: value }))}
+                        size="small"
+                        color="primary"
+                      />
                     </Box>
                   )}
                 </Box>
