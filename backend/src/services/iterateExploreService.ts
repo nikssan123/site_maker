@@ -97,6 +97,7 @@ Rules:
 - You MUST choose paths ONLY from the provided file tree.
 - Keep it minimal: open at most ${maxOpens} files total.
 - Prefer reading key entrypoints/components that determine behavior, not broad refactors.
+- If the change will likely require a new file, still focus on opening the existing files that will import, render, or connect that new file.
 - When done, provide a minimal targetFiles list (1-8 files).
 - Do not include node_modules, dist, or lockfiles.
 `;
@@ -177,4 +178,3 @@ Rules:
     openedBodies,
   };
 }
-

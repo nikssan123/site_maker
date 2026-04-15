@@ -166,6 +166,10 @@ export async function clarifyIteration(
   const planData = session.plan.data as Record<string, unknown>;
   const projectFiles = Object.keys((session.project.files as Record<string, string>) ?? {});
   const fileRecord = (session.project.files as Record<string, string>) ?? {};
+  const conversationContext = conversation
+    .slice(-6)
+    .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
+    .join('\n\n');
   const alreadyAskedAQuestion = conversation.some(
     (m) => m.role === 'assistant' && /[?？]\s*$/.test(m.content.trim()),
   );
@@ -175,8 +179,16 @@ export async function clarifyIteration(
   let draftSpecEn = draftFromUser || 'Apply the requested change using best judgement.';
   try {
     const chatAi = getChatClient();
-    const draftSystem = `You convert a user's change request into technical intent.\n\nRules:\n- English only.\n- 3–8 concise bullet points.\n- Do NOT ask questions.\n- Do NOT include file paths.\n`;
-    const draftUser = `User request (may be Bulgarian):\n${draftFromUser || '(empty)'}\n\nApp plan JSON:\n${JSON.stringify(planData)}`;
+    const draftSystem = `You convert an improvement-chat request into implementation intent for a coding agent.
+
+Rules:
+- English only.
+- 4-8 concise bullet points.
+- Do NOT ask questions.
+- Infer the likely intent from the repo/app context whenever possible.
+- Mention if a new file or reusable component is likely needed, but do not include exact file paths.
+- Focus on the user's latest request and any clarifications already given.`;
+    const draftUser = `Recent conversation:\n${conversationContext || '(empty)'}\n\nLatest user request (may be Bulgarian):\n${draftFromUser || '(empty)'}\n\nApp plan JSON:\n${JSON.stringify(planData)}`;
     const drafted = await chatAi.complete([{ role: 'user', content: draftUser }], draftSystem, { maxTokens: 250 });
     const cleaned = drafted.trim();
     if (cleaned.length >= 20) draftSpecEn = cleaned;
@@ -230,11 +242,16 @@ export async function clarifyIteration(
 ПРОЕКТ (вътрешен контекст — не го цитирай в summary/question):
 - План: ${JSON.stringify(planData)}
 - Всички файлове: ${projectFiles.join(', ')}
+- Последен разговор:
+${conversationContext || '(няма)'}
 
 КОД НА РЕЛЕВАНТНИТЕ ФАЙЛОВЕ (вътрешен; в summary/question НЕ споменавай пътища, .tsx/.jsx, “src/”):
 ${relevantCodeContext || '(няма налично съдържание)'}
 
 Цел: почти винаги директно готова spec; само при крайна неяснота — един кратък продуктов въпрос (и само ако още няма съобщение от асистента в този thread).
+- По подразбиране избирай ready:true и прави разумни допускания от контекста.
+- Не искай потвърждение и не предлагай отделен план за одобрение.
+- Ако има достатъчно информация да се започне безопасно, НЕ задавай въпрос.
 
 Правила за потребителския текст (summary и question):
 - На български, без технически жаргон, без имена на файлове и без пътища.
@@ -249,6 +266,7 @@ ${relevantCodeContext || '(няма налично съдържание)'}
 - Ако вече е зададен поне един въпрос в историята, НЕ задавай въпрос — винаги ready: true.
 - Иначе: най-много един въпрос за целия чат; питай само за продуктово поведение.
 - При ясни заявки (“смени цвета на бутона”, “добави поле”) — веднага ready: true с разумни допускания.
+- Дори при по-широки заявки, ако можеш да локализираш промяната от кода, върни ready:true.
 
 Правила за spec (технически, на английски, за кода):
 - 4–8 конкретни bullets.
@@ -256,6 +274,7 @@ ${relevantCodeContext || '(няма налично съдържание)'}
   Пример: “In src/pages/HomePage.tsx, change the AppBar sx prop to add position:'sticky', top:0, zIndex:10.”
 - Базирай се на видения код — не измисляй имена на компоненти, props или state.
 - Минимален обхват; само необходимите файлове; без широки рефакторинги.
+- Ако е нужен нов frontend файл, позволено е да го опишеш с точен нов path под src/components, src/pages, src/hooks, src/lib, src/features, src/styles, src/assets или src/data и да кажеш “create”.
 
 ВЪРНИ САМО JSON (без markdown):
 1) Ако НЕ е готово и още няма assistant съобщение в този thread: { “ready”: false, “question”: “<български, без технически детайли>” }

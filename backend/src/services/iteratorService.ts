@@ -26,12 +26,27 @@ import {
   GEN_JSON_REPAIR_INITIAL,
 } from '../lib/generationFriendly';
 
-function isSafeExtraFile(p: string): boolean {
+function isSafeFrontendExtraFile(p: string): boolean {
   return (
-    /^src\/(components|lib|pages)\/.+\.(ts|tsx)$/.test(p) ||
-    /^src\/styles\/.+\.(ts|tsx)$/.test(p) ||
-    /^src\/theme\.ts$/.test(p)
+    /^src\/(components|lib|pages|hooks|utils|features|data|assets)\/.+\.(ts|tsx|js|jsx|css|scss|json|svg)$/.test(p) ||
+    /^src\/styles\/.+\.(css|scss|ts|tsx)$/.test(p)
   );
+}
+
+function isAllowedGuardedExtraFile(p: string, refinedSpec: string, scopedFiles: string[]): boolean {
+  const normalizedPath = p.replace(/\\/g, '/');
+  const spec = refinedSpec.toLowerCase();
+  const pathMentioned = spec.includes(normalizedPath.toLowerCase());
+
+  if (/^backend\/src\/.+\.(ts|js)$/.test(normalizedPath)) {
+    return pathMentioned;
+  }
+
+  if (normalizedPath === 'package.json' || normalizedPath === 'backend/package.json') {
+    return pathMentioned;
+  }
+
+  return scopedFiles.includes(normalizedPath);
 }
 
 function isHighRiskGlobalFile(p: string): boolean {
@@ -215,7 +230,12 @@ Rules:
   // Safety: prevent broad/unscoped changes to reduce layout/copy regressions.
   const changedPaths = Object.keys(changedFiles).sort();
   const allowed = new Set(scopedFiles);
-  const illegal = changedPaths.filter((p) => !allowed.has(p) && !isSafeExtraFile(p));
+  const illegal = changedPaths.filter(
+    (p) =>
+      !allowed.has(p) &&
+      !isSafeFrontendExtraFile(p) &&
+      !isAllowedGuardedExtraFile(p, refinedSpec, scopedFiles),
+  );
   const MAX_CHANGED = 10;
   if (changedPaths.length > MAX_CHANGED || illegal.length > 0) {
     await publishEvent(sessionId, {

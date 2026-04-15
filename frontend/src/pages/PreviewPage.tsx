@@ -32,7 +32,6 @@ import IterationBar from '../components/IterationBar';
 import ProjectCheckout from '../components/UpgradeGate';
 import PaymentsSetupDialog from '../components/PaymentsSetupDialog';
 import MessageBubble from '../components/MessageBubble';
-import IterationPlanCard from '../components/IterationPlanCard';
 
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
@@ -142,13 +141,6 @@ export default function PreviewPage() {
   const [drawerOpen, setDrawerOpen] = useState(() => !window.matchMedia('(max-width:899.95px)').matches);
   const [drawerMode, setDrawerMode] = useState<'improvements' | AdminWorkspaceMode>('improvements');
   const [iterateChat, setIterateChat] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
-  const [pendingIterate, setPendingIterate] = useState<null | {
-    summary: string;
-    planBulletsBg: string[];
-    spec: string;
-    targetFiles: string[];
-    explorerContextNotes?: string;
-  }>(null);
   const [iterationHistory, setIterationHistory] = useState<Array<{ id: string; title: string | null; description: string | null; createdAt: string }>>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [paymentsOpen, setPaymentsOpen] = useState(
@@ -442,14 +434,20 @@ export default function PreviewPage() {
     fetchHistory();
   }, [projectId, drawerOpen, drawerMode, fetchHistory]);
 
-  const confirmIterationPlan = () => {
-    if (!store.sessionId || !pendingIterate) return;
+  const executeIteration = (snapshot: {
+    summary: string;
+    planBulletsBg: string[];
+    spec: string;
+    targetFiles: string[];
+    explorerContextNotes?: string;
+  }) => {
+    if (!store.sessionId) return;
     if (!store.projectPaid && !store.allowUnpaidDownload) {
       setCheckoutReason('');
       setCheckoutOpen(true);
       return;
     }
-    const snapshot = pendingIterate;
+
     setIterating(true);
     useProjectStore.setState({ fixAttempts: [] });
     store.setGenerationFriendlyMessage(t('preview.applyingChanges'));
@@ -493,7 +491,6 @@ export default function PreviewPage() {
       () => {
         store.setGenerationFriendlyMessage('');
         setIterating(false);
-        setPendingIterate(null);
       },
     );
   };
@@ -502,10 +499,6 @@ export default function PreviewPage() {
     if (!store.sessionId) return;
     const text = message.trim();
     if (!text) return;
-
-    if (pendingIterate) {
-      setPendingIterate(null);
-    }
 
     setIterateChat((prev) => [...prev, { role: 'user', content: text }]);
 
@@ -531,17 +524,16 @@ export default function PreviewPage() {
         return;
       }
 
-      const summaryText = res.summary ?? '';
-      const fromApi = Array.isArray(res.planBulletsBg) ? res.planBulletsBg.filter((s) => s.trim()) : [];
-      const planBulletsBg =
-        fromApi.length > 0
-          ? fromApi
-          : summaryText
-              .split(/(?<=[.!?])\s+/)
-              .map((s) => s.trim())
-              .filter((s) => s.length > 12);
+      const summaryText = res.summary?.trim() ?? '';
+      const planBulletsBg = Array.isArray(res.planBulletsBg)
+        ? res.planBulletsBg.map((s) => s.trim()).filter(Boolean)
+        : [];
 
-      setPendingIterate({
+      if (summaryText) {
+        setIterateChat((prev) => [...prev, { role: 'assistant', content: summaryText }]);
+      }
+
+      executeIteration({
         summary: summaryText,
         planBulletsBg,
         spec: res.spec,
@@ -993,17 +985,6 @@ export default function PreviewPage() {
                     <MessageBubble key={idx} role={m.role} content={m.content} />
                   ))}
 
-                  {pendingIterate && (
-                    <IterationPlanCard
-                      summary={pendingIterate.summary}
-                      planBulletsBg={pendingIterate.planBulletsBg}
-                      loading={iterating}
-                      showUnlockHint={!projectPaid && !allowUnpaidDownload}
-                      onConfirm={confirmIterationPlan}
-                      onEdit={() => setPendingIterate(null)}
-                    />
-                  )}
-
                   {iterating && (
                     <MessageBubble
                       role="assistant"
@@ -1144,6 +1125,12 @@ export default function PreviewPage() {
                 {iterateChat.map((msg, i) => (
                   <MessageBubble key={i} role={msg.role} content={msg.content} />
                 ))}
+                {iterating && (
+                  <MessageBubble
+                    role="assistant"
+                    content={store.generationFriendlyMessage || t('preview.applyingChanges')}
+                  />
+                )}
               </Box>
               <Box sx={{ p: 1.5, borderTop: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
                 <IterationBar onSubmit={handleIterate} loading={iterating} onBuyIteration={handleBuyIteration} />
