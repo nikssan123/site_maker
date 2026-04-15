@@ -218,6 +218,21 @@ export default function PreviewFrame({ projectId, port, editToken }: Props) {
   }, [projectId, previewUrl, frameKey, port, t]);
 
   const handleIframeLoad = () => {
+    const iframe = iframeRef.current;
+    if (iframe && !PREVIEW_USE_HOST_PORT) {
+      try {
+        const pathname = iframe.contentWindow?.location.pathname;
+        const base = `/preview-app/${projectId}/`;
+        if (pathname && !pathname.startsWith(base)) {
+          iframe.contentWindow!.location.replace(previewUrl);
+          return;
+        }
+      } catch {
+        /* cross-origin — preview escaped to another origin, force it back */
+        iframe.src = previewUrl;
+        return;
+      }
+    }
     waitingRef.current = false;
     clearWarnTimer();
     setSoftHint(null);
