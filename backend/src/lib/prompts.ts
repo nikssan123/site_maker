@@ -799,7 +799,7 @@ Wrap app in <ThemeProvider theme={theme}><CssBaseline /> in src/main.tsx.`;
     }
     if (appType === 'booking' && !dataModels.some((m) => String(m.name).toLowerCase().includes('slot'))) {
       prompt += `- takenSlots: [date, time, note]\n`;
-      prompt += `\nBooking-specific requirement: persist taken (unavailable) time slots and expose them via the backend API so the calendar and booking form can read/write them.`;
+      prompt += `\nBooking-specific requirement: persist taken (unavailable) time slots and expose them via the backend API so the calendar and booking form can read/write them. Use the EXACT canonical model/API name "takenSlots" with routes GET /api/takenSlots, POST /api/takenSlots, and DELETE /api/takenSlots/:id. Do not rename this model to blockedSlots, unavailableSlots, busySlots, calendarSlots, or any other alias.`;
     }
     prompt += `
 server.js requirements (MUST follow the exact skeleton from the system prompt):
@@ -820,7 +820,7 @@ server.js requirements (MUST follow the exact skeleton from the system prompt):
 
   } else if (hasDatabase && appType === 'booking') {
     // Booking apps need taken-slots persistence even if the model forgot to include it.
-    prompt += `\n\nBOOKING DATABASE REQUIREMENT:\n- Add a model/table for taken slots (e.g. takenSlots with fields [date, time, note]) and expose CRUD endpoints for it in server.js using the same REST pattern. The calendar and booking form must use it to prevent unavailable selections.`;
+    prompt += `\n\nBOOKING DATABASE REQUIREMENT:\n- Add the EXACT canonical model/table name takenSlots with fields [date, time, note] and expose routes GET /api/takenSlots, POST /api/takenSlots, and DELETE /api/takenSlots/:id in server.js using the same REST pattern. The calendar and booking form must use this exact API name to prevent unavailable selections. Do not invent alternate names like blockedSlots, unavailableSlots, or busySlots.`;
     prompt += `\n- REQUIRED: inside main(), before app.listen(), call fs.writeFileSync(require('path').join(__dirname, '__admin_config.json'), JSON.stringify(${buildAdminConfig(appType, [{ name: 'takenSlots', fields: ['date', 'time', 'note'] }])}));`;
   }
 

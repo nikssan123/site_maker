@@ -1,6 +1,8 @@
 import { prisma } from '../index';
 import { getChatClient, ChatMessage } from './aiClient';
+import { Prisma } from '@prisma/client';
 import { PLANNER_SYSTEM_LOCALIZED } from '../lib/prompts';
+import { normalizePlanDataForPersistence } from '../lib/planNormalization';
 
 // Matches ```plan ... ``` or ```json ... ``` code fences, and legacy <PLAN>...</PLAN> tags.
 // GPT-4o sometimes uses ```json instead of ```plan.
@@ -135,7 +137,7 @@ export async function chat(
 
   if (fenceJson) {
     try {
-      const planData = parsePlanData(fenceJson) as { appType?: string };
+      const planData = normalizePlanDataForPersistence(parsePlanData(fenceJson)) as { appType?: string };
 
       // Only accept as a valid plan if it has the expected appType field
       // (prevents a stray ```json block from being mistaken for a plan)
@@ -256,7 +258,7 @@ export async function chatStream(
 
   if (fenceJson) {
     try {
-      const planData = parsePlanData(fenceJson) as { appType?: string };
+        const planData = normalizePlanDataForPersistence(parsePlanData(fenceJson)) as { appType?: string };
       if (planData && typeof planData.appType === 'string') {
         const existing = await prisma.plan.findUnique({ where: { sessionId } });
         if (!existing || !existing.locked) {
@@ -287,6 +289,9 @@ export async function lockPlan(planId: string, userId: string) {
 
   return prisma.plan.update({
     where: { id: planId },
-    data: { locked: true },
+    data: {
+      locked: true,
+      data: normalizePlanDataForPersistence(plan.data) as Prisma.InputJsonValue,
+    },
   });
 }

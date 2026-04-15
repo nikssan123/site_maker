@@ -1,24 +1,12 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { requireAuth } from '../middleware/requireAuth';
 import { lockPlan } from '../services/plannerService';
 import { prisma } from '../index';
+import { normalizePlanDataForPersistence } from '../lib/planNormalization';
 
 const router = Router();
-
-function normalizePlanLanguages(languages: unknown): string[] {
-  const values = Array.isArray(languages) ? languages : [];
-  const normalized = Array.from(
-    new Set(
-      values
-        .filter((value): value is string => typeof value === 'string')
-        .map((value) => value.trim().toLowerCase())
-        .filter(Boolean),
-    ),
-  );
-
-  return normalized.includes('bg') ? normalized : ['bg', ...normalized];
-}
 
 router.get('/:sessionId', requireAuth, async (req, res, next) => {
   try {
@@ -68,14 +56,14 @@ router.patch('/:planId', requireAuth, async (req, res, next) => {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    const normalizedUpdates = {
+    const normalizedUpdates = normalizePlanDataForPersistence({
+      ...(plan.data as object),
       ...updates,
-      ...(updates.languages ? { languages: normalizePlanLanguages(updates.languages) } : {}),
-    };
+    });
 
     const updated = await prisma.plan.update({
       where: { id: planId },
-      data: { data: { ...(plan.data as object), ...normalizedUpdates } },
+      data: { data: normalizedUpdates as Prisma.InputJsonValue },
     });
     return res.json(updated);
   } catch (err) {
