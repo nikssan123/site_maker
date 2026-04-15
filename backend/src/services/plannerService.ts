@@ -230,7 +230,7 @@ export async function chatStream(
     }
   };
 
-  let response = await ai.stream(history, PLANNER_SYSTEM_LOCALIZED, filteredOnToken);
+  const streamedResponse = await ai.stream(history, PLANNER_SYSTEM_LOCALIZED, filteredOnToken);
 
   // Flush any held buffer that wasn't actually a fence
   if (!insidePlanFence && planFenceBuffer) {
@@ -239,18 +239,19 @@ export async function chatStream(
 
   // If the model forgot the plan block and should have included it, do a
   // non-streamed retry (rare path — the plan block is machine-only anyway).
-  if (shouldRetryForPlanBlock(userMessage, response)) {
+  let planSourceResponse = streamedResponse;
+  if (shouldRetryForPlanBlock(userMessage, streamedResponse)) {
     const forcePlanSystem = `${PLANNER_SYSTEM_LOCALIZED}${FORCE_PLAN_APPENDIX}`;
-    response = await ai.complete(history, forcePlanSystem);
+    planSourceResponse = await ai.complete(history, forcePlanSystem);
   }
 
-  const displayText = response.replace(PLAN_REGEX, '').trim();
+  const displayText = streamedResponse.replace(PLAN_REGEX, '').trim();
 
   await prisma.message.create({
     data: { sessionId, role: 'assistant', content: displayText },
   });
 
-  const fenceJson = extractPlanFence(response);
+  const fenceJson = extractPlanFence(planSourceResponse);
   let plan = null;
 
   if (fenceJson) {

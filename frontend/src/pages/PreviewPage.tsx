@@ -29,6 +29,7 @@ import AppLogo from '../components/AppLogo';
 import PreviewFrame from '../components/PreviewFrame';
 import AdminWorkspace, { type AdminWorkspaceMode } from '../components/AdminWorkspace';
 import IterationBar from '../components/IterationBar';
+import IterationPlanCard from '../components/IterationPlanCard';
 import ProjectCheckout from '../components/UpgradeGate';
 import PaymentsSetupDialog from '../components/PaymentsSetupDialog';
 import MessageBubble from '../components/MessageBubble';
@@ -40,6 +41,14 @@ import { Joyride } from 'react-joyride';
 import { usePreviewTour } from '../hooks/usePreviewTour';
 
 const DRAWER_WIDTH = 400;
+
+interface PendingIterationPlan {
+  summary: string;
+  planBulletsBg: string[];
+  spec: string;
+  targetFiles: string[];
+  explorerContextNotes?: string;
+}
 
 /** What we store in iteration history / session — not the English codegen spec. */
 function buildUserFacingIterationLogMessage(
@@ -135,12 +144,14 @@ export default function PreviewPage() {
   const pvMobile = useMediaQuery(pvTheme.breakpoints.down('md'));
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutReason, setCheckoutReason] = useState('');
+  const [clarifyingIteration, setClarifyingIteration] = useState(false);
   const [iterating, setIterating] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [downloadPreparingOpen, setDownloadPreparingOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(() => !window.matchMedia('(max-width:899.95px)').matches);
   const [drawerMode, setDrawerMode] = useState<'improvements' | AdminWorkspaceMode>('improvements');
   const [iterateChat, setIterateChat] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  const [pendingIterationPlan, setPendingIterationPlan] = useState<PendingIterationPlan | null>(null);
   const [iterationHistory, setIterationHistory] = useState<Array<{ id: string; title: string | null; description: string | null; createdAt: string }>>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [paymentsOpen, setPaymentsOpen] = useState(
@@ -442,12 +453,8 @@ export default function PreviewPage() {
     explorerContextNotes?: string;
   }) => {
     if (!store.sessionId) return;
-    if (!store.projectPaid && !store.allowUnpaidDownload) {
-      setCheckoutReason('');
-      setCheckoutOpen(true);
-      return;
-    }
 
+    setPendingIterationPlan(null);
     setIterating(true);
     useProjectStore.setState({ fixAttempts: [] });
     store.setGenerationFriendlyMessage(t('preview.applyingChanges'));
@@ -498,9 +505,11 @@ export default function PreviewPage() {
   const handleIterate = async (message: string) => {
     if (!store.sessionId) return;
     const text = message.trim();
-    if (!text) return;
+    if (!text || clarifyingIteration || iterating) return;
 
+    setPendingIterationPlan(null);
     setIterateChat((prev) => [...prev, { role: 'user', content: text }]);
+    setClarifyingIteration(true);
 
     try {
       const res = await api.post<
@@ -533,7 +542,7 @@ export default function PreviewPage() {
         setIterateChat((prev) => [...prev, { role: 'assistant', content: summaryText }]);
       }
 
-      executeIteration({
+      setPendingIterationPlan({
         summary: summaryText,
         planBulletsBg,
         spec: res.spec,
@@ -551,6 +560,8 @@ export default function PreviewPage() {
         },
       ]);
       return;
+    } finally {
+      setClarifyingIteration(false);
     }
   };
 
@@ -985,29 +996,31 @@ export default function PreviewPage() {
                     <MessageBubble key={idx} role={m.role} content={m.content} />
                   ))}
 
+                  {clarifyingIteration && (
+                    <MessageBubble
+                      role="assistant"
+                      content={t('preview.improvementsThinking', {
+                        defaultValue: 'Reviewing your request and preparing the improvement plan…',
+                      })}
+                    />
+                  )}
+
+                  {pendingIterationPlan && (
+                    <IterationPlanCard
+                      summary={pendingIterationPlan.summary}
+                      planBulletsBg={pendingIterationPlan.planBulletsBg}
+                      loading={iterating}
+                      onConfirm={() => executeIteration(pendingIterationPlan)}
+                      onEdit={() => setPendingIterationPlan(null)}
+                      showUnlockHint={false}
+                    />
+                  )}
+
                   {iterating && (
                     <MessageBubble
                       role="assistant"
                       content={store.generationFriendlyMessage || t('preview.applyingChanges')}
                     />
-                  )}
-
-                  {!projectPaid && (
-                    <Paper variant="outlined" sx={{ p: 1.5, borderColor: 'primary.main', borderWidth: 2 }}>
-                      <Stack direction="row" alignItems="center" gap={1} mb={1}>
-                        <RocketLaunchIcon color="primary" sx={{ fontSize: 17 }} />
-                        <Typography variant="subtitle2" fontWeight={700} sx={{ fontSize: 13 }}>
-                          {t('preview.unlockTitle')}
-                        </Typography>
-                      </Stack>
-                      <Typography variant="caption" color="text.secondary" display="block" mb={1.25}>
-                        {t('preview.unlockSubtitle')}
-                      </Typography>
-                      <Button variant="contained" fullWidth size="small"
-                        onClick={() => { setCheckoutReason(''); setCheckoutOpen(true); }}>
-                        {t('preview.unlockCta')}
-                      </Button>
-                    </Paper>
                   )}
 
                   {/* History section */}
@@ -1096,7 +1109,14 @@ export default function PreviewPage() {
                 <Box sx={{ p: 1.5, borderTop: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
                   <IterationBar
                     onSubmit={handleIterate}
-                    loading={iterating}
+                    loading={clarifyingIteration || iterating}
+                    loadingLabel={
+                      clarifyingIteration
+                        ? t('preview.improvementsThinking', {
+                            defaultValue: 'Reviewing your request and preparing the improvement plan…',
+                          })
+                        : t('preview.applyingChanges')
+                    }
                     onBuyIteration={handleBuyIteration}
                   />
                 </Box>
@@ -1125,6 +1145,24 @@ export default function PreviewPage() {
                 {iterateChat.map((msg, i) => (
                   <MessageBubble key={i} role={msg.role} content={msg.content} />
                 ))}
+                {clarifyingIteration && (
+                  <MessageBubble
+                    role="assistant"
+                    content={t('preview.improvementsThinking', {
+                      defaultValue: 'Reviewing your request and preparing the improvement plan…',
+                    })}
+                  />
+                )}
+                {pendingIterationPlan && (
+                  <IterationPlanCard
+                    summary={pendingIterationPlan.summary}
+                    planBulletsBg={pendingIterationPlan.planBulletsBg}
+                    loading={iterating}
+                    onConfirm={() => executeIteration(pendingIterationPlan)}
+                    onEdit={() => setPendingIterationPlan(null)}
+                    showUnlockHint={false}
+                  />
+                )}
                 {iterating && (
                   <MessageBubble
                     role="assistant"
@@ -1133,7 +1171,18 @@ export default function PreviewPage() {
                 )}
               </Box>
               <Box sx={{ p: 1.5, borderTop: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
-                <IterationBar onSubmit={handleIterate} loading={iterating} onBuyIteration={handleBuyIteration} />
+                <IterationBar
+                  onSubmit={handleIterate}
+                  loading={clarifyingIteration || iterating}
+                  loadingLabel={
+                    clarifyingIteration
+                      ? t('preview.improvementsThinking', {
+                          defaultValue: 'Reviewing your request and preparing the improvement plan…',
+                        })
+                      : t('preview.applyingChanges')
+                  }
+                  onBuyIteration={handleBuyIteration}
+                />
               </Box>
             </Box>
           </Drawer>

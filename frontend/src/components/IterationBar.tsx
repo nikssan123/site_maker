@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   Box, TextField, Button, Stack, Typography, LinearProgress, Paper,
-  Dialog, DialogTitle, DialogContent, DialogActions, Slider, Chip,
+  Dialog, DialogTitle, DialogContent, DialogActions, Slider, Chip, CircularProgress,
 } from '@mui/material';
 import DiamondIcon from '@mui/icons-material/Diamond';
 import SendIcon from '@mui/icons-material/Send';
@@ -23,10 +23,11 @@ function formatPrice(price: number): string {
 interface Props {
   onSubmit: (message: string) => void;
   loading: boolean;
+  loadingLabel?: string;
   onBuyIteration: (quantity: number) => void;
 }
 
-export default function IterationBar({ onSubmit, loading, onBuyIteration }: Props) {
+export default function IterationBar({ onSubmit, loading, loadingLabel, onBuyIteration }: Props) {
   const { t } = useTranslation();
   const [value, setValue] = useState('');
   const [buyDialogOpen, setBuyDialogOpen] = useState(false);
@@ -124,10 +125,10 @@ export default function IterationBar({ onSubmit, loading, onBuyIteration }: Prop
             fullWidth
             disabled={loading || !value.trim()}
             onClick={handleSubmit}
-            startIcon={<SendIcon fontSize="small" />}
+            startIcon={loading ? <CircularProgress size={14} sx={{ color: 'inherit' }} /> : <SendIcon fontSize="small" />}
             sx={{ background: 'linear-gradient(135deg, #6366f1, #a855f7)', fontWeight: 700 }}
           >
-            {t('iteration.apply')}
+            {loading ? (loadingLabel ?? t('preview.applyingChanges')) : t('iteration.apply')}
           </Button>
         ) : (
           <Button

@@ -243,8 +243,15 @@ export default function ChatPage() {
     api.get<any>(`/sessions/${paramSessionId}`)
       .then((session) => {
         applySessionFromApi(session);
+        const isSessionGenerating =
+          session.status === 'generating' ||
+          session.project?.status === 'generating' ||
+          session.project?.status === 'building' ||
+          session.project?.status === 'running' ||
+          session.status === 'error' ||
+          session.project?.status === 'error';
         if (session.plan) {
-          setPlanVisible(true);
+          setPlanVisible(!isSessionGenerating);
           setChatUnlockedForEditing(false);
         } else {
           setChatUnlockedForEditing(true);
@@ -303,12 +310,26 @@ export default function ChatPage() {
     };
   }, [paramSessionId, store.phase, emitGenerationEvent, finishGenerationStream]);
 
-  const startGeneration = (sessionId: string) => {
-    buildStartedInTabRef.current = true;
+  const enterGeneratingUi = useCallback((friendlyMessage?: string) => {
+    setPlanVisible(false);
+    setChatUnlockedForEditing(false);
     store.setPhase('generating');
     store.setIsStreaming(true);
     store.clearStreamBuffer();
-    store.setGenerationFriendlyMessage(t('chat.buildStarted'));
+    useProjectStore.setState({
+      generationSteps: INITIAL_STEPS.map((step) => (
+        step.step === 1
+          ? { ...step, status: 'running' as const }
+          : { ...step, status: 'pending' as const }
+      )),
+      fixAttempts: [],
+    });
+    store.setGenerationFriendlyMessage(friendlyMessage ?? t('chat.buildStarted'));
+  }, [store, t]);
+
+  const startGeneration = (sessionId: string) => {
+    buildStartedInTabRef.current = true;
+    enterGeneratingUi(t('chat.buildStarted'));
 
     api.streamEvents(
       '/generate',
@@ -352,8 +373,9 @@ export default function ChatPage() {
             store.appendStreamToken(event.token ?? '');
           } else if (event.type === 'done') {
             // Finalise: move streamed content into messages list
+            const finalMessage = useProjectStore.getState().streamBuffer || event.message || '';
             store.clearStreamBuffer();
-            store.addMessage({ role: 'assistant', content: event.message ?? '' });
+            store.addMessage({ role: 'assistant', content: finalMessage });
             if (event.plan) { store.setPlan(event.plan); }
             if (event.plan || store.plan) {
               setPlanVisible(true);
@@ -411,7 +433,7 @@ export default function ChatPage() {
         }>(`/sessions/${store.sessionId}`);
         // Session is already generating (e.g. page was refreshed mid-build) — just reconnect.
         if (s.status === 'generating') {
-          store.setPhase('generating');
+          enterGeneratingUi(t('chat.buildStarted'));
           return;
         }
         // Backend allows free retry when project failed after codegen; paid session skips checkout.

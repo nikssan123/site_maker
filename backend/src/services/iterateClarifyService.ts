@@ -106,6 +106,33 @@ function lastUserContent(conversation: ChatMessage[]): string {
   return [...conversation].reverse().find((m) => m.role === 'user')?.content?.trim() ?? '';
 }
 
+function isActionableImprovementRequest(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (t.length < 6) return false;
+
+  return /\b(добави|направи|сложи|смени|махни|премахни|покажи|скрий|обнови|редактирай|коригирай|поправи|премести|увеличи|намали|add|create|make|change|remove|update|edit|fix|move|show|hide)\b/i.test(t)
+    || /(секция|страница|бутон|навигац|меню|форма|карта|хедър|футър|заглав|текст|изображ|банер|about|about us|contact|hero|section|page|button|menu|navigation|form|header|footer)/i.test(t);
+}
+
+function buildContextualClarifyQuestion(userMessage: string): string {
+  const t = userMessage.trim().toLowerCase();
+
+  if (/(за нас|about)/i.test(t) && /(секция|страница|add|добави|new|нова)/i.test(t)) {
+    return 'Искаш ли „За нас“ да е отделна страница в менюто или секция в началната страница, и какво основно съдържание да включва?';
+  }
+  if (/(контакт|contact)/i.test(t) && /(секция|страница|форма|add|добави|new|нова)/i.test(t)) {
+    return 'Искаш ли контактната част да е отделна страница или секция, и трябва ли да има форма, телефон и адрес?';
+  }
+  if (/(меню|навигац|navigation|header)/i.test(t)) {
+    return 'Какво точно искаш да се промени в навигацията и къде трябва да води новият елемент?';
+  }
+  if (/(цвят|цвет|color|бутон|button|текст|заглав)/i.test(t)) {
+    return 'Кой елемент искаш да се промени и как трябва да изглежда след промяната?';
+  }
+
+  return 'Може ли с едно изречение да уточниш какво точно трябва да се промени и как трябва да изглежда крайният резултат?';
+}
+
 function isBoilerplateBullet(s: string): boolean {
   const x = s.toLowerCase();
   return (
@@ -252,6 +279,8 @@ ${relevantCodeContext || '(няма налично съдържание)'}
 - По подразбиране избирай ready:true и прави разумни допускания от контекста.
 - Не искай потвърждение и не предлагай отделен план за одобрение.
 - Ако има достатъчно информация да се започне безопасно, НЕ задавай въпрос.
+- Ако заявката е стандартна UI промяна като добавяне на секция/страница, бутон, форма, текст, навигационен елемент или визуална промяна, върни ready:true и избери най-логичното място според текущата структура.
+- При заявки от типа „Добави секция/страница X“ се ориентирай по навигацията и текущите екрани; не задавай общ въпрос „къде точно“ освен ако това наистина блокира изпълнението.
 
 Правила за потребителския текст (summary и question):
 - На български, без технически жаргон, без имена на файлове и без пътища.
@@ -286,6 +315,11 @@ ${mandatoryNoMoreQuestions}
   const raw = await ai.complete(conversation, system, { maxTokens: alreadyAskedAQuestion ? 1800 : 1500 });
   const parsed = safeParseJson(raw);
   const data = parsed ? RESULT_SCHEMA.safeParse(parsed) : null;
+  const lastUser = lastUserContent(conversation);
+  const shouldAutoProceed =
+    isActionableImprovementRequest(lastUser) ||
+    Boolean(suggestedTargets && suggestedTargets.length > 0) ||
+    draftSpecEn.trim().length >= 40;
 
   async function readyFromScopeFallback(
     summary: string,
@@ -319,6 +353,25 @@ ${mandatoryNoMoreQuestions}
   }
 
   if (!data?.success) {
+    if (alreadyAskedAQuestion || shouldAutoProceed) {
+      return readyFromScopeFallback(
+        'Ок — ще го направя по най-разумния начин на база описанието ти.',
+        draftSpecEn,
+        `Assumptions: Use best judgement; do not ask more questions.\n` +
+          `- Implement the requested change described by the user.\n` +
+          `- Keep existing styles and flows unless explicitly requested.\n` +
+          `- Prefer minimal edits; update only the necessary files.\n` +
+          `- Ensure build passes and UI remains consistent.\n`,
+        lastUser || undefined,
+      );
+    }
+    return {
+      kind: 'question',
+      message: buildContextualClarifyQuestion(lastUser),
+    };
+  }
+
+  if (!data?.success) {
     if (alreadyAskedAQuestion) {
       const lastUser = lastUserContent(conversation);
       return readyFromScopeFallback(
@@ -339,6 +392,25 @@ ${mandatoryNoMoreQuestions}
   }
 
   const v = data.data;
+  if (!v.ready && !alreadyAskedAQuestion && !shouldAutoProceed) {
+    const q = (v.question ?? '').trim();
+    return {
+      kind: 'question',
+      message: q || buildContextualClarifyQuestion(lastUser),
+    };
+  }
+  if (!v.ready && (alreadyAskedAQuestion || shouldAutoProceed)) {
+    return readyFromScopeFallback(
+      'Ок — продължавам с промяната по най-доброто тълкуване на заявката.',
+      draftSpecEn,
+      `Assumptions: User intent is sufficiently actionable from context.\n` +
+        `- Implement the requested change.\n` +
+        `- Keep scope minimal; avoid broad refactors.\n` +
+        `- Preserve existing UX and styling unless asked.\n` +
+        `- Ensure build passes.\n`,
+      lastUser || undefined,
+    );
+  }
   if (!v.ready) {
     if (!alreadyAskedAQuestion) {
       const q = (v.question ?? '').trim();
@@ -393,6 +465,22 @@ ${mandatoryNoMoreQuestions}
 
   const summary = (v.summary ?? '').trim();
   const spec = (v.spec ?? '').trim();
+  if (!spec && (alreadyAskedAQuestion || shouldAutoProceed)) {
+    return readyFromScopeFallback(
+      summary || 'Ок — имам яснота какво да направя.',
+      draftSpecEn,
+      `Assumptions: Proceed from user message and current UI context.\n` +
+        `- Implement what the user asked.\n` +
+        `- Keep scope small.\n`,
+      lastUser || undefined,
+    );
+  }
+  if (!spec) {
+    return {
+      kind: 'question',
+      message: buildContextualClarifyQuestion(lastUser),
+    };
+  }
   if (!spec) {
     if (alreadyAskedAQuestion) {
       const lastUser = lastUserContent(conversation);
