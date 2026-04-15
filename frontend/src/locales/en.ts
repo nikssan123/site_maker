@@ -306,6 +306,11 @@ const en = {
     error: 'Unable to replace the hero image right now.',
     fileTooLarge: 'The selected hero image is too large.',
   },
+  plan: {
+    socialLinks: 'Social links',
+    socialLinksHint: 'Add your brand profile links here. They are not collected in the planning chat anymore, and you can fill them in or adjust them directly from this card.',
+    socialLinksOptional: 'Optional — leave blank for any network you do not use.',
+  },
   workspace: {
     brandVisionTitle: 'Brand look',
     brandVisionBody: 'Change the main visuals people notice first on the site. After a change, the preview updates automatically.',
