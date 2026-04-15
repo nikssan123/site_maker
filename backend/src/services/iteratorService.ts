@@ -29,8 +29,33 @@ import {
 function isSafeFrontendExtraFile(p: string): boolean {
   return (
     /^src\/(components|lib|pages|hooks|utils|features|data|assets)\/.+\.(ts|tsx|js|jsx|css|scss|json|svg)$/.test(p) ||
-    /^src\/styles\/.+\.(css|scss|ts|tsx)$/.test(p)
+    /^src\/(styles|locales|i18n|translations|lang)\/.+\.(ts|tsx|js|jsx|css|scss|json|svg)$/.test(p)
   );
+}
+
+function normalizePlanLanguages(languages: unknown): string[] {
+  const values = Array.isArray(languages) ? languages : [];
+  const normalized = Array.from(new Set(
+    values
+      .filter((value): value is string => typeof value === 'string')
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean),
+  ));
+  return normalized.includes('bg') ? normalized : ['bg', ...normalized];
+}
+
+function isLocalizationFilePath(p: string): boolean {
+  return /(^|\/)(i18n|locales|translations|lang)(\/|$)/i.test(p);
+}
+
+function fileContentLooksLocalizationEntry(content: string): boolean {
+  return /useTranslation\(|i18next|react-i18next|changeLanguage\(|t\(|translations?\s*=|locales?\s*=|resources\s*:/i.test(content);
+}
+
+function shouldAugmentWithLocalizationFiles(planData: Record<string, unknown>, changeRequest: string): boolean {
+  const languages = normalizePlanLanguages(planData.languages);
+  if (languages.length > 1) return true;
+  return /\b(language|languages|translation|translations|locale|localization|i18n|text|copy|label|labels)\b/i.test(changeRequest);
 }
 
 function isAllowedGuardedExtraFile(p: string, refinedSpec: string, scopedFiles: string[]): boolean {
@@ -144,12 +169,21 @@ Rules:
         plan: planData,
         filePaths: allFilePaths,
         refinedSpec,
-        maxFiles: 8,
+        maxFiles: 12,
       });
       scopedFiles = scoped.targetFiles;
     } catch {
       scopedFiles = allFilePaths.slice(0, 6);
     }
+  }
+
+  if (shouldAugmentWithLocalizationFiles(planData, `${changeRequest}\n${refinedSpec}`)) {
+    const localizationFiles = allFilePaths.filter((path) => {
+      if (isLocalizationFilePath(path)) return true;
+      const content = currentFiles[path];
+      return typeof content === 'string' && fileContentLooksLocalizationEntry(content);
+    });
+    scopedFiles = Array.from(new Set([...(scopedFiles ?? []), ...localizationFiles])).slice(0, 12);
   }
 
   const subsetFiles: Record<string, string> = {};
@@ -236,7 +270,7 @@ Rules:
       !isSafeFrontendExtraFile(p) &&
       !isAllowedGuardedExtraFile(p, refinedSpec, scopedFiles),
   );
-  const MAX_CHANGED = 10;
+  const MAX_CHANGED = shouldAugmentWithLocalizationFiles(planData, `${changeRequest}\n${refinedSpec}`) ? 16 : 10;
   if (changedPaths.length > MAX_CHANGED || illegal.length > 0) {
     await publishEvent(sessionId, {
       type: 'fatal',

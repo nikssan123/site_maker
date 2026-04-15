@@ -338,7 +338,7 @@ export default function PlanSummary({ plan, onConfirm, onEdit, onLanguagesChange
             </Typography>
             <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: 11 }}>
               {t('plan.languagesDefault', {
-                defaultValue: 'Bulgarian is always included and stays the default language.',
+                defaultValue: 'Bulgarian is preselected here by default, but the generated app does not have to start in Bulgarian.',
               })}
             </Typography>
             <FormControl fullWidth size="small">
@@ -381,7 +381,7 @@ export default function PlanSummary({ plan, onConfirm, onEdit, onLanguagesChange
                     <ListItemText
                       primary={option.label}
                       secondary={option.code === 'bg'
-                        ? t('plan.languagesBulgarianDefault', { defaultValue: 'Always included by default' })
+                        ? t('plan.languagesBulgarianDefault', { defaultValue: 'Preselected by default' })
                         : undefined}
                       primaryTypographyProps={{ fontSize: 13, color: '#e2e8f0' }}
                       secondaryTypographyProps={{ fontSize: 11, color: '#94a3b8' }}

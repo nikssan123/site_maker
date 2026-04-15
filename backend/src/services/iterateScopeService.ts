@@ -57,6 +57,7 @@ Rules:
 - targetFiles MUST be chosen ONLY from the provided file paths.
 - Max targetFiles: ${maxFiles}
 - If the implementation may add a new file, choose the smallest set of existing files that need to change to wire that new file in.
+- If the app plan includes multiple languages, or the spec changes user-visible text/labels/navigation, include the relevant existing locale/i18n/translation files when they are present.
 - nonGoalsBg: 2-5 items, Bulgarian, focused on preventing regressions (layout, copy language, unrelated features).
 `;
 

@@ -386,7 +386,7 @@ export default function PreviewPage() {
         const msg: string = err.message ?? '';
         const status: number | undefined = err.status;
         // Dynamic content (catalog) or blocked targets (e.g. server.js) should guide user to Catalog.
-        if (status === 409 || msg.toLowerCase().includes('not found')) {
+        if (status === 409) {
           setEditDynamicError(true);
         } else {
           alert(msg || t('errors.generic'));

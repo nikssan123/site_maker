@@ -309,8 +309,8 @@ const en = {
   plan: {
     languages: 'App languages',
     languagesHint: 'Choose the European languages the generated app should support. The app will be created with a language switcher and full UI translations for the selected locales.',
-    languagesDefault: 'Bulgarian is always included and stays the default language.',
-    languagesBulgarianDefault: 'Always included by default',
+    languagesDefault: 'Bulgarian is preselected in the plan by default, but the generated app does not have to start in Bulgarian.',
+    languagesBulgarianDefault: 'Preselected by default',
     socialLinks: 'Social links',
     socialLinksHint: 'Add your brand profile links here. They are not collected in the planning chat anymore, and you can fill them in or adjust them directly from this card.',
     socialLinksOptional: 'Optional — leave blank for any network you do not use.',

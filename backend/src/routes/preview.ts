@@ -346,6 +346,41 @@ function getAdminConfig(projectId: string): AdminConfig {
 function applyContentPatch(projectId: string, original: string, replacement: string): void {
   const projectDir = projectPath(projectId);
   const files = walkSourceFiles(projectDir);
+  const normalizePatchText = (text: string): string =>
+    text
+      .replace(/\u00a0/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  const decodeSimpleJsxString = (value: string): string =>
+    value
+      .replace(/\\n/g, ' ')
+      .replace(/\\r/g, ' ')
+      .replace(/\\t/g, ' ')
+      .replace(/\\"/g, '"')
+      .replace(/\\'/g, "'");
+  const normalizeRenderedJsxText = (body: string): string =>
+    normalizePatchText(
+      body
+        .replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ')
+        .replace(/<br\s*\/?>/gi, ' ')
+        .replace(/\{`([\s\S]*?)`\}/g, (_, value: string) => ` ${value} `)
+        .replace(/\{"((?:\\.|[^"])*)"\}/g, (_, value: string) => ` ${decodeSimpleJsxString(value)} `)
+        .replace(/\{'((?:\\.|[^'])*)'\}/g, (_, value: string) => ` ${decodeSimpleJsxString(value)} `)
+        .replace(/\{[^}]+\}/g, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' '),
+    );
+  const canReplaceInlineJsxBody = (body: string): boolean => {
+    if (/<(?:Box|Stack|Grid|Container|Paper|Card|section|article|aside|main|header|footer|nav|div|ul|ol|li|table|tbody|thead|tr|td|th|form)\b/i.test(body)) {
+      return false;
+    }
+    if (/\{[^}]*\b(map|filter|reduce|forEach|=>|return|if\s*\(|\?)\b[^}]*\}/.test(body)) {
+      return false;
+    }
+    return true;
+  };
+  const replacementExpression = `{${JSON.stringify(replacement)}}`;
 
   // Never patch server.js via edit mode (too easy to break runtime JS strings).
   const serverFile = path.join(projectDir, 'server.js');
@@ -374,7 +409,7 @@ function applyContentPatch(projectId: string, original: string, replacement: str
   }
 
   // Pass 2 — whitespace-flexible match (handles JSX indentation / innerText normalisation)
-  const norm = original.replace(/\s+/g, ' ').trim();
+  const norm = normalizePatchText(original);
   if (norm.length > 0) {
     const escaped = norm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const flexRegex = new RegExp(escaped.replace(/ /g, '\\s+'));
@@ -384,6 +419,22 @@ function applyContentPatch(projectId: string, original: string, replacement: str
         fs.writeFileSync(fp, content.replace(m[0], replacement), 'utf8');
         return;
       }
+    }
+  }
+
+  // Pass 3 â€” rendered-text JSX match for multiline hero copy split by inline tags or <br/>.
+  for (const { path: fp, content } of jsxFirst) {
+    if (!/\.[jt]sx$/i.test(fp)) continue;
+    const elementRegex = /<([A-Za-z][\w.]*)\b[^>]*>([\s\S]*?)<\/\1>/g;
+    let match: RegExpExecArray | null;
+    while ((match = elementRegex.exec(content)) !== null) {
+      const full = match[0];
+      const body = match[2] ?? '';
+      if (!body.trim() || !canReplaceInlineJsxBody(body)) continue;
+      if (normalizeRenderedJsxText(body) !== norm) continue;
+      const updated = full.replace(body, replacementExpression);
+      fs.writeFileSync(fp, content.slice(0, match.index) + updated + content.slice(match.index + full.length), 'utf8');
+      return;
     }
   }
 

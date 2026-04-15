@@ -309,7 +309,7 @@ Theme polish (MUST):
 
 ═══ ЕЗИК И ЛОКАЛИЗАЦИЯ ═══
 The generated app MUST support every language listed in plan.languages.
-Bulgarian ("bg") is ALWAYS included and MUST be the default/preselected language.
+Bulgarian ("bg") is ALWAYS included in plan.languages, but it is NOT required to be the app's default language on first load.
 If plan.languages is missing, default to Bulgarian-only support.
 Every single user-visible string in the generated app MUST exist in all selected languages.
 
@@ -828,7 +828,8 @@ server.js requirements (MUST follow the exact skeleton from the system prompt):
 
   prompt += `\n\nMULTILANGUAGE SUPPORT (REQUIRED):
 - Selected app languages: ${describeGeneratedLanguages(selectedLanguages)}
-- Bulgarian (bg) MUST be the default/preselected locale on first load.
+- Do NOT force Bulgarian to be the default locale on first load unless Bulgarian is the only selected language.
+- The generated app may choose its initial active language from the selected locales, but it must fully support switching between all selected languages.
 - Build the app so all selected languages are fully supported from day one.
 - Add a clearly visible language switcher/dropdown in the shared app shell or header.
 - Translate all user-visible UI copy for every selected language: navigation, headings, buttons, forms, helper text, alerts, empty states, validation, checkout text, footer, and seeded content.
@@ -867,11 +868,29 @@ export function buildIteratorPrompt(
   changeRequest: string,
   opts?: { explorerContextNotes?: string },
 ): string {
+  const planRecord = plan as Record<string, unknown>;
+  const selectedLanguages = normalizeGeneratedLanguages(planRecord.languages);
+  const multilingual = selectedLanguages.length > 1;
   const fileList = Object.entries(files)
     .map(([p, content]) => `// ${p}\n${content}`)
     .join('\n\n---\n\n');
   const notesRaw = (opts?.explorerContextNotes ?? '').trim();
+  const localizationRules = multilingual
+    ? `\n- This app is multilingual. Selected languages: ${describeGeneratedLanguages(selectedLanguages)}.
+- Bulgarian ("bg") must remain supported, but do not force it to remain the default/initial language unless it is the only selected locale.
+- Do not break the existing i18n/translation mechanism. Reuse the current locale/dictionary structure instead of inventing a second one.
+- If you change or add any user-visible text, make sure the same content exists for every selected language.
+- When locale files, translation dictionaries, or language-switcher wiring already exist, update them consistently together with the UI files that use them.`
+    : `\n- Keep all existing Bulgarian user-visible strings Bulgarian; any new user-visible strings must be Bulgarian.`;
+  const constraintBlock = multilingual
+    ? `Current files (SCOPED SUBSET):\n\n${fileList}\n\nHard constraints:\n- Keep UI/layout stable; do not restyle unrelated areas.\n- No surprise features; implement only what is requested.${localizationRules}\n- Prefer minimal diffs; avoid broad refactors.\n- You MAY create new frontend files when needed for the requested change, especially under src/components, src/pages, src/hooks, src/lib, src/features, src/styles, src/assets, src/data, src/locales, src/i18n, or src/translations.\n- Only create backend or config files when the request clearly requires them and the spec/exploration context points to the exact path.\n- If creating a new file, wire it into the existing scoped files instead of rewriting unrelated areas.\n- Preserve any APPMAKER_LOGO_SLOT_START/END and APPMAKER_HERO_BG_START/END markers that already exist; do not remove or rename them.`
+    : `Current files (SCOPED SUBSET):\n\n${fileList}\n\nHard constraints:\n- Keep UI/layout stable; do not restyle unrelated areas.\n- No surprise features; implement only what is requested.\n- Keep all existing Bulgarian user-visible strings Bulgarian; any new user-visible strings must be Bulgarian.\n- Prefer minimal diffs; avoid broad refactors.\n- You MAY create new frontend files when needed for the requested change, especially under src/components, src/pages, src/hooks, src/lib, src/features, src/styles, src/assets, or src/data.\n- Only create backend or config files when the request clearly requires them and the spec/exploration context points to the exact path.\n- If creating a new file, wire it into the existing scoped files instead of rewriting unrelated areas.\n- Preserve any APPMAKER_LOGO_SLOT_START/END and APPMAKER_HERO_BG_START/END markers that already exist; do not remove or rename them.\n\nÐ›Ð¾ÐºÐ°Ð»Ð¸Ð·Ð°Ñ†Ð¸Ñ: Ð·Ð°Ð¿Ð°Ð·Ð¸ Ð¸ Ð´Ð¾Ð¿ÑŠÐ»Ð½Ð¸ Ð¿Ð¾Ñ‚Ñ€ÐµÐ±Ð¸Ñ‚ÐµÐ»ÑÐºÐ¸Ñ‚Ðµ Ñ‚ÐµÐºÑÑ‚Ð¾Ð²Ðµ Ð½Ð° Ð±ÑŠÐ»Ð³Ð°Ñ€ÑÐºÐ¸ ÐµÐ·Ð¸Ðº.`;
   const notes = notesRaw.length > 12000 ? `${notesRaw.slice(0, 12000)}\n\n…(truncated)…` : notesRaw;
+  if (multilingual) {
+    return `Plan:\n${JSON.stringify(plan, null, 2)}\n\nChange request: "${changeRequest}"\n\n` +
+      (notes ? `Extra exploration context (internal):\n${notes}\n\n` : '') +
+      constraintBlock;
+  }
   return `Plan:\n${JSON.stringify(plan, null, 2)}\n\nChange request: "${changeRequest}"\n\n` +
     (notes ? `Extra exploration context (internal):\n${notes}\n\n` : '') +
     `Current files (SCOPED SUBSET):\n\n${fileList}\n\nHard constraints:\n- Keep UI/layout stable; do not restyle unrelated areas.\n- No surprise features; implement only what is requested.\n- Keep all existing Bulgarian user-visible strings Bulgarian; any new user-visible strings must be Bulgarian.\n- Prefer minimal diffs; avoid broad refactors.\n- You MAY create new frontend files when needed for the requested change, especially under src/components, src/pages, src/hooks, src/lib, src/features, src/styles, src/assets, or src/data.\n- Only create backend or config files when the request clearly requires them and the spec/exploration context points to the exact path.\n- If creating a new file, wire it into the existing scoped files instead of rewriting unrelated areas.\n- Preserve any APPMAKER_LOGO_SLOT_START/END and APPMAKER_HERO_BG_START/END markers that already exist; do not remove or rename them.\n\nЛокализация: запази и допълни потребителските текстове на български език.`;
