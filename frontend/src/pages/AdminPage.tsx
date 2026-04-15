@@ -807,7 +807,7 @@ export default function AdminPage() {
           <AppLogo size="small" />
           <Box sx={{ mx: 0.5, width: '1px', height: 20, bgcolor: 'divider' }} />
           <AdminPanelSettingsIcon color="primary" sx={{ mr: 0.5 }} />
-          <Typography variant="h6" fontWeight={700} sx={{ flex: 1 }}>Admin Portal</Typography>
+          <Typography variant="h6" fontWeight={700} sx={{ flex: 1 }}>Админ панел</Typography>
         </Toolbar>
       </AppBar>
 

@@ -7,6 +7,8 @@ import ArticleIcon from '@mui/icons-material/Article';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import ImageIcon from '@mui/icons-material/Image';
 import WallpaperIcon from '@mui/icons-material/Wallpaper';
+import BarChartIcon from '@mui/icons-material/BarChart';
+import SettingsEthernetIcon from '@mui/icons-material/SettingsEthernet';
 
 import CatalogPanel from './CatalogPanel';
 import BookingSlotsPanel from './BookingSlotsPanel';
@@ -14,6 +16,8 @@ import InquiriesPanel from './InquiriesPanel';
 import BlogPanel from './BlogPanel';
 import DashboardPanel from './DashboardPanel';
 import HostingPanel from './HostingPanel';
+import AnalyticsPanel from './AnalyticsPanel';
+import EmailPanel from './EmailPanel';
 
 export type AdminWorkspaceMode =
   | 'catalog'
@@ -22,7 +26,9 @@ export type AdminWorkspaceMode =
   | 'blog'
   | 'dashboard'
   | 'branding'
-  | 'hosting';
+  | 'hosting'
+  | 'analytics'
+  | 'email';
 
 const WORKSPACE_NAV_WIDTH = 280;
 
@@ -146,8 +152,7 @@ function BrandingPanel({
           Визия на бранда
         </Typography>
         <Typography variant="body2" sx={{ mt: 0.75, color: 'text.secondary', lineHeight: 1.7 }}>
-          Тук сменяш основните визии, които хората виждат първо на сайта. След промяна прегледът се
-          обновява автоматично.
+          Тук сменяш основните визии, които хората виждат първо на сайта. След промяна прегледът се обновява автоматично.
         </Typography>
       </Paper>
 
@@ -234,6 +239,52 @@ function BrandingPanel({
   );
 }
 
+function workspaceTitle(mode: AdminWorkspaceMode): string {
+  switch (mode) {
+    case 'catalog':
+      return 'Каталог';
+    case 'booking_slots':
+      return 'Свободни часове';
+    case 'inquiries':
+      return 'Съобщения';
+    case 'blog':
+      return 'Статии';
+    case 'dashboard':
+      return 'Общ преглед';
+    case 'branding':
+      return 'Визия';
+    case 'analytics':
+      return 'Анализ';
+    case 'email':
+      return 'Имейл';
+    case 'hosting':
+      return 'Адрес на сайта';
+  }
+}
+
+function workspaceSubtitle(mode: AdminWorkspaceMode): string {
+  switch (mode) {
+    case 'catalog':
+      return 'Управлявай данните и записите в приложението.';
+    case 'booking_slots':
+      return 'Поддържай графика си винаги актуален.';
+    case 'inquiries':
+      return 'Виж какво са изпратили хората през контактната форма.';
+    case 'blog':
+      return 'Пиши и обновявай публикациите на сайта си.';
+    case 'dashboard':
+      return 'Кратък преглед на съдържанието в сайта ти.';
+    case 'branding':
+      return 'Смени основните визии, които хората забелязват първо.';
+    case 'analytics':
+      return 'Преглед на посещенията, източниците и поведението на посетителите.';
+    case 'email':
+      return 'Управлявай домейните за изпращане, подателя и имейл шаблоните.';
+    case 'hosting':
+      return 'Управлявай адреса, на който хората намират живия ти сайт.';
+  }
+}
+
 export default function AdminWorkspace({
   mode,
   projectId,
@@ -278,18 +329,14 @@ export default function AdminWorkspace({
         }}
       >
         <Box>
-          <Typography
-            variant="overline"
-            sx={{ color: 'primary.main', fontWeight: 800, letterSpacing: '0.12em' }}
-          >
+          <Typography variant="overline" sx={{ color: 'primary.main', fontWeight: 800, letterSpacing: '0.12em' }}>
             УПРАВЛЕНИЕ
           </Typography>
           <Typography variant="h6" sx={{ mt: 0.5, fontWeight: 800, color: 'text.primary' }}>
             Управление на сайта
           </Typography>
           <Typography variant="body2" sx={{ mt: 0.75, color: 'text.secondary', lineHeight: 1.6 }}>
-            Редактирай съдържанието, следи какво се случва и се връщай към живия преглед по всяко
-            време.
+            Редактирай съдържанието, следи какво се случва и се връщай към живия преглед по всяко време.
           </Typography>
         </Box>
 
@@ -311,8 +358,8 @@ export default function AdminWorkspace({
           {planAppType !== 'portfolio' && planAppType !== 'landing_page' && planAppType !== 'saas' && (
             <WorkspaceNavButton
               icon={<StorefrontIcon fontSize="small" />}
-              title="Продукти"
-              subtitle="Добавяй, редактирай и подреждай продуктите си."
+              title="Каталог"
+              subtitle="Управлявай продуктите, записите и съдържанието."
               active={mode === 'catalog'}
               onClick={() => onModeChange('catalog')}
             />
@@ -351,6 +398,22 @@ export default function AdminWorkspace({
               subtitle="Управлявай живия сайт и свързаните домейни."
               active={mode === 'hosting'}
               onClick={() => onModeChange('hosting')}
+            />
+          )}
+          <WorkspaceNavButton
+            icon={<BarChartIcon fontSize="small" />}
+            title="Анализ"
+            subtitle="Виж посещения, устройства и най-популярни страници."
+            active={mode === 'analytics'}
+            onClick={() => onModeChange('analytics')}
+          />
+          {projectPaid && (
+            <WorkspaceNavButton
+              icon={<SettingsEthernetIcon fontSize="small" />}
+              title="Имейл"
+              subtitle="Настрой домейни, подател и имейл шаблони."
+              active={mode === 'email'}
+              onClick={() => onModeChange('email')}
             />
           )}
         </Stack>
@@ -401,34 +464,10 @@ export default function AdminWorkspace({
             }}
           >
             <Typography variant="h6" sx={{ fontWeight: 800, color: 'text.primary' }}>
-              {mode === 'catalog'
-                ? 'Продукти'
-                : mode === 'booking_slots'
-                  ? 'Свободни часове'
-                  : mode === 'inquiries'
-                    ? 'Съобщения'
-                    : mode === 'blog'
-                      ? 'Статии'
-                      : mode === 'dashboard'
-                        ? 'Общ преглед'
-                        : mode === 'branding'
-                          ? 'Визия'
-                          : 'Адрес на сайта'}
+              {workspaceTitle(mode)}
             </Typography>
             <Typography variant="body2" sx={{ mt: 0.35, color: 'text.secondary' }}>
-              {mode === 'catalog'
-                ? 'Всичко за продуктите ти на едно място.'
-                : mode === 'booking_slots'
-                  ? 'Поддържай графика си винаги актуален.'
-                  : mode === 'inquiries'
-                    ? 'Виж какво са изпратили хората през контактната форма.'
-                    : mode === 'blog'
-                      ? 'Пиши и обновявай публикациите на сайта си.'
-                      : mode === 'dashboard'
-                        ? 'Кратък преглед на съдържанието в сайта ти.'
-                        : mode === 'branding'
-                          ? 'Смени основните визии, които хората забелязват първо.'
-                          : 'Управлявай адреса, на който хората намират живия ти сайт.'}
+              {workspaceSubtitle(mode)}
             </Typography>
           </Box>
 
@@ -470,6 +509,8 @@ export default function AdminWorkspace({
                 onUpdated={onHostingUpdated}
               />
             )}
+            {mode === 'analytics' && <AnalyticsPanel projectId={projectId} />}
+            {mode === 'email' && <EmailPanel projectId={projectId} />}
           </Box>
         </Paper>
       </Box>

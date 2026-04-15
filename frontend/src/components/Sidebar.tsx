@@ -294,7 +294,7 @@ export default function Sidebar({ onNewProject, onClose }: Props) {
           >
             <AdminPanelSettingsIcon sx={{ fontSize: 16, color: 'primary.light' }} />
             <Typography variant="caption" fontWeight={600} color="primary.light">
-              Admin Portal
+              Админ панел
             </Typography>
           </Box>
         </Box>

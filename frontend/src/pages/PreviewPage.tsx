@@ -758,11 +758,11 @@ export default function PreviewPage() {
               </Box>
             </Tooltip>
           ) : (
-            <Tooltip title={editDynamicError ? t('editMode.useCatalogTooltip') : t('catalog.tooltip')} placement="right">
+            <Tooltip title={editDynamicError ? 'Отвори панела Каталог за динамично съдържание' : 'Панел Каталог'} placement="right">
               <Box data-tour="action-data-panel">
                 <ActionButton
                   icon={<StorefrontIcon fontSize="inherit" />}
-                  label={t('catalog.label')}
+                  label="Каталог"
                   onClick={() => {
                     setEditDynamicError(false);
                     if (workspaceMode === 'catalog') setDrawerMode('improvements');
@@ -807,33 +807,7 @@ export default function PreviewPage() {
             </Box>
           </Tooltip>
 
-          <Tooltip title={t('logo.tooltip')} placement="right">
-            <Box data-tour="action-branding">
-              <ActionButton
-                icon={<AutoAwesomeIcon fontSize="inherit" />}
-                label="Визия"
-                onClick={() => {
-                  if (workspaceMode === 'branding') setDrawerMode('improvements');
-                  else { setDrawerMode('branding'); setDrawerOpen(false); }
-                }}
-                active={workspaceMode === 'branding'}
-                color="#a78bfa"
-              />
-            </Box>
-          </Tooltip>
 
-          <Divider sx={{ my: 0.5 }} />
-
-          <Tooltip title={t('analytics.title')} placement="right">
-            <Box data-tour="action-analytics">
-              <ActionButton
-                icon={<BarChartIcon fontSize="inherit" />}
-                label="Посещения"
-                onClick={() => navigate(`/analytics/${projectId}`)}
-                color="#60a5fa"
-              />
-            </Box>
-          </Tooltip>
 
           <Tooltip title={t('payments.setupTooltip')} placement="right">
             <Box data-tour="action-payments">
@@ -845,19 +819,6 @@ export default function PreviewPage() {
               />
             </Box>
           </Tooltip>
-
-          {projectPaid && (
-            <Tooltip title="Настройки за имейл" placement="right">
-              <Box data-tour="action-email">
-                <ActionButton
-                  icon={<MailOutlineIcon fontSize="inherit" />}
-                  label="Имейл"
-                  onClick={() => navigate(`/email/${projectId}`)}
-                  color="#34d399"
-                />
-              </Box>
-            </Tooltip>
-          )}
 
           <Tooltip title={t('preview.download')} placement="right">
             <Box data-tour="action-download">
