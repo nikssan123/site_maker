@@ -13,7 +13,10 @@
     "cancel": "Отказ",
     "retry": "Опитай отново",
     "copy": "Копирай",
-    "openNewTab": "Отвори в нов раздел"
+    "openNewTab": "Отвори в нов раздел",
+    "language": "Език",
+    "languageBg": "Български",
+    "languageEn": "Английски"
   },
   "landing": {
     "pricingNav": "Цени",

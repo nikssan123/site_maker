@@ -30,6 +30,7 @@ import AnimatedContent from '../components/AnimatedContent';
 import SpotlightCard from '../components/SpotlightCard';
 import StarBorder from '../components/StarBorder';
 import ShinyText from '../components/ShinyText';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 const fadeUp = keyframes`
   from { opacity: 0; transform: translateY(24px); }
@@ -204,6 +205,7 @@ export default function LandingPage({ scrollTo }: Props) {
               </>
             )}
           </Stack>
+          <LanguageSwitcher />
         </Toolbar>
       </AppBar>
 

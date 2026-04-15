@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 import { useProjectStore } from '../store/project';
 import { useAuthStore } from '../store/auth';
+import LanguageSwitcher from './LanguageSwitcher';
 
 interface SessionItem {
   id: string;
@@ -263,6 +264,15 @@ export default function Sidebar({ onNewProject, onClose }: Props) {
             )}
           </>
         )}
+      </Box>
+
+      <Box sx={{ px: 1.5, py: 1.25, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1}>
+          <Typography variant="caption" color="text.secondary">
+            {t('common.language')}
+          </Typography>
+          <LanguageSwitcher />
+        </Stack>
       </Box>
 
       {/* Admin link */}
