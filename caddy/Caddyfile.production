@@ -1,5 +1,5 @@
 {
-    email admin@fornaxelit.com
+    email admin@webwork.bg
 
     order rate_limit before basicauth
 
@@ -172,12 +172,12 @@
 }
 
 # ─── Main site (HTTPS with auto cert) ───────────────────────
-fornaxelit.com, www.fornaxelit.com {
+webwork.bg, www.webwork.bg {
     import main_site
 }
 
 # ─── Wildcard subdomains (hosted apps) ──────────────────────
-*.sites.fornaxelit.com {
+*.webwork.bg {
     tls {
         dns cloudflare {env.CF_API_TOKEN}
     }
@@ -185,7 +185,7 @@ fornaxelit.com, www.fornaxelit.com {
     import security_headers
     encode zstd gzip
 
-    @valid_uuid header_regexp Host uuid ^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.sites\.fornaxelit\.com$
+    @valid_uuid header_regexp Host uuid ^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.webwork\.bg$
 
     handle @valid_uuid {
         # Hash-versioned Vite output under /assets/ — safe to mark immutable.
@@ -206,7 +206,7 @@ fornaxelit.com, www.fornaxelit.com {
     }
 
     handle {
-        # Human-friendly first-party slugs (e.g. test.sites.fornaxelit.com) and any other
+        # Human-friendly first-party slugs (e.g. test.webwork.bg) and any other
         # non-UUID hostnames under the wildcard go through the custom-domain resolver.
         @hashed_static path /assets/*
         header @hashed_static Cache-Control "public, max-age=31536000, immutable"
