@@ -23,6 +23,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import DescriptionIcon from '@mui/icons-material/Description';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import SettingsIcon from '@mui/icons-material/Settings';
 
 import AppLogo from '../components/AppLogo';
 import PreviewFrame from '../components/PreviewFrame';
@@ -736,6 +737,16 @@ export default function PreviewPage() {
                 }}
               >
                 <HelpOutlineIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Tooltip title={t('settings.title')}>
+            <span>
+              <IconButton
+                size="small"
+                onClick={() => navigate('/settings')}
+              >
+                <SettingsIcon fontSize="small" />
               </IconButton>
             </span>
           </Tooltip>

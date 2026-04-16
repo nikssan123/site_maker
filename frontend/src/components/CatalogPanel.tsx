@@ -13,6 +13,7 @@ import StorefrontIcon from '@mui/icons-material/Storefront';
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 import { AdminField, inferFieldType, renderField } from '../lib/adminFields';
+import { fixMojibake } from '../lib/textEncoding';
 
 const MAX_FILE_BYTES = 7 * 1024 * 1024; // 7 MB
 const ROWS_PER_PAGE = 25;
@@ -40,6 +41,7 @@ type TypedModel = { name: string; fields: AdminField[] | null };
 
 export default function CatalogPanel({ projectId, runPort, adminApiToken, onDataChange }: Props) {
   const { t } = useTranslation();
+  const modelLabel = (name: string | null | undefined): string => fixMojibake(name ?? '');
 
   // Step 1: discover models
   const [models, setModels] = useState<TypedModel[] | null>(null);
@@ -264,7 +266,7 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken, onData
               }}
             >
               {models.map((m) => (
-                <MenuItem key={m.name} value={m.name}>{m.name}</MenuItem>
+                <MenuItem key={m.name} value={m.name}>{modelLabel(m.name)}</MenuItem>
               ))}
             </Select>
           </FormControl>
@@ -274,7 +276,7 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken, onData
       {/* Toolbar */}
       <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
         <Typography variant="body2" color="text.secondary" sx={{ flex: 1, fontWeight: 600 }}>
-          {loading ? '…' : `${rows?.length ?? 0} ${activeModel ?? ''}`}
+          {loading ? '…' : `${rows?.length ?? 0} ${modelLabel(activeModel)}`}
         </Typography>
         <Button
           size="small"

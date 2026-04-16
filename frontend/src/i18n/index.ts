@@ -31,8 +31,7 @@ function detectInitialLanguage(): 'bg' | 'en' {
   } catch {
     /* ignore */
   }
-  const nav = navigator.language.toLowerCase();
-  return nav.startsWith('bg') ? 'bg' : 'en';
+  return 'bg';
 }
 
 const resources = {

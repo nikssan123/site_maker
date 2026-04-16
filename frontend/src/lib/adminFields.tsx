@@ -1,6 +1,7 @@
 import { Box, Typography, TextField, Button, CircularProgress, Stack } from '@mui/material';
 import UploadIcon from '@mui/icons-material/Upload';
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
+import { fixMojibake } from './textEncoding';
 
 export interface AdminField { name: string; type: string; }
 
@@ -24,12 +25,13 @@ export function renderField(
   onFileSelect: (file: File) => void,
   labels: { clickToUpload: string; orPasteUrl: string; imageUrl: string },
 ): React.ReactNode {
+  const label = fixMojibake(f.name);
   if (f.type === 'image' || f.type === 'photo') {
     const hasImage = Boolean(value);
     return (
       <Box key={f.name}>
         <Typography variant="caption" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.75, color: 'text.secondary', fontWeight: 600 }}>
-          <CameraAltIcon sx={{ fontSize: 13 }} />{f.name}
+          <CameraAltIcon sx={{ fontSize: 13 }} />{label}
         </Typography>
         <Button
           component="label"
@@ -63,21 +65,21 @@ export function renderField(
     );
   }
   if (f.type === 'textarea') {
-    return <TextField key={f.name} label={f.name} multiline rows={4} size="small" fullWidth
+    return <TextField key={f.name} label={label} multiline rows={4} size="small" fullWidth
       value={value} onChange={(e) => onChange(e.target.value)} />;
   }
   if (f.type === 'date') {
-    return <TextField key={f.name} label={f.name} type="date" size="small" fullWidth
+    return <TextField key={f.name} label={label} type="date" size="small" fullWidth
       value={value} onChange={(e) => onChange(e.target.value)} InputLabelProps={{ shrink: true }} />;
   }
   if (f.type === 'number') {
-    return <TextField key={f.name} label={f.name} type="number" size="small" fullWidth
+    return <TextField key={f.name} label={label} type="number" size="small" fullWidth
       value={value} onChange={(e) => onChange(e.target.value)} inputProps={{ min: 0 }} />;
   }
   if (f.type === 'url') {
-    return <TextField key={f.name} label={f.name} type="url" size="small" fullWidth
+    return <TextField key={f.name} label={label} type="url" size="small" fullWidth
       value={value} onChange={(e) => onChange(e.target.value)} placeholder="https://…" />;
   }
-  return <TextField key={f.name} label={f.name} size="small" fullWidth
+  return <TextField key={f.name} label={label} size="small" fullWidth
     value={value} onChange={(e) => onChange(e.target.value)} />;
 }
