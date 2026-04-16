@@ -271,6 +271,82 @@ export async function changePassword(
   return { ok: true as const };
 }
 
+export async function requestPasswordChange(
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+) {
+  if (typeof newPassword !== 'string' || newPassword.length < MIN_PASSWORD_LENGTH) {
+    throw new AppError(400, `Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+  }
+
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!valid) throw new AppError(401, 'Current password is incorrect');
+
+  const isSamePassword = await bcrypt.compare(newPassword, user.passwordHash);
+  if (isSamePassword) {
+    throw new AppError(400, 'New password must be different from the current password');
+  }
+
+  const code = generateCode();
+  const [newPasswordHash, codeHash] = await Promise.all([
+    bcrypt.hash(newPassword, SALT_ROUNDS),
+    bcrypt.hash(code, SALT_ROUNDS),
+  ]);
+  const expiresAt = new Date(Date.now() + CODE_TTL_MS);
+
+  await prisma.pendingPasswordChange.upsert({
+    where: { userId },
+    create: { userId, newPasswordHash, codeHash, expiresAt, attempts: 0 },
+    update: { newPasswordHash, codeHash, expiresAt, attempts: 0 },
+  });
+
+  await sendVerificationCode(user.email, code);
+  return { pending: true as const, email: user.email };
+}
+
+export async function confirmPasswordChange(userId: string, rawCode: string) {
+  const code = String(rawCode ?? '').trim();
+  if (!code) throw new AppError(400, 'Code is required');
+
+  const pending = await prisma.pendingPasswordChange.findUnique({ where: { userId } });
+  if (!pending) throw new AppError(400, 'No pending password change');
+
+  if (pending.expiresAt.getTime() < Date.now()) {
+    await prisma.pendingPasswordChange.delete({ where: { userId } }).catch(() => undefined);
+    throw new AppError(400, 'Verification code expired');
+  }
+
+  if (pending.attempts >= MAX_CODE_ATTEMPTS) {
+    await prisma.pendingPasswordChange.delete({ where: { userId } }).catch(() => undefined);
+    throw new AppError(429, 'Too many attempts. Start the change again.');
+  }
+
+  const valid = await bcrypt.compare(code, pending.codeHash);
+  if (!valid) {
+    await prisma.pendingPasswordChange.update({
+      where: { userId },
+      data: { attempts: { increment: 1 } },
+    });
+    throw new AppError(400, 'Invalid verification code');
+  }
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: pending.newPasswordHash },
+    }),
+    prisma.pendingPasswordChange.delete({ where: { userId } }),
+    prisma.passwordReset.updateMany({
+      where: { userId, usedAt: null, expiresAt: { gt: new Date() } },
+      data: { usedAt: new Date() },
+    }),
+  ]);
+
+  return { ok: true as const };
+}
+
 export async function requestEmailChange(
   userId: string,
   rawNewEmail: string,

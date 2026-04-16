@@ -126,6 +126,10 @@ export const api = {
 
   changePassword: (body: { currentPassword: string; newPassword: string }) =>
     request<{ ok: true }>('POST', '/auth/change-password', body),
+  requestPasswordChange: (body: { currentPassword: string; newPassword: string }) =>
+    request<{ pending: true; email: string }>('POST', '/auth/request-password-change', body),
+  confirmPasswordChange: (body: { code: string }) =>
+    request<{ ok: true }>('POST', '/auth/confirm-password-change', body),
   requestEmailChange: (body: { newEmail: string; password: string }) =>
     request<{ pending: true; newEmail: string }>('POST', '/auth/request-email-change', body),
   confirmEmailChange: (body: { code: string }) =>

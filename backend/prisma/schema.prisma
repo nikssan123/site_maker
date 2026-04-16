@@ -18,6 +18,7 @@ model User {
   createdAt        DateTime  @default(now())
   sessions         Session[]
   emailChange      PendingEmailChange?
+  passwordChange   PendingPasswordChange?
 }
 
 model PendingEmailChange {
@@ -29,6 +30,19 @@ model PendingEmailChange {
   expiresAt DateTime
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([expiresAt])
+}
+
+model PendingPasswordChange {
+  userId          String   @id
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  newPasswordHash String
+  codeHash        String
+  attempts        Int      @default(0)
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([expiresAt])
 }

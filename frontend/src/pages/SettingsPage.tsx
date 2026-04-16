@@ -69,19 +69,38 @@ export default function SettingsPage() {
   const [pwCurrent, setPwCurrent] = useState('');
   const [pwNew, setPwNew] = useState('');
   const [pwConfirm, setPwConfirm] = useState('');
+  const [pwStage, setPwStage] = useState<'idle' | 'sent'>('idle');
+  const [pwCode, setPwCode] = useState('');
+  const [pwSentTo, setPwSentTo] = useState('');
   const [pwBusy, setPwBusy] = useState(false);
   const [pwError, setPwError] = useState('');
   const [pwSuccess, setPwSuccess] = useState(false);
 
-  const handleChangePassword = async (e: React.FormEvent) => {
+  const handleRequestPasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setPwError(''); setPwSuccess(false);
     if (pwNew !== pwConfirm) { setPwError(t('settings.passwordMismatch')); return; }
     setPwBusy(true);
     try {
-      await api.changePassword({ currentPassword: pwCurrent, newPassword: pwNew });
+      const res = await api.requestPasswordChange({ currentPassword: pwCurrent, newPassword: pwNew });
+      setPwSentTo(res.email);
+      setPwStage('sent');
+    } catch (err: unknown) {
+      setPwError(err instanceof Error ? err.message : 'Error');
+    } finally {
+      setPwBusy(false);
+    }
+  };
+
+  const handleConfirmPasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwError('');
+    setPwBusy(true);
+    try {
+      await api.confirmPasswordChange({ code: pwCode });
       setPwSuccess(true);
-      setPwCurrent(''); setPwNew(''); setPwConfirm('');
+      setPwStage('idle');
+      setPwCurrent(''); setPwNew(''); setPwConfirm(''); setPwCode(''); setPwSentTo('');
     } catch (err: unknown) {
       setPwError(err instanceof Error ? err.message : 'Error');
     } finally {
@@ -219,49 +238,86 @@ export default function SettingsPage() {
           title={t('settings.sectionPassword')}
           hint={t('settings.sectionPasswordHint')}
         >
-          <form onSubmit={handleChangePassword}>
-            <Stack gap={2}>
-              {pwError && <Alert severity="error">{pwError}</Alert>}
-              {pwSuccess && <Alert severity="success">{t('settings.passwordSuccess')}</Alert>}
-              <TextField
-                label={t('settings.currentPassword')}
-                type="password"
-                value={pwCurrent}
-                onChange={(e) => setPwCurrent(e.target.value)}
-                required
-                fullWidth
-                autoComplete="current-password"
-              />
-              <TextField
-                label={t('settings.newPassword')}
-                type="password"
-                value={pwNew}
-                onChange={(e) => setPwNew(e.target.value)}
-                required
-                fullWidth
-                autoComplete="new-password"
-                helperText={t('auth.passwordHint')}
-              />
-              <TextField
-                label={t('settings.confirmPassword')}
-                type="password"
-                value={pwConfirm}
-                onChange={(e) => setPwConfirm(e.target.value)}
-                required
-                fullWidth
-                autoComplete="new-password"
-              />
-              <Box>
-                <Button
-                  type="submit"
-                  variant="contained"
-                  disabled={pwBusy || pwCurrent.length === 0 || pwNew.length < 8}
-                >
-                  {pwBusy ? t('settings.saving') : t('settings.saveNewPassword')}
-                </Button>
-              </Box>
-            </Stack>
-          </form>
+          {pwStage === 'idle' && (
+            <form onSubmit={handleRequestPasswordChange}>
+              <Stack gap={2}>
+                {pwError && <Alert severity="error">{pwError}</Alert>}
+                {pwSuccess && <Alert severity="success">{t('settings.passwordSuccess')}</Alert>}
+                <TextField
+                  label={t('settings.currentPassword')}
+                  type="password"
+                  value={pwCurrent}
+                  onChange={(e) => setPwCurrent(e.target.value)}
+                  required
+                  fullWidth
+                  autoComplete="current-password"
+                />
+                <TextField
+                  label={t('settings.newPassword')}
+                  type="password"
+                  value={pwNew}
+                  onChange={(e) => setPwNew(e.target.value)}
+                  required
+                  fullWidth
+                  autoComplete="new-password"
+                  helperText={t('auth.passwordHint')}
+                />
+                <TextField
+                  label={t('settings.confirmPassword')}
+                  type="password"
+                  value={pwConfirm}
+                  onChange={(e) => setPwConfirm(e.target.value)}
+                  required
+                  fullWidth
+                  autoComplete="new-password"
+                />
+                <Box>
+                  <Button
+                    type="submit"
+                    variant="contained"
+                    disabled={pwBusy || pwCurrent.length === 0 || pwNew.length < 8}
+                  >
+                    {pwBusy ? t('settings.sending') : t('settings.sendCode')}
+                  </Button>
+                </Box>
+              </Stack>
+            </form>
+          )}
+
+          {pwStage === 'sent' && (
+            <form onSubmit={handleConfirmPasswordChange}>
+              <Stack gap={2}>
+                {pwError && <Alert severity="error">{pwError}</Alert>}
+                <Alert severity="info">
+                  {t('settings.codeSent', { email: pwSentTo })}
+                </Alert>
+                <TextField
+                  label={t('settings.verificationCode')}
+                  value={pwCode}
+                  onChange={(e) => setPwCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  required
+                  fullWidth
+                  inputProps={{ inputMode: 'numeric', maxLength: 6 }}
+                />
+                <Stack direction="row" gap={1}>
+                  <Button
+                    type="submit"
+                    variant="contained"
+                    disabled={pwBusy || pwCode.length !== 6}
+                  >
+                    {pwBusy ? t('settings.confirming') : t('settings.confirmChange')}
+                  </Button>
+                  <Button
+                    type="button"
+                    color="inherit"
+                    onClick={() => { setPwStage('idle'); setPwCode(''); setPwError(''); setPwSentTo(''); }}
+                  >
+                    {t('settings.cancelChange')}
+                  </Button>
+                </Stack>
+              </Stack>
+            </form>
+          )}
         </SectionCard>
 
         <SectionCard

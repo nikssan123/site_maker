@@ -97,7 +97,6 @@ export default function ConnectDomainPanel({ projectId, onUpdated }: Props) {
         `/preview/${projectId}/custom-domain/verify`,
         {},
       );
-      // Store full payload (includes domainKind + firstParty fields)
       setData(d);
       onUpdated?.();
     } catch (e: unknown) {
@@ -148,10 +147,10 @@ export default function ConnectDomainPanel({ projectId, onUpdated }: Props) {
       <Stack direction="row" alignItems="flex-start" justifyContent="space-between" gap={1} mb={1.5}>
         <Box>
           <Typography variant="subtitle2" fontWeight={700}>
-            {t('connectDomain.panelTitle')}
+            {t('connectDomain.customPanelTitle')}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            {t('connectDomain.panelSubtitle')}
+            {t('connectDomain.customPanelSubtitle')}
           </Typography>
         </Box>
         <Tooltip title={t('connectDomain.helpTooltip')}>
@@ -163,8 +162,7 @@ export default function ConnectDomainPanel({ projectId, onUpdated }: Props) {
 
       {isFirstParty && (
         <Alert severity="info" sx={{ mb: 2, py: 0.5 }}>
-          Този адрес е поддомейн в нашия домейн и не изисква DNS настройки. Ако искате собствен домейн (напр. www.yourbrand.com),
-          въведете го по-долу и следвайте стъпките за DNS.
+          {t('connectDomain.firstPartyNotice')}
         </Alert>
       )}
 
@@ -173,6 +171,14 @@ export default function ConnectDomainPanel({ projectId, onUpdated }: Props) {
           {t('connectDomain.hostingEnvWarn')}
         </Alert>
       )}
+
+      <Alert severity="info" sx={{ mb: 2, py: 0.5 }}>
+        {t('connectDomain.stepsLine1')}
+        <br />
+        {t('connectDomain.stepsLine2')}
+        <br />
+        {t('connectDomain.stepsLine3')}
+      </Alert>
 
       {localError && (
         <Alert severity="error" sx={{ mb: 2, py: 0.5 }} onClose={() => setLocalError(null)}>
@@ -192,7 +198,7 @@ export default function ConnectDomainPanel({ projectId, onUpdated }: Props) {
             </Typography>
           </Stack>
           <Alert severity="info" sx={{ mb: 2, py: 0.5 }}>
-            {t('connectDomain.httpsHint', { target: data.cnameTarget ?? '…' })}
+            {t('connectDomain.httpsHint', { target: data.cnameTarget ?? '...' })}
           </Alert>
         </>
       )}
@@ -201,15 +207,15 @@ export default function ConnectDomainPanel({ projectId, onUpdated }: Props) {
         <TextField
           size="small"
           fullWidth
-          label={t('connectDomain.hostnameLabel')}
+          label={t('connectDomain.customHostnameLabel')}
           placeholder="www.yourbrand.com"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          helperText={t('connectDomain.hostnameHint')}
+          helperText={t('connectDomain.customHostnameHint')}
           disabled={saving || verifying}
         />
         <Button variant="contained" onClick={handleSave} disabled={saving || !input.trim()} sx={{ flexShrink: 0 }}>
-          {saving ? <CircularProgress size={20} color="inherit" /> : t('connectDomain.saveDomain')}
+          {saving ? <CircularProgress size={20} color="inherit" /> : t('connectDomain.showDnsRecords')}
         </Button>
       </Stack>
 
@@ -221,18 +227,25 @@ export default function ConnectDomainPanel({ projectId, onUpdated }: Props) {
           <Stack direction="row" alignItems="center" gap={0.5}>
             <Typography
               variant="body2"
-              sx={{ fontFamily: 'monospace', wordBreak: 'break-all', flex: 1, bgcolor: 'rgba(0,0,0,0.2)', px: 1, py: 0.5, borderRadius: 1 }}
+              sx={{
+                fontFamily: 'monospace',
+                wordBreak: 'break-all',
+                flex: 1,
+                bgcolor: 'rgba(0,0,0,0.2)',
+                px: 1,
+                py: 0.5,
+                borderRadius: 1,
+              }}
             >
               {data.cnameTarget}
             </Typography>
             <Tooltip title={t('common.copy')}>
               <IconButton
                 size="small"
-                onClick={() =>
-                  copyText(
-                    t('connectDomain.copyPrompt', { label: t('connectDomain.copyCnameTarget') }),
-                    data.cnameTarget!,
-                  )}
+                onClick={() => copyText(
+                  t('connectDomain.copyPrompt', { label: t('connectDomain.copyCnameTarget') }),
+                  data.cnameTarget!,
+                )}
               >
                 <ContentCopyIcon fontSize="small" />
               </IconButton>
@@ -252,18 +265,25 @@ export default function ConnectDomainPanel({ projectId, onUpdated }: Props) {
           <Stack direction="row" alignItems="center" gap={0.5}>
             <Typography
               variant="body2"
-              sx={{ fontFamily: 'monospace', wordBreak: 'break-all', flex: 1, bgcolor: 'rgba(0,0,0,0.2)', px: 1, py: 0.5, borderRadius: 1 }}
+              sx={{
+                fontFamily: 'monospace',
+                wordBreak: 'break-all',
+                flex: 1,
+                bgcolor: 'rgba(0,0,0,0.2)',
+                px: 1,
+                py: 0.5,
+                borderRadius: 1,
+              }}
             >
               {data.challengeTxtValue}
             </Typography>
             <Tooltip title={t('common.copy')}>
               <IconButton
                 size="small"
-                onClick={() =>
-                  copyText(
-                    t('connectDomain.copyPrompt', { label: t('connectDomain.copyTxtValue') }),
-                    data.challengeTxtValue!,
-                  )}
+                onClick={() => copyText(
+                  t('connectDomain.copyPrompt', { label: t('connectDomain.copyTxtValue') }),
+                  data.challengeTxtValue!,
+                )}
               >
                 <ContentCopyIcon fontSize="small" />
               </IconButton>
@@ -273,11 +293,7 @@ export default function ConnectDomainPanel({ projectId, onUpdated }: Props) {
       )}
 
       <Stack direction="row" flexWrap="wrap" gap={1}>
-        <Button
-          variant="outlined"
-          onClick={handleVerify}
-          disabled={verifying || !data.customDomain}
-        >
+        <Button variant="outlined" onClick={handleVerify} disabled={verifying || !data.customDomain}>
           {verifying ? <CircularProgress size={20} /> : t('connectDomain.verifyDns')}
         </Button>
         <Button variant="text" color="inherit" onClick={() => navigate('/docs/connect-domain')} size="small">

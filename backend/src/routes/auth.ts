@@ -9,6 +9,8 @@ import {
   login,
   getMe,
   changePassword,
+  requestPasswordChange,
+  confirmPasswordChange,
   requestEmailChange,
   confirmEmailChange,
   deleteAccount,
@@ -118,6 +120,30 @@ router.post('/change-password', requireAuth, async (req, res, next) => {
   try {
     const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
     const result = await changePassword(req.user.userId, currentPassword, newPassword);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/request-password-change', requireAuth, async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
+    const result = await requestPasswordChange(req.user.userId, currentPassword, newPassword);
+    res.status(202).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+const confirmPasswordChangeSchema = z.object({
+  code: z.string().regex(/^\d{6}$/, 'Code must be 6 digits'),
+});
+
+router.post('/confirm-password-change', requireAuth, async (req, res, next) => {
+  try {
+    const { code } = confirmPasswordChangeSchema.parse(req.body);
+    const result = await confirmPasswordChange(req.user.userId, code);
     res.json(result);
   } catch (err) {
     next(err);
