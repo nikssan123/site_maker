@@ -27,6 +27,15 @@ const PREVIEW_HOST_OVERRIDE = (
   import.meta.env.VITE_PREVIEW_HOST as string | undefined
 )?.trim();
 
+function shouldUseHostPortPreview(): boolean {
+  if (!PREVIEW_USE_HOST_PORT) return false;
+  const host =
+    PREVIEW_HOST_OVERRIDE ||
+    (typeof window !== 'undefined' ? window.location.hostname : 'localhost');
+  const h = host.toLowerCase();
+  return h === 'localhost' || h === '127.0.0.1' || h === '::1' || h.endsWith('.lvh.me');
+}
+
 function directPreviewOrigin(port: number): string {
   const h =
     PREVIEW_HOST_OVERRIDE ||
@@ -43,11 +52,12 @@ function directPreviewOrigin(port: number): string {
 export default function PreviewFrame({ projectId, port, editToken }: Props) {
   const { t } = useTranslation();
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const useHostPortPreview = shouldUseHostPortPreview();
 
   const previewUrl = useMemo(() => {
-    if (PREVIEW_USE_HOST_PORT && port > 0) return directPreviewOrigin(port);
+    if (useHostPortPreview && port > 0) return directPreviewOrigin(port);
     return `/preview-app/${projectId}/`;
-  }, [projectId, port]);
+  }, [projectId, port, useHostPortPreview]);
 
   const [phase, setPhase] = useState<'checking' | 'framing' | 'ready' | 'error'>('checking');
   const [errorTitle, setErrorTitle] = useState<string | null>(null);
@@ -128,7 +138,7 @@ export default function PreviewFrame({ projectId, port, editToken }: Props) {
 
     const ac = new AbortController();
 
-    if (PREVIEW_USE_HOST_PORT && port > 0) {
+    if (useHostPortPreview && port > 0) {
       // Poll with no-cors (cross-port fetch) until the server responds or we time out.
       const MAX_ATTEMPTS = 20;
       const INTERVAL_MS = 600;
@@ -216,30 +226,9 @@ export default function PreviewFrame({ projectId, port, editToken }: Props) {
       ac.abort();
       clearWarnTimer();
     };
-  }, [projectId, previewUrl, frameKey, port, t]);
+  }, [projectId, previewUrl, frameKey, port, t, useHostPortPreview]);
 
   const handleIframeLoad = () => {
-    const iframe = iframeRef.current;
-    if (iframe && !PREVIEW_USE_HOST_PORT) {
-      try {
-        const pathname = iframe.contentWindow?.location.pathname;
-        const base = `/preview-app/${projectId}/`;
-        if (pathname && !pathname.startsWith(base)) {
-          // Cap retries so a buggy app that immediately navigates away can't spam the network.
-          if (escapeAttemptsRef.current < 2) {
-            escapeAttemptsRef.current += 1;
-            iframe.contentWindow!.location.replace(previewUrl);
-            return;
-          }
-          setPhase('error');
-          setErrorTitle(t('previewFrame.errorLoad'));
-          setErrorHint(t('previewFrame.errorLoadHint'));
-          return;
-        }
-      } catch {
-        /* cross-origin access blocked — nothing we can do; let it render. */
-      }
-    }
     escapeAttemptsRef.current = 0;
     waitingRef.current = false;
     clearWarnTimer();
