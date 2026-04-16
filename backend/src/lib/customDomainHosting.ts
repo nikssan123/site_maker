@@ -88,6 +88,26 @@ async function resolveCnameFlat(fqdn: string): Promise<string[]> {
   }
 }
 
+async function resolve4Flat(fqdn: string): Promise<string[]> {
+  try {
+    return await dns.resolve4(fqdn);
+  } catch (e: unknown) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === 'ENOTFOUND' || code === 'ENODATA') return [];
+    throw e;
+  }
+}
+
+async function resolve6Flat(fqdn: string): Promise<string[]> {
+  try {
+    return await dns.resolve6(fqdn);
+  } catch (e: unknown) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === 'ENOTFOUND' || code === 'ENODATA') return [];
+    throw e;
+  }
+}
+
 /** Follow CNAME chain (limited depth) and collect all seen targets. */
 async function cnameChain(host: string, maxDepth = 8): Promise<string[]> {
   const seen = new Set<string>();
@@ -117,6 +137,23 @@ export async function verifyCnamePointsToProject(
 ): Promise<boolean> {
   const expected = cnameTargetForProject(projectId);
   if (!expected) return false;
-  const chain = await cnameChain(normalizeHostname(hostname));
-  return chain.some((t) => t === expected || t.endsWith(`.${expected}`));
+  const host = normalizeHostname(hostname);
+
+  const chain = await cnameChain(host);
+  if (chain.some((t) => t === expected || t.endsWith(`.${expected}`))) return true;
+
+  // Fallback for apex domains / CNAME-flattened records (e.g. Cloudflare at @):
+  // a CNAME at the apex is invalid in DNS, so Cloudflare serves flattened A/AAAA.
+  // Treat the host as verified when its resolved IPs overlap with the expected
+  // target's IPs — that means it's pointed at our hosting edge even though the
+  // CNAME chain isn't visible in public DNS.
+  const [hostA, targetA, hostAAAA, targetAAAA] = await Promise.all([
+    resolve4Flat(host),
+    resolve4Flat(expected),
+    resolve6Flat(host),
+    resolve6Flat(expected),
+  ]);
+  const ipv4Match = targetA.length > 0 && hostA.some((ip) => targetA.includes(ip));
+  const ipv6Match = targetAAAA.length > 0 && hostAAAA.some((ip) => targetAAAA.includes(ip));
+  return ipv4Match || ipv6Match;
 }

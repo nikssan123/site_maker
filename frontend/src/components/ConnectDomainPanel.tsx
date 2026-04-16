@@ -180,6 +180,15 @@ export default function ConnectDomainPanel({ projectId, onUpdated }: Props) {
         {t('connectDomain.stepsLine3')}
       </Alert>
 
+      <Alert severity="warning" sx={{ mb: 2, py: 0.5 }}>
+        <Typography variant="body2" fontWeight={700} component="span">
+          {t('connectDomain.cloudflareNoteTitle')}
+        </Typography>{' '}
+        <Typography variant="body2" component="span">
+          {t('connectDomain.cloudflareNoteBody')}
+        </Typography>
+      </Alert>
+
       {localError && (
         <Alert severity="error" sx={{ mb: 2, py: 0.5 }} onClose={() => setLocalError(null)}>
           {localError}
