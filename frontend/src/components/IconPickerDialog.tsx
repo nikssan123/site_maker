@@ -1,8 +1,9 @@
-import { useMemo, useState, useRef, lazy, Suspense, type ComponentType } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import {
   Dialog, DialogContent, Box, Typography, TextField, InputAdornment, Tabs, Tab,
   IconButton, Button, Stack, ToggleButtonGroup, ToggleButton, CircularProgress, Alert,
 } from '@mui/material';
+import * as MuiIcons from '@mui/icons-material';
 import SearchIcon from '@mui/icons-material/Search';
 import CloseIcon from '@mui/icons-material/Close';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
@@ -25,22 +26,11 @@ interface Props {
 
 /** Lazy-load an @mui/icons-material icon by name. Falls back to a placeholder on failure. */
 function LazyIcon({ name, size = 24 }: { name: string; size?: number }) {
-  const Component = useMemo(
-    () =>
-      lazy<ComponentType<{ sx?: unknown; fontSize?: 'small' | 'medium' | 'large' }>>(() =>
-        import(`@mui/icons-material/${name}.js`)
-          .then((m) => ({ default: m.default }))
-          .catch(() => ({
-            default: () => <Box sx={{ width: size, height: size, bgcolor: 'error.main', opacity: 0.2, borderRadius: 0.5 }} />,
-          })),
-      ),
-    [name, size],
-  );
-  return (
-    <Suspense fallback={<Box sx={{ width: size, height: size }} />}>
-      <Component sx={{ fontSize: size }} />
-    </Suspense>
-  );
+  const Component = (MuiIcons as Record<string, React.ComponentType<{ sx?: unknown }>>)[name];
+  if (!Component) {
+    return <Box sx={{ width: size, height: size, bgcolor: 'error.main', opacity: 0.2, borderRadius: 0.5 }} />;
+  }
+  return <Component sx={{ fontSize: size }} />;
 }
 
 export default function IconPickerDialog({ open, onClose, onPick }: Props) {
