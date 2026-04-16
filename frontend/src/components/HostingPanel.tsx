@@ -92,9 +92,7 @@ export default function HostingPanel({ projectId, hosted, paid, onUpdated }: Pro
           </Typography>
         </Stack>
         <Typography variant="body2" color="text.secondary">
-          {hosted
-            ? 'Сайтът е онлайн и може да бъде свързан с домейн.'
-            : 'Активирайте хостинга, за да имате публичен адрес и да пуснете сайта си онлайн.'}
+          {hosted ? t('hostingPanel.statusOnline') : t('hostingPanel.statusOffline')}
         </Typography>
       </Paper>
 
@@ -104,27 +102,26 @@ export default function HostingPanel({ projectId, hosted, paid, onUpdated }: Pro
         <>
           <Paper variant="outlined" sx={{ p: 1.75, borderRadius: 2 }}>
             <Typography variant="subtitle2" fontWeight={800} mb={0.75}>
-              Вариант 1: Адрес към нашия домейн
+              {t('hostingPanel.option1Title')}
             </Typography>
             <Typography variant="body2" color="text.secondary" mb={1.25}>
-              Изберете кратко име, а ние ще го пуснем като адрес към вашия сайт без допълнителни DNS
-              настройки.
+              {t('hostingPanel.option1Body')}
             </Typography>
 
             <Stack direction={{ xs: 'column', sm: 'row' }} gap={1}>
               <TextField
                 size="small"
-                label="Име за адреса"
+                label={t('hostingPanel.slugLabel')}
                 value={slug}
                 onChange={(e) => setSlug(e.target.value)}
-                placeholder="mysite"
+                placeholder={t('hostingPanel.slugPlaceholder')}
                 fullWidth
                 inputProps={{ spellCheck: false }}
                 disabled={savingSlug}
                 helperText={
                   domainInfo?.firstPartyRootDomain
-                    ? `Пример: mysite.${domainInfo.firstPartyRootDomain}`
-                    : 'Например: mysite'
+                    ? t('hostingPanel.slugHelperExample', { root: domainInfo.firstPartyRootDomain })
+                    : t('hostingPanel.slugHelperPlain')
                 }
               />
               <Button
@@ -132,7 +129,7 @@ export default function HostingPanel({ projectId, hosted, paid, onUpdated }: Pro
                 onClick={saveSlug}
                 disabled={savingSlug || normalizedSlug.length === 0}
               >
-                {savingSlug ? <CircularProgress size={18} /> : 'Запази'}
+                {savingSlug ? <CircularProgress size={18} /> : t('hostingPanel.save')}
               </Button>
             </Stack>
 
@@ -144,7 +141,7 @@ export default function HostingPanel({ projectId, hosted, paid, onUpdated }: Pro
 
             {((domainInfo?.domainKind === 'first_party_subdomain' && domainInfo.customDomain) || slugSuccess) && (
               <Alert severity="success" sx={{ mt: 1 }}>
-                Активен адрес:{' '}
+                {t('hostingPanel.activeAddress')}{' '}
                 <Box component="span" sx={{ fontFamily: 'monospace' }}>
                   {domainInfo?.domainKind === 'first_party_subdomain' && domainInfo.customDomain
                     ? domainInfo.customDomain
@@ -160,7 +157,7 @@ export default function HostingPanel({ projectId, hosted, paid, onUpdated }: Pro
                   underline="hover"
                   sx={{ ml: 0.5 }}
                 >
-                  отвори
+                  {t('hostingPanel.open')}
                 </Link>
               </Alert>
             )}
@@ -171,11 +168,10 @@ export default function HostingPanel({ projectId, hosted, paid, onUpdated }: Pro
             sx={{ p: 1.75, borderRadius: 2, borderColor: 'rgba(99,102,241,0.35)' }}
           >
             <Typography variant="subtitle2" fontWeight={800} mb={0.75}>
-              Вариант 2: Собствен домейн
+              {t('hostingPanel.option2Title')}
             </Typography>
             <Typography variant="body2" color="text.secondary" mb={1.25}>
-              Можете да свържете и собствен домейн, например <b>www.yourbrand.com</b>. За това ще
-              трябва да добавите DNS записи.
+              <span dangerouslySetInnerHTML={{ __html: t('hostingPanel.option2Body') }} />
             </Typography>
             <ConnectDomainPanel
               projectId={projectId}
@@ -194,14 +190,14 @@ export default function HostingPanel({ projectId, hosted, paid, onUpdated }: Pro
             onClick={openPortal}
             disabled={loadingPortal}
           >
-            {loadingPortal ? <CircularProgress size={18} /> : 'Управлявай абонамента'}
+            {loadingPortal ? <CircularProgress size={18} /> : t('hostingPanel.manageSubscription')}
           </Button>
         </>
       )}
 
       {paid && !hosted && (
         <Alert severity="info">
-          Изберете „{t('preview.hostCta')}“, за да активирате хостинга и да пуснете сайта си онлайн.
+          {t('hostingPanel.activateHint', { cta: t('preview.hostCta') })}
         </Alert>
       )}
     </Box>

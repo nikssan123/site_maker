@@ -131,10 +131,10 @@ export default function DashboardPanel({ projectId, runPort }: Props) {
             </Box>
             <Box>
               <Typography variant="subtitle1" fontWeight={800}>
-                Общ преглед
+                {t('dashboard.heading')}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Бърз поглед към съдържанието, което в момента е записано в сайта.
+                {t('dashboard.subtitle')}
               </Typography>
             </Box>
           </Stack>

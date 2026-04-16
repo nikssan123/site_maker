@@ -14,6 +14,7 @@ import {
 } from '@mui/material';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import DeleteIcon from '@mui/icons-material/Delete';
+import { useTranslation } from 'react-i18next';
 
 type Inquiry = {
   id: number;
@@ -23,27 +24,26 @@ type Inquiry = {
   createdAt?: string | null;
 };
 
-async function readJsonOrExplain<T>(res: Response): Promise<T> {
-  const contentType = (res.headers.get('content-type') ?? '').toLowerCase();
-  const text = await res.text();
-  if (contentType.includes('text/html') || /^\s*</.test(text)) {
-    throw new Error(
-      'Този проект не връща правилни данни за запитванията. Проверете дали контактната форма записва съобщенията.',
-    );
-  }
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    throw new Error(`Невалиден отговор от сървъра: ${text.slice(0, 120)}`);
-  }
-}
-
 export default function InquiriesPanel({ projectId }: { projectId: string }) {
+  const { t } = useTranslation();
   const API_BASE = useMemo(() => `/preview-app/${projectId}`.replace(/\/$/, ''), [projectId]);
   const [rows, setRows] = useState<Inquiry[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function readJsonOrExplain<T>(res: Response): Promise<T> {
+    const contentType = (res.headers.get('content-type') ?? '').toLowerCase();
+    const text = await res.text();
+    if (contentType.includes('text/html') || /^\s*</.test(text)) {
+      throw new Error(t('inquiries.errors.noApi'));
+    }
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      throw new Error(t('inquiries.errors.invalidJson', { text: text.slice(0, 120) }));
+    }
+  }
 
   const load = async () => {
     setLoading(true);
@@ -54,7 +54,7 @@ export default function InquiriesPanel({ projectId }: { projectId: string }) {
       const data = await readJsonOrExplain<Inquiry[]>(res);
       setRows(Array.isArray(data) ? data : []);
     } catch (e: unknown) {
-      setError((e instanceof Error ? e.message : String(e)) || 'Грешка при зареждане.');
+      setError((e instanceof Error ? e.message : String(e)) || t('inquiries.errors.load'));
       setRows([]);
     } finally {
       setLoading(false);
@@ -63,6 +63,7 @@ export default function InquiriesPanel({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [API_BASE]);
 
   const del = async (id: number) => {
@@ -73,7 +74,7 @@ export default function InquiriesPanel({ projectId }: { projectId: string }) {
       if (!res.ok) throw new Error((await res.text()).slice(0, 300));
       await load();
     } catch (e: unknown) {
-      setError((e instanceof Error ? e.message : String(e)) || 'Грешка при изтриване.');
+      setError((e instanceof Error ? e.message : String(e)) || t('inquiries.errors.delete'));
     } finally {
       setSaving(false);
     }
@@ -111,21 +112,21 @@ export default function InquiriesPanel({ projectId }: { projectId: string }) {
             </Box>
             <Box>
               <Typography variant="subtitle1" fontWeight={800}>
-                Запитвания
+                {t('inquiries.heading')}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Тук виждаш новите съобщения от формата за контакт.
+                {t('inquiries.subtitle')}
               </Typography>
             </Box>
           </Stack>
           <Stack direction="row" gap={1} sx={{ ml: { sm: 'auto' } }}>
             <Chip
               size="small"
-              label={`${rows.length} общо`}
+              label={t('inquiries.total', { n: rows.length })}
               sx={{ height: 24, fontSize: 11, bgcolor: 'rgba(52,211,153,0.10)', border: '1px solid rgba(52,211,153,0.22)' }}
             />
             <Button size="small" variant="outlined" onClick={load} disabled={loading || saving}>
-              Обнови
+              {t('inquiries.refresh')}
             </Button>
           </Stack>
         </Stack>
@@ -145,10 +146,10 @@ export default function InquiriesPanel({ projectId }: { projectId: string }) {
         ) : sorted.length === 0 ? (
           <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, textAlign: 'center' }}>
             <Typography variant="body1" fontWeight={700}>
-              Все още няма запитвания
+              {t('inquiries.emptyTitle')}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
-              Когато някой ти пише от формата за контакт, съобщението ще се покаже тук.
+              {t('inquiries.emptyBody')}
             </Typography>
           </Paper>
         ) : (
@@ -178,7 +179,7 @@ export default function InquiriesPanel({ projectId }: { projectId: string }) {
                       {r.message || '—'}
                     </Typography>
                   </Box>
-                  <Tooltip title="Изтрий">
+                  <Tooltip title={t('inquiries.delete')}>
                     <span>
                       <IconButton size="small" onClick={() => del(r.id)} disabled={saving}>
                         <DeleteIcon fontSize="small" />

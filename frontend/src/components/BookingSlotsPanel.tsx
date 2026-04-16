@@ -21,6 +21,7 @@ import { DateCalendar } from '@mui/x-date-pickers/DateCalendar';
 import { TimePicker } from '@mui/x-date-pickers/TimePicker';
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/bg';
+import { useTranslation } from 'react-i18next';
 
 type TakenSlot = {
   id: number;
@@ -28,26 +29,6 @@ type TakenSlot = {
   time: string; // HH:mm
   note?: string | null;
 };
-
-async function readJsonOrExplain<T>(res: Response): Promise<T> {
-  const contentType = (res.headers.get('content-type') ?? '').toLowerCase();
-  const text = await res.text();
-
-  // If we got the SPA HTML fallback, Vite/Express likely served index.html instead of an API.
-  if (contentType.includes('text/html') || /^\s*</.test(text)) {
-    throw new Error(
-      'Този проект не предоставя API `GET /api/takenSlots` (връща HTML вместо JSON). ' +
-      'Най-често това означава, че генерираното приложение няма `server.js` (няма база данни) ' +
-      'или няма дефинирани маршрути за `takenSlots`.',
-    );
-  }
-
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    throw new Error(`Невалиден отговор от сървъра (очаква се JSON): ${text.slice(0, 120)}`);
-  }
-}
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
@@ -68,8 +49,10 @@ export default function BookingSlotsPanel({
   projectId: string;
   adminApiToken?: string | null;
 }) {
+  const { t, i18n } = useTranslation();
   const API_BASE = useMemo(() => `/preview-app/${projectId}`.replace(/\/$/, ''), [projectId]);
-  const [selectedDate, setSelectedDate] = useState<Dayjs>(dayjs().locale('bg'));
+  const locale = i18n.language === 'en' ? 'en' : 'bg';
+  const [selectedDate, setSelectedDate] = useState<Dayjs>(dayjs().locale(locale));
   const [slots, setSlots] = useState<TakenSlot[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -83,6 +66,22 @@ export default function BookingSlotsPanel({
     .filter((s) => s.date === dateKey)
     .sort((a, b) => a.time.localeCompare(b.time));
 
+  async function readJsonOrExplain<T>(res: Response): Promise<T> {
+    const contentType = (res.headers.get('content-type') ?? '').toLowerCase();
+    const text = await res.text();
+
+    // If we got the SPA HTML fallback, Vite/Express likely served index.html instead of an API.
+    if (contentType.includes('text/html') || /^\s*</.test(text)) {
+      throw new Error(t('bookingSlots.errors.noApi'));
+    }
+
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      throw new Error(t('bookingSlots.errors.invalidJson', { text: text.slice(0, 120) }));
+    }
+  }
+
   const load = async () => {
     setLoading(true);
     setError(null);
@@ -92,7 +91,7 @@ export default function BookingSlotsPanel({
       const data = await readJsonOrExplain<TakenSlot[]>(res);
       setSlots(Array.isArray(data) ? data : []);
     } catch (e: any) {
-      setError((e instanceof Error ? e.message : String(e)) || 'Грешка при зареждане.');
+      setError((e instanceof Error ? e.message : String(e)) || t('bookingSlots.errors.load'));
     } finally {
       setLoading(false);
     }
@@ -120,7 +119,7 @@ export default function BookingSlotsPanel({
       await load();
       setNote('');
     } catch (e: any) {
-      setError((e instanceof Error ? e.message : String(e)) || 'Грешка при запис.');
+      setError((e instanceof Error ? e.message : String(e)) || t('bookingSlots.errors.save'));
     } finally {
       setSaving(false);
     }
@@ -136,7 +135,7 @@ export default function BookingSlotsPanel({
       if (!res.ok) throw new Error((await res.text()).slice(0, 300));
       await load();
     } catch (e: any) {
-      setError((e instanceof Error ? e.message : String(e)) || 'Грешка при изтриване.');
+      setError((e instanceof Error ? e.message : String(e)) || t('bookingSlots.errors.delete'));
     } finally {
       setSaving(false);
     }
@@ -148,16 +147,16 @@ export default function BookingSlotsPanel({
         <Stack direction="row" alignItems="center" gap={1}>
           <CalendarMonthIcon sx={{ fontSize: 16, color: 'primary.main' }} />
           <Typography variant="subtitle2" fontWeight={800} sx={{ fontSize: 13 }}>
-            Заети часове
+            {t('bookingSlots.heading')}
           </Typography>
           <Chip
             size="small"
-            label="за booking проекти"
+            label={t('bookingSlots.chip')}
             sx={{ ml: 'auto', height: 22, fontSize: 11, bgcolor: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)' }}
           />
         </Stack>
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75, lineHeight: 1.5 }}>
-          Тук отбелязваш часове като заети (недостъпни) и ги виждаш в календар. Това се записва в генерираното приложение (API: <code>/api/takenSlots</code>).
+          <span dangerouslySetInnerHTML={{ __html: t('bookingSlots.intro') }} />
         </Typography>
       </Paper>
 
@@ -170,7 +169,7 @@ export default function BookingSlotsPanel({
 
         <Stack gap={1.5}>
           <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
-            <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="bg">
+            <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale={locale}>
               <DateCalendar
                 value={selectedDate}
                 onChange={(v) => { if (v) setSelectedDate(v); }}
@@ -180,13 +179,13 @@ export default function BookingSlotsPanel({
 
           <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
             <Typography variant="subtitle2" fontWeight={800} sx={{ fontSize: 13, mb: 1 }}>
-              Маркирай час като зает
+              {t('bookingSlots.markHeading')}
             </Typography>
 
-            <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="bg">
+            <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale={locale}>
               <Stack gap={1.25}>
                 <TimePicker
-                  label="Час"
+                  label={t('bookingSlots.timeLabel')}
                   value={time}
                   onChange={(v) => { if (v) setTime(v); }}
                   minutesStep={5}
@@ -194,10 +193,10 @@ export default function BookingSlotsPanel({
                 />
                 <TextField
                   size="small"
-                  label="Бележка (по избор)"
+                  label={t('bookingSlots.noteLabel')}
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  placeholder="напр. Обедна почивка"
+                  placeholder={t('bookingSlots.notePlaceholder')}
                   fullWidth
                 />
                 <Button
@@ -206,7 +205,7 @@ export default function BookingSlotsPanel({
                   disabled={saving}
                   sx={{ fontWeight: 800 }}
                 >
-                  {saving ? 'Записване…' : 'Маркирай като зает'}
+                  {saving ? t('bookingSlots.saving') : t('bookingSlots.markCta')}
                 </Button>
               </Stack>
             </LocalizationProvider>
@@ -215,10 +214,10 @@ export default function BookingSlotsPanel({
           <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
             <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
               <Typography variant="subtitle2" fontWeight={800} sx={{ fontSize: 13 }}>
-                {`Заети часове за ${selectedDate.format('D MMM YYYY')}`}
+                {t('bookingSlots.listHeading', { date: selectedDate.locale(locale).format('D MMM YYYY') })}
               </Typography>
               <Button size="small" variant="outlined" onClick={load} disabled={loading || saving}>
-                Обнови
+                {t('bookingSlots.refresh')}
               </Button>
             </Stack>
             <Divider sx={{ mb: 1.25 }} />
@@ -229,7 +228,7 @@ export default function BookingSlotsPanel({
               </Box>
             ) : daySlots.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
-                Няма заети часове за тази дата.
+                {t('bookingSlots.none')}
               </Typography>
             ) : (
               <Stack gap={0.75}>
@@ -239,7 +238,7 @@ export default function BookingSlotsPanel({
                     <Typography variant="body2" color="text.secondary" sx={{ flex: 1, fontSize: 12 }}>
                       {s.note ?? '—'}
                     </Typography>
-                    <Tooltip title="Премахни">
+                    <Tooltip title={t('bookingSlots.remove')}>
                       <span>
                         <IconButton size="small" onClick={() => deleteSlot(s.id)} disabled={saving}>
                           <DeleteIcon fontSize="small" />
@@ -256,4 +255,3 @@ export default function BookingSlotsPanel({
     </Box>
   );
 }
-

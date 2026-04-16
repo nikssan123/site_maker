@@ -25,6 +25,7 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 
 type DomainRow = {
@@ -49,13 +50,7 @@ type SettingsRow = null | {
 
 type TemplateRow = { id: string; eventType: string; subject: string; htmlBody: string; updatedAt: string };
 
-const EVENT_TYPES: Array<{ key: string; label: string }> = [
-  { key: 'user.signup', label: 'Регистрация на потребител' },
-  { key: 'form.submitted', label: 'Ново запитване (контактна форма)' },
-  { key: 'booking.created', label: 'Нова резервация' },
-  { key: 'order.created', label: 'Нова поръчка' },
-  { key: 'payment.received', label: 'Получено плащане' },
-];
+const EVENT_TYPE_KEYS = ['user.signup', 'form.submitted', 'booking.created', 'order.created', 'payment.received'] as const;
 
 function prettyJson(v: unknown): string {
   try {
@@ -66,6 +61,7 @@ function prettyJson(v: unknown): string {
 }
 
 export default function EmailPanel({ projectId }: { projectId: string }) {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<'domains' | 'sender' | 'templates'>('domains');
   const [loading, setLoading] = useState(true);
   const [domains, setDomains] = useState<DomainRow[]>([]);
@@ -81,27 +77,34 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
   const [fromName, setFromName] = useState('');
   const [fromEmail, setFromEmail] = useState('');
   const [domainId, setDomainId] = useState<string | null>(null);
-  const [templateEventType, setTemplateEventType] = useState(EVENT_TYPES[1].key);
+  const [templateEventType, setTemplateEventType] = useState<string>(EVENT_TYPE_KEYS[1]);
   const [templateSubject, setTemplateSubject] = useState('');
   const [templateHtml, setTemplateHtml] = useState('');
 
   const templateByType = useMemo(() => {
     const m = new Map<string, TemplateRow>();
-    for (const t of templates) m.set(t.eventType, t);
+    for (const tpl of templates) m.set(tpl.eventType, tpl);
     return m;
   }, [templates]);
+
+  const variablesHintHtml = useMemo(() => {
+    const vars = ['{{name}}', '{{email}}', '{{message}}']
+      .map((v) => `<code>${v}</code>`)
+      .join(', ');
+    return t('emailPanel.templates.variablesHint', { vars, interpolation: { escapeValue: false } });
+  }, [t]);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [d, s, t] = await Promise.all([
+      const [d, s, tpls] = await Promise.all([
         api.emailDomainsList({ projectId }),
         api.emailSettingsGet(projectId),
         api.emailTemplatesGet(projectId),
       ]);
       setDomains(d);
       setSettings(s);
-      setTemplates(t);
+      setTemplates(tpls);
 
       if (s) {
         setFromName(s.fromName ?? '');
@@ -113,7 +116,7 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
         setDomainId(null);
       }
 
-      const chosen = t.find((x) => x.eventType === templateEventType) ?? t[0];
+      const chosen = tpls.find((x) => x.eventType === templateEventType) ?? tpls[0];
       if (chosen) {
         setTemplateEventType(chosen.eventType);
         setTemplateSubject(chosen.subject);
@@ -123,34 +126,34 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
         setTemplateHtml('');
       }
     } catch (e: any) {
-      setToast({ open: true, severity: 'error', message: e?.message ?? 'Грешка при зареждане' });
+      setToast({ open: true, severity: 'error', message: e?.message ?? t('emailPanel.toasts.loadError') });
     } finally {
       setLoading(false);
     }
-  }, [projectId, templateEventType]);
+  }, [projectId, templateEventType, t]);
 
   useEffect(() => {
     loadAll();
   }, [loadAll]);
 
   useEffect(() => {
-    const t = templateByType.get(templateEventType);
-    if (t) {
-      setTemplateSubject(t.subject);
-      setTemplateHtml(t.htmlBody);
+    const tpl = templateByType.get(templateEventType);
+    if (tpl) {
+      setTemplateSubject(tpl.subject);
+      setTemplateHtml(tpl.htmlBody);
     }
   }, [templateByType, templateEventType]);
 
   const onCreateDomain = async () => {
     try {
       const res = await api.emailDomainCreate(projectId, createDomain);
-      setToast({ open: true, severity: 'success', message: 'Домейнът е добавен. Конфигурирайте DNS записите и натиснете „Провери“.' });
+      setToast({ open: true, severity: 'success', message: t('emailPanel.toasts.domainAdded') });
       setCreateOpen(false);
       setCreateDomain('');
       await loadAll();
       if (!settings && typeof res.domain === 'string') setFromEmail(`no-reply@${res.domain}`);
     } catch (e: any) {
-      setToast({ open: true, severity: 'error', message: e?.message ?? 'Грешка' });
+      setToast({ open: true, severity: 'error', message: e?.message ?? t('emailPanel.toasts.generic') });
     }
   };
 
@@ -160,28 +163,28 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
       setToast({
         open: true,
         severity: res.verified ? 'success' : 'info',
-        message: res.verified ? 'Домейнът е потвърден.' : 'Все още не е потвърден. DNS-ът може да не е пропагирал.',
+        message: res.verified ? t('emailPanel.toasts.domainVerified') : t('emailPanel.toasts.domainNotYetVerified'),
       });
       await loadAll();
     } catch (e: any) {
-      setToast({ open: true, severity: 'error', message: e?.message ?? 'Грешка' });
+      setToast({ open: true, severity: 'error', message: e?.message ?? t('emailPanel.toasts.generic') });
     }
   };
 
   const onDelete = async (id: string) => {
     try {
       await api.emailDomainDelete(id);
-      setToast({ open: true, severity: 'success', message: 'Домейнът е изтрит.' });
+      setToast({ open: true, severity: 'success', message: t('emailPanel.toasts.domainDeleted') });
       await loadAll();
     } catch (e: any) {
-      setToast({ open: true, severity: 'error', message: e?.message ?? 'Грешка' });
+      setToast({ open: true, severity: 'error', message: e?.message ?? t('emailPanel.toasts.generic') });
     }
   };
 
   const onSaveSender = async () => {
     try {
       const res = await api.emailSettingsPut(projectId, { fromName: fromName || undefined, fromEmail, domainId });
-      setToast({ open: true, severity: 'success', message: 'Настройките са запазени.' });
+      setToast({ open: true, severity: 'success', message: t('emailPanel.toasts.settingsSaved') });
       setSettings({
         projectId: res.projectId,
         domainId: res.domainId,
@@ -192,17 +195,17 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
         provider: 'resend',
       });
     } catch (e: any) {
-      setToast({ open: true, severity: 'error', message: e?.message ?? 'Грешка' });
+      setToast({ open: true, severity: 'error', message: e?.message ?? t('emailPanel.toasts.generic') });
     }
   };
 
   const onSaveTemplate = async () => {
     try {
       await api.emailTemplatePut(projectId, templateEventType, { subject: templateSubject, htmlBody: templateHtml });
-      setToast({ open: true, severity: 'success', message: 'Шаблонът е запазен.' });
+      setToast({ open: true, severity: 'success', message: t('emailPanel.toasts.templateSaved') });
       await loadAll();
     } catch (e: any) {
-      setToast({ open: true, severity: 'error', message: e?.message ?? 'Грешка' });
+      setToast({ open: true, severity: 'error', message: e?.message ?? t('emailPanel.toasts.generic') });
     }
   };
 
@@ -211,12 +214,12 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
       <Stack gap={2}>
         <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'center' }} justifyContent="space-between" gap={1.5}>
           <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ minHeight: 0 }}>
-            <Tab value="domains" label="Домейни" />
-            <Tab value="sender" label="Подател" />
-            <Tab value="templates" label="Шаблони" />
+            <Tab value="domains" label={t('emailPanel.tabs.domains')} />
+            <Tab value="sender" label={t('emailPanel.tabs.sender')} />
+            <Tab value="templates" label={t('emailPanel.tabs.templates')} />
           </Tabs>
           <Button startIcon={<RefreshIcon />} onClick={loadAll} disabled={loading}>
-            Обнови
+            {t('emailPanel.refresh')}
           </Button>
         </Stack>
 
@@ -231,19 +234,19 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
                 <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
                   <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'center' }} justifyContent="space-between" gap={2}>
                     <Box>
-                      <Typography variant="h6" fontWeight={800}>Домейни за изпращане</Typography>
+                      <Typography variant="h6" fontWeight={800}>{t('emailPanel.domains.heading')}</Typography>
                       <Typography variant="body2" color="text.secondary">
-                        Добавете домейн, настройте DNS записите и потвърдете. След потвърждение може да го изберете като подател.
+                        {t('emailPanel.domains.subtitle')}
                       </Typography>
                     </Box>
                     <Button startIcon={<AddIcon />} variant="contained" onClick={() => setCreateOpen(true)}>
-                      Нов домейн
+                      {t('emailPanel.domains.newDomain')}
                     </Button>
                   </Stack>
                 </Paper>
 
                 {domains.length === 0 ? (
-                  <Alert severity="info">Няма добавени домейни за този проект.</Alert>
+                  <Alert severity="info">{t('emailPanel.domains.empty')}</Alert>
                 ) : (
                   <Stack gap={2}>
                     {domains.map((d) => (
@@ -255,28 +258,34 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
                               {d.verified ? (
                                 <Stack direction="row" gap={0.5} alignItems="center">
                                   <VerifiedIcon fontSize="small" color="success" />
-                                  <Typography variant="caption" color="success.main" fontWeight={700}>Потвърден</Typography>
+                                  <Typography variant="caption" color="success.main" fontWeight={700}>
+                                    {t('emailPanel.domains.verified')}
+                                  </Typography>
                                 </Stack>
                               ) : (
-                                <Typography variant="caption" color="warning.main" fontWeight={700}>Непотвърден</Typography>
+                                <Typography variant="caption" color="warning.main" fontWeight={700}>
+                                  {t('emailPanel.domains.notVerified')}
+                                </Typography>
                               )}
                             </Stack>
                             <Typography variant="caption" color="text.secondary">
-                              Добавен: {new Date(d.createdAt).toLocaleString()}
+                              {t('emailPanel.domains.added', { date: new Date(d.createdAt).toLocaleString() })}
                             </Typography>
                           </Box>
 
                           <Stack direction="row" gap={1} flexWrap="wrap">
-                            <Button variant="outlined" onClick={() => onVerify(d.id)}>Провери</Button>
+                            <Button variant="outlined" onClick={() => onVerify(d.id)}>
+                              {t('emailPanel.domains.verify')}
+                            </Button>
                             <Button variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={() => onDelete(d.id)}>
-                              Изтрий
+                              {t('emailPanel.domains.delete')}
                             </Button>
                           </Stack>
                         </Stack>
 
                         <Divider sx={{ my: 2 }} />
                         <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>
-                          DNS записи
+                          {t('emailPanel.domains.dnsRecords')}
                         </Typography>
                         <TextField
                           value={prettyJson(d.dnsRecords)}
@@ -295,58 +304,66 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
             {tab === 'sender' && (
               <Stack gap={2}>
                 <Alert severity="info">
-                  Ако няма потвърден домейн, системата автоматично изпраща от платформения подател.
+                  {t('emailPanel.sender.fallbackInfo')}
                 </Alert>
 
                 <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
                   <Typography variant="h6" fontWeight={800} sx={{ mb: 2 }}>
-                    Подател
+                    {t('emailPanel.sender.heading')}
                   </Typography>
                   <Stack gap={2}>
                     <TextField
-                      label="Име на подателя (по желание)"
+                      label={t('emailPanel.sender.nameLabel')}
                       value={fromName}
                       onChange={(e) => setFromName(e.target.value)}
                       fullWidth
                     />
 
                     <FormControl fullWidth>
-                      <InputLabel id="email-domain-select-label">Домейн</InputLabel>
+                      <InputLabel id="email-domain-select-label">{t('emailPanel.sender.domainLabel')}</InputLabel>
                       <Select
                         labelId="email-domain-select-label"
-                        label="Домейн"
+                        label={t('emailPanel.sender.domainLabel')}
                         value={domainId ?? ''}
                         onChange={(e) => setDomainId(String(e.target.value || '') || null)}
                       >
-                        <MenuItem value="">Платформен домейн (по подразбиране)</MenuItem>
+                        <MenuItem value="">{t('emailPanel.sender.platformDefault')}</MenuItem>
                         {domains.map((d) => (
                           <MenuItem key={d.id} value={d.id} disabled={!d.verified}>
-                            {d.domain} {d.verified ? '' : '(непотвърден)'}
+                            {d.domain} {d.verified ? '' : t('emailPanel.sender.notVerifiedSuffix')}
                           </MenuItem>
                         ))}
                       </Select>
                     </FormControl>
 
                     <TextField
-                      label="Имейл на подателя"
+                      label={t('emailPanel.sender.emailLabel')}
                       value={fromEmail}
                       onChange={(e) => setFromEmail(e.target.value)}
                       fullWidth
                     />
 
                     <Stack direction="row" gap={1} justifyContent="flex-end">
-                      <Button variant="contained" onClick={onSaveSender}>Запази</Button>
+                      <Button variant="contained" onClick={onSaveSender}>{t('emailPanel.sender.save')}</Button>
                     </Stack>
                   </Stack>
                 </Paper>
 
                 {settings && (
                   <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-                    <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>Текущо</Typography>
+                    <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>
+                      {t('emailPanel.sender.currentHeading')}
+                    </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Подател: {settings.fromEmail}{settings.fromName ? ` (${settings.fromName})` : ''}<br />
-                      Домейн: {settings.domain ?? 'Платформен'}<br />
-                      Потвърден: {settings.verified ? 'Да' : 'Не'}
+                      {t('emailPanel.sender.currentSender', {
+                        email: `${settings.fromEmail}${settings.fromName ? ` (${settings.fromName})` : ''}`,
+                      })}<br />
+                      {t('emailPanel.sender.currentDomain', {
+                        domain: settings.domain ?? t('emailPanel.sender.platformLabel'),
+                      })}<br />
+                      {t('emailPanel.sender.currentVerified', {
+                        value: settings.verified ? t('emailPanel.sender.yes') : t('emailPanel.sender.no'),
+                      })}
                     </Typography>
                   </Paper>
                 )}
@@ -356,38 +373,38 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
             {tab === 'templates' && (
               <Stack gap={2}>
                 <Alert severity="info">
-                  Шаблоните поддържат променливи като <code>{`{{name}}`}</code>, <code>{`{{email}}`}</code>, <code>{`{{message}}`}</code>.
+                  <span dangerouslySetInnerHTML={{ __html: variablesHintHtml }} />
                 </Alert>
                 <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
                   <Stack direction={{ xs: 'column', md: 'row' }} gap={2}>
                     <FormControl sx={{ minWidth: 280 }}>
-                      <InputLabel id="email-template-event-type-label">Събитие</InputLabel>
+                      <InputLabel id="email-template-event-type-label">{t('emailPanel.templates.eventLabel')}</InputLabel>
                       <Select
                         labelId="email-template-event-type-label"
-                        label="Събитие"
+                        label={t('emailPanel.templates.eventLabel')}
                         value={templateEventType}
                         onChange={(e) => setTemplateEventType(String(e.target.value))}
                       >
-                        {EVENT_TYPES.map((e) => (
-                          <MenuItem key={e.key} value={e.key}>{e.label}</MenuItem>
+                        {EVENT_TYPE_KEYS.map((key) => (
+                          <MenuItem key={key} value={key}>{t(`emailPanel.eventTypes.${key}`)}</MenuItem>
                         ))}
                       </Select>
                     </FormControl>
                     <Box sx={{ flex: 1 }} />
-                    <Button variant="contained" onClick={onSaveTemplate}>Запази шаблон</Button>
+                    <Button variant="contained" onClick={onSaveTemplate}>{t('emailPanel.templates.saveTemplate')}</Button>
                   </Stack>
 
                   <Divider sx={{ my: 2 }} />
 
                   <Stack gap={2}>
                     <TextField
-                      label="Тема"
+                      label={t('emailPanel.templates.subjectLabel')}
                       value={templateSubject}
                       onChange={(e) => setTemplateSubject(e.target.value)}
                       fullWidth
                     />
                     <TextField
-                      label="HTML"
+                      label={t('emailPanel.templates.htmlLabel')}
                       value={templateHtml}
                       onChange={(e) => setTemplateHtml(e.target.value)}
                       multiline
@@ -403,14 +420,14 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
       </Stack>
 
       <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Нов домейн</DialogTitle>
+        <DialogTitle>{t('emailPanel.dialog.title')}</DialogTitle>
         <DialogContent>
           <Stack gap={2} sx={{ mt: 1 }}>
             <Alert severity="info">
-              След добавяне ще получите DNS записи. След като ги настроите, натиснете „Провери“.
+              {t('emailPanel.dialog.info')}
             </Alert>
             <TextField
-              label="Домейн"
+              label={t('emailPanel.dialog.domainLabel')}
               value={createDomain}
               onChange={(e) => setCreateDomain(e.target.value)}
               placeholder="example.com"
@@ -420,9 +437,9 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setCreateOpen(false)}>Отказ</Button>
+          <Button onClick={() => setCreateOpen(false)}>{t('emailPanel.dialog.cancel')}</Button>
           <Button variant="contained" onClick={onCreateDomain} disabled={!createDomain.trim()}>
-            Добави
+            {t('emailPanel.dialog.add')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -430,16 +447,13 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
       <Snackbar
         open={toast.open}
         autoHideDuration={5000}
-        onClose={() => setToast((t) => ({ ...t, open: false }))}
+        onClose={() => setToast((tt) => ({ ...tt, open: false }))}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert severity={toast.severity} onClose={() => setToast((t) => ({ ...t, open: false }))} sx={{ width: '100%' }}>
+        <Alert severity={toast.severity} onClose={() => setToast((tt) => ({ ...tt, open: false }))} sx={{ width: '100%' }}>
           {toast.message}
         </Alert>
       </Snackbar>
     </Box>
   );
 }
-
-
-

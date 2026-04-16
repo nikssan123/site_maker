@@ -9,6 +9,7 @@ import ImageIcon from '@mui/icons-material/Image';
 import WallpaperIcon from '@mui/icons-material/Wallpaper';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import SettingsEthernetIcon from '@mui/icons-material/SettingsEthernet';
+import { useTranslation } from 'react-i18next';
 
 import CatalogPanel from './CatalogPanel';
 import BookingSlotsPanel from './BookingSlotsPanel';
@@ -138,6 +139,7 @@ function BrandingPanel({
   onOpenLogoUpload: () => void;
   onOpenHeroUpload: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Box sx={{ p: { xs: 1.25, md: 2 }, display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Paper
@@ -150,10 +152,10 @@ function BrandingPanel({
         }}
       >
         <Typography variant="subtitle1" sx={{ fontWeight: 800, color: 'text.primary' }}>
-          Визия на бранда
+          {t('adminWorkspace.branding.heading')}
         </Typography>
         <Typography variant="body2" sx={{ mt: 0.75, color: 'text.secondary', lineHeight: 1.7 }}>
-          Тук сменяш основните визии, които хората виждат първо на сайта. След промяна прегледът се обновява автоматично.
+          {t('adminWorkspace.branding.body')}
         </Typography>
       </Paper>
 
@@ -185,15 +187,15 @@ function BrandingPanel({
             </Box>
             <Box>
               <Typography variant="subtitle2" sx={{ fontWeight: 800, color: 'text.primary' }}>
-                Лого
+                {t('adminWorkspace.branding.logoTitle')}
               </Typography>
               <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.6 }}>
-                Смени логото, което се показва в навигацията и основните части на сайта.
+                {t('adminWorkspace.branding.logoBody')}
               </Typography>
             </Box>
           </Stack>
           <Button variant="contained" sx={{ mt: 2 }} onClick={onOpenLogoUpload}>
-            Смени логото
+            {t('adminWorkspace.branding.logoCta')}
           </Button>
         </Paper>
 
@@ -224,66 +226,20 @@ function BrandingPanel({
             </Box>
             <Box>
               <Typography variant="subtitle2" sx={{ fontWeight: 800, color: 'text.primary' }}>
-                Главна снимка
+                {t('adminWorkspace.branding.heroTitle')}
               </Typography>
               <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.6 }}>
-                Смени голямата фонова снимка в горната част на сайта.
+                {t('adminWorkspace.branding.heroBody')}
               </Typography>
             </Box>
           </Stack>
           <Button variant="contained" sx={{ mt: 2 }} onClick={onOpenHeroUpload}>
-            Смени снимката
+            {t('adminWorkspace.branding.heroCta')}
           </Button>
         </Paper>
       </Stack>
     </Box>
   );
-}
-
-function workspaceTitle(mode: AdminWorkspaceMode): string {
-  switch (mode) {
-    case 'catalog':
-      return '\u041f\u0440\u043e\u0434\u0443\u043a\u0442\u0438';
-    case 'booking_slots':
-      return 'Свободни часове';
-    case 'inquiries':
-      return 'Съобщения';
-    case 'blog':
-      return 'Статии';
-    case 'dashboard':
-      return 'Общ преглед';
-    case 'branding':
-      return 'Визия';
-    case 'analytics':
-      return 'Анализ';
-    case 'email':
-      return 'Имейл';
-    case 'hosting':
-      return 'Адрес на сайта';
-  }
-}
-
-function workspaceSubtitle(mode: AdminWorkspaceMode): string {
-  switch (mode) {
-    case 'catalog':
-      return '\u0423\u043f\u0440\u0430\u0432\u043b\u044f\u0432\u0430\u0439 \u043f\u0440\u043e\u0434\u0443\u043a\u0442\u0438\u0442\u0435 \u0438 \u0437\u0430\u043f\u0438\u0441\u0438\u0442\u0435 \u0432 \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0435\u0442\u043e.';
-    case 'booking_slots':
-      return 'Поддържай графика си винаги актуален.';
-    case 'inquiries':
-      return 'Виж какво са изпратили хората през контактната форма.';
-    case 'blog':
-      return 'Пиши и обновявай публикациите на сайта си.';
-    case 'dashboard':
-      return 'Кратък преглед на съдържанието в сайта ти.';
-    case 'branding':
-      return 'Смени основните визии, които хората забелязват първо.';
-    case 'analytics':
-      return 'Преглед на посещенията, източниците и поведението на посетителите.';
-    case 'email':
-      return 'Управлявай домейните за изпращане, подателя и имейл шаблоните.';
-    case 'hosting':
-      return 'Управлявай адреса, на който хората намират живия ти сайт.';
-  }
 }
 
 export default function AdminWorkspace({
@@ -302,6 +258,7 @@ export default function AdminWorkspace({
   onOpenLogoUpload,
   onOpenHeroUpload,
 }: Props) {
+  const { t } = useTranslation();
   return (
     <Box
       sx={{
@@ -332,13 +289,13 @@ export default function AdminWorkspace({
       >
         <Box>
           <Typography variant="overline" sx={{ color: 'primary.main', fontWeight: 800, letterSpacing: '0.12em' }}>
-            УПРАВЛЕНИЕ
+            {t('adminWorkspace.sectionLabel')}
           </Typography>
           <Typography variant="h6" sx={{ mt: 0.5, fontWeight: 800, color: 'text.primary' }}>
-            Управление на сайта
+            {t('adminWorkspace.sectionTitle')}
           </Typography>
           <Typography variant="body2" sx={{ mt: 0.75, color: 'text.secondary', lineHeight: 1.6 }}>
-            Редактирай съдържанието, следи какво се случва и се връщай към живия преглед по всяко време.
+            {t('adminWorkspace.sectionSubtitle')}
           </Typography>
         </Box>
 
@@ -356,23 +313,23 @@ export default function AdminWorkspace({
         >
           <WorkspaceNavButton
             icon={<DashboardIcon fontSize="small" />}
-            title="Общ преглед"
-            subtitle="Виж най-важната информация на едно място."
+            title={t('adminWorkspace.nav.dashboardTitle')}
+            subtitle={t('adminWorkspace.nav.dashboardSubtitle')}
             active={mode === 'dashboard'}
             onClick={() => onModeChange('dashboard')}
           />
           <WorkspaceNavButton
             icon={<ImageIcon fontSize="small" />}
-            title="Визия"
-            subtitle="Смени логото и основната снимка в горната част на сайта."
+            title={t('adminWorkspace.nav.brandingTitle')}
+            subtitle={t('adminWorkspace.nav.brandingSubtitle')}
             active={mode === 'branding'}
             onClick={() => onModeChange('branding')}
           />
           {planAppType !== 'portfolio' && planAppType !== 'landing_page' && planAppType !== 'saas' && (
             <WorkspaceNavButton
               icon={<StorefrontIcon fontSize="small" />}
-              title="\u041f\u0440\u043e\u0434\u0443\u043a\u0442\u0438"
-              subtitle="Управлявай продуктите, записите и съдържанието."
+              title={t('adminWorkspace.nav.catalogTitle')}
+              subtitle={t('adminWorkspace.nav.catalogSubtitle')}
               active={mode === 'catalog'}
               onClick={() => onModeChange('catalog')}
             />
@@ -380,8 +337,8 @@ export default function AdminWorkspace({
           {planAppType === 'blog' && (
             <WorkspaceNavButton
               icon={<ArticleIcon fontSize="small" />}
-              title="Статии"
-              subtitle="Създавай и редактирай публикациите за сайта си."
+              title={t('adminWorkspace.nav.blogTitle')}
+              subtitle={t('adminWorkspace.nav.blogSubtitle')}
               active={mode === 'blog'}
               onClick={() => onModeChange('blog')}
             />
@@ -389,8 +346,8 @@ export default function AdminWorkspace({
           {planAppType === 'booking' && (
             <WorkspaceNavButton
               icon={<CalendarMonthIcon fontSize="small" />}
-              title="Свободни часове"
-              subtitle="Поддържай датите и часовете си актуални."
+              title={t('adminWorkspace.nav.bookingTitle')}
+              subtitle={t('adminWorkspace.nav.bookingSubtitle')}
               active={mode === 'booking_slots'}
               onClick={() => onModeChange('booking_slots')}
             />
@@ -398,8 +355,8 @@ export default function AdminWorkspace({
           {planHasContactForm && (
             <WorkspaceNavButton
               icon={<MailOutlineIcon fontSize="small" />}
-              title="Съобщения"
-              subtitle="Преглеждай и изчиствай съобщенията от посетители."
+              title={t('adminWorkspace.nav.inquiriesTitle')}
+              subtitle={t('adminWorkspace.nav.inquiriesSubtitle')}
               active={mode === 'inquiries'}
               onClick={() => onModeChange('inquiries')}
             />
@@ -407,24 +364,24 @@ export default function AdminWorkspace({
           {projectPaid && projectHosted && (
             <WorkspaceNavButton
               icon={<CloudDoneIcon fontSize="small" />}
-              title="Адрес на сайта"
-              subtitle="Управлявай живия сайт и свързаните домейни."
+              title={t('adminWorkspace.nav.hostingTitle')}
+              subtitle={t('adminWorkspace.nav.hostingSubtitle')}
               active={mode === 'hosting'}
               onClick={() => onModeChange('hosting')}
             />
           )}
           <WorkspaceNavButton
             icon={<BarChartIcon fontSize="small" />}
-            title="Анализ"
-            subtitle="Виж посещения, устройства и най-популярни страници."
+            title={t('adminWorkspace.nav.analyticsTitle')}
+            subtitle={t('adminWorkspace.nav.analyticsSubtitle')}
             active={mode === 'analytics'}
             onClick={() => onModeChange('analytics')}
           />
           {projectPaid && (
             <WorkspaceNavButton
               icon={<SettingsEthernetIcon fontSize="small" />}
-              title="Имейл"
-              subtitle="Настрой домейни, подател и имейл шаблони."
+              title={t('adminWorkspace.nav.emailTitle')}
+              subtitle={t('adminWorkspace.nav.emailSubtitle')}
               active={mode === 'email'}
               onClick={() => onModeChange('email')}
             />
@@ -442,13 +399,13 @@ export default function AdminWorkspace({
           }}
         >
           <Typography variant="subtitle2" sx={{ fontWeight: 800, color: 'text.primary' }}>
-            Обратно към прегледа
+            {t('adminWorkspace.backHeading')}
           </Typography>
           <Typography variant="body2" sx={{ mt: 0.5, color: 'text.secondary', lineHeight: 1.6 }}>
-            Върни се към живия преглед, за да видиш сайта така, както го виждат посетителите.
+            {t('adminWorkspace.backBody')}
           </Typography>
           <Button variant="contained" size="small" sx={{ mt: 1.25 }} onClick={onBackToPreview}>
-            Отвори прегледа
+            {t('adminWorkspace.backCta')}
           </Button>
         </Paper>
       </Box>
@@ -477,10 +434,10 @@ export default function AdminWorkspace({
             }}
           >
             <Typography variant="h6" sx={{ fontWeight: 800, color: 'text.primary' }}>
-              {workspaceTitle(mode)}
+              {t(`adminWorkspace.titles.${mode}`)}
             </Typography>
             <Typography variant="body2" sx={{ mt: 0.35, color: 'text.secondary' }}>
-              {workspaceSubtitle(mode)}
+              {t(`adminWorkspace.subtitles.${mode}`)}
             </Typography>
           </Box>
 

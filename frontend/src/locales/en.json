@@ -237,6 +237,8 @@
     "title": "Articles"
   },
   "dashboard": {
+    "heading": "Overview",
+    "subtitle": "A quick look at the content that's currently stored in the site.",
     "models": "models",
     "records": "records",
     "refresh": "Refresh",
@@ -663,6 +665,188 @@
       "memoryRss": "Memory (RSS)",
       "memoryRssSub": "Heap: {{used}}/{{total}} MB",
       "uptime": "Uptime"
+    }
+  },
+  "adminWorkspace": {
+    "sectionLabel": "MANAGEMENT",
+    "sectionTitle": "Site management",
+    "sectionSubtitle": "Edit content, keep an eye on what's happening, and jump back to the live preview whenever you want.",
+    "backHeading": "Back to preview",
+    "backBody": "Return to the live preview to see the site exactly the way visitors see it.",
+    "backCta": "Open preview",
+    "nav": {
+      "dashboardTitle": "Overview",
+      "dashboardSubtitle": "See the most important information in one place.",
+      "brandingTitle": "Branding",
+      "brandingSubtitle": "Change the logo and the main image at the top of the site.",
+      "catalogTitle": "Products",
+      "catalogSubtitle": "Manage products, entries, and content.",
+      "blogTitle": "Articles",
+      "blogSubtitle": "Create and edit posts for your site.",
+      "bookingTitle": "Available times",
+      "bookingSubtitle": "Keep your dates and times up to date.",
+      "inquiriesTitle": "Messages",
+      "inquiriesSubtitle": "View and clear messages from visitors.",
+      "hostingTitle": "Site address",
+      "hostingSubtitle": "Manage the live site and connected domains.",
+      "analyticsTitle": "Analytics",
+      "analyticsSubtitle": "See visits, devices, and most popular pages.",
+      "emailTitle": "Email",
+      "emailSubtitle": "Configure domains, sender, and email templates."
+    },
+    "titles": {
+      "catalog": "Products",
+      "booking_slots": "Available times",
+      "inquiries": "Messages",
+      "blog": "Articles",
+      "dashboard": "Overview",
+      "branding": "Branding",
+      "analytics": "Analytics",
+      "email": "Email",
+      "hosting": "Site address"
+    },
+    "subtitles": {
+      "catalog": "Manage products and entries in your app.",
+      "booking_slots": "Keep your schedule always up to date.",
+      "inquiries": "See what people have submitted through the contact form.",
+      "blog": "Write and update posts on your site.",
+      "dashboard": "A quick overview of the content on your site.",
+      "branding": "Change the main visuals that people notice first.",
+      "analytics": "Overview of visits, sources, and visitor behavior.",
+      "email": "Manage sender domains, the sender, and email templates.",
+      "hosting": "Manage the address where people find your live site."
+    },
+    "branding": {
+      "heading": "Brand visuals",
+      "body": "Change the main visuals people see first on the site. The preview updates automatically after a change.",
+      "logoTitle": "Logo",
+      "logoBody": "Change the logo that appears in the navigation and main parts of the site.",
+      "logoCta": "Change the logo",
+      "heroTitle": "Main image",
+      "heroBody": "Change the large background image at the top of the site.",
+      "heroCta": "Change the image"
+    }
+  },
+  "hostingPanel": {
+    "statusOnline": "The site is online and can be connected to a domain.",
+    "statusOffline": "Activate hosting to have a public address and put your site online.",
+    "option1Title": "Option 1: Address on our domain",
+    "option1Body": "Pick a short name and we'll launch it as an address for your site with no extra DNS setup.",
+    "slugLabel": "Address name",
+    "slugPlaceholder": "mysite",
+    "slugHelperExample": "Example: mysite.{{root}}",
+    "slugHelperPlain": "For example: mysite",
+    "save": "Save",
+    "activeAddress": "Active address:",
+    "open": "open",
+    "option2Title": "Option 2: Custom domain",
+    "option2Body": "You can also connect your own domain, for example <b>www.yourbrand.com</b>. You'll need to add DNS records for that.",
+    "manageSubscription": "Manage subscription",
+    "activateHint": "Pick \"{{cta}}\" to activate hosting and put your site online."
+  },
+  "inquiries": {
+    "heading": "Inquiries",
+    "subtitle": "See new messages from your contact form here.",
+    "total": "{{n}} total",
+    "refresh": "Refresh",
+    "emptyTitle": "No inquiries yet",
+    "emptyBody": "When someone writes to you through the contact form, the message will appear here.",
+    "delete": "Delete",
+    "errors": {
+      "noApi": "This project doesn't return valid data for inquiries. Check whether the contact form records messages.",
+      "invalidJson": "Invalid response from server: {{text}}",
+      "load": "Failed to load.",
+      "delete": "Failed to delete."
+    }
+  },
+  "bookingSlots": {
+    "heading": "Taken times",
+    "chip": "for booking projects",
+    "intro": "Mark times as taken (unavailable) and see them in a calendar. This is stored in the generated app (API: <code>/api/takenSlots</code>).",
+    "markHeading": "Mark a time as taken",
+    "timeLabel": "Time",
+    "noteLabel": "Note (optional)",
+    "notePlaceholder": "e.g. Lunch break",
+    "saving": "Saving…",
+    "markCta": "Mark as taken",
+    "listHeading": "Taken times for {{date}}",
+    "refresh": "Refresh",
+    "none": "No taken times for this date.",
+    "remove": "Remove",
+    "errors": {
+      "noApi": "This project does not expose the `GET /api/takenSlots` API (returns HTML instead of JSON). Most commonly this means the generated app has no `server.js` (no database) or has no routes for `takenSlots`.",
+      "invalidJson": "Invalid response from server (JSON expected): {{text}}",
+      "load": "Failed to load.",
+      "save": "Failed to save.",
+      "delete": "Failed to delete."
+    }
+  },
+  "emailPanel": {
+    "tabs": {
+      "domains": "Domains",
+      "sender": "Sender",
+      "templates": "Templates"
+    },
+    "refresh": "Refresh",
+    "eventTypes": {
+      "user.signup": "User signup",
+      "form.submitted": "New inquiry (contact form)",
+      "booking.created": "New booking",
+      "order.created": "New order",
+      "payment.received": "Payment received"
+    },
+    "toasts": {
+      "loadError": "Failed to load",
+      "generic": "Something went wrong",
+      "domainAdded": "Domain added. Configure the DNS records and click \"Verify\".",
+      "domainVerified": "Domain verified.",
+      "domainNotYetVerified": "Not verified yet. DNS may not have propagated.",
+      "domainDeleted": "Domain deleted.",
+      "settingsSaved": "Settings saved.",
+      "templateSaved": "Template saved."
+    },
+    "domains": {
+      "heading": "Sending domains",
+      "subtitle": "Add a domain, set up the DNS records and verify. Once verified, you can select it as the sender.",
+      "newDomain": "New domain",
+      "empty": "No domains added for this project.",
+      "verified": "Verified",
+      "notVerified": "Not verified",
+      "added": "Added: {{date}}",
+      "verify": "Verify",
+      "delete": "Delete",
+      "dnsRecords": "DNS records"
+    },
+    "sender": {
+      "fallbackInfo": "If there is no verified domain, the system automatically sends from the platform sender.",
+      "heading": "Sender",
+      "nameLabel": "Sender name (optional)",
+      "domainLabel": "Domain",
+      "platformDefault": "Platform domain (default)",
+      "notVerifiedSuffix": "(not verified)",
+      "emailLabel": "Sender email",
+      "save": "Save",
+      "currentHeading": "Current",
+      "currentSender": "Sender: {{email}}",
+      "currentDomain": "Domain: {{domain}}",
+      "platformLabel": "Platform",
+      "currentVerified": "Verified: {{value}}",
+      "yes": "Yes",
+      "no": "No"
+    },
+    "templates": {
+      "variablesHint": "Templates support variables like {{vars}}.",
+      "eventLabel": "Event",
+      "saveTemplate": "Save template",
+      "subjectLabel": "Subject",
+      "htmlLabel": "HTML"
+    },
+    "dialog": {
+      "title": "New domain",
+      "info": "After adding, you'll receive DNS records. Once they are configured, click \"Verify\".",
+      "domainLabel": "Domain",
+      "cancel": "Cancel",
+      "add": "Add"
     }
   }
 }
