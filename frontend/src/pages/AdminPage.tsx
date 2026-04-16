@@ -26,6 +26,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
   ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts';
+import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 import AppLogo from '../components/AppLogo';
 
@@ -162,8 +163,8 @@ function formatShortDate(d: string) {
   return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function formatSeconds(s: number | null): string {
-  if (s == null) return 'N/A';
+function formatSeconds(s: number | null, naLabel = 'N/A'): string {
+  if (s == null) return naLabel;
   const mins = Math.floor(s / 60);
   const secs = Math.round(s % 60);
   return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
@@ -178,6 +179,7 @@ function formatUptime(s: number): string {
 /* ─── Tab Panels ─────��────────────────────────���──────────────────────────── */
 
 function OverviewPanel() {
+  const { t } = useTranslation();
   const [stats, setStats] = useState<Stats | null>(null);
   const [daily, setDaily] = useState<DailyData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -193,7 +195,7 @@ function OverviewPanel() {
   }, []);
 
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}><CircularProgress /></Box>;
-  if (!stats) return <Typography color="error">Failed to load stats</Typography>;
+  if (!stats) return <Typography color="error">{t('admin.failed.stats')}</Typography>;
 
   const chartData = daily
     ? daily.dailyUsers.map((u, i) => ({
@@ -208,22 +210,22 @@ function OverviewPanel() {
   return (
     <Stack spacing={3}>
       <Grid container spacing={2}>
-        <Grid item xs={6} sm={4} md={3}><StatCard label="Total Users" value={stats.totalUsers} icon={<PeopleIcon />} sub={`+${stats.usersLast7d} last 7d`} /></Grid>
-        <Grid item xs={6} sm={4} md={3}><StatCard label="Total Projects" value={stats.totalProjects} icon={<FolderIcon />} sub={`+${stats.projectsLast7d} last 7d`} /></Grid>
-        <Grid item xs={6} sm={4} md={3}><StatCard label="Paid Projects" value={stats.paidProjects} icon={<AttachMoneyIcon />} /></Grid>
-        <Grid item xs={6} sm={4} md={3}><StatCard label="Hosted" value={stats.hostedProjects} icon={<CloudIcon />} /></Grid>
-        <Grid item xs={6} sm={4} md={3}><StatCard label="Errors" value={stats.errorProjects} icon={<ErrorIcon />} /></Grid>
-        <Grid item xs={6} sm={4} md={3}><StatCard label="Avg Gen Time" value={formatSeconds(stats.avgGenerationSeconds)} icon={<TimerIcon />} /></Grid>
-        <Grid item xs={6} sm={4} md={3}><StatCard label="Paid Generations" value={stats.paidGenerations} icon={<TrendingUpIcon />} sub={`${stats.retryGenerations} retries`} /></Grid>
-        <Grid item xs={6} sm={4} md={3}><StatCard label="Total Sessions" value={stats.totalSessions} icon={<DescriptionIcon />} /></Grid>
+        <Grid item xs={6} sm={4} md={3}><StatCard label={t('admin.overview.totalUsers')} value={stats.totalUsers} icon={<PeopleIcon />} sub={t('admin.overview.last7d', { n: stats.usersLast7d })} /></Grid>
+        <Grid item xs={6} sm={4} md={3}><StatCard label={t('admin.overview.totalProjects')} value={stats.totalProjects} icon={<FolderIcon />} sub={t('admin.overview.last7d', { n: stats.projectsLast7d })} /></Grid>
+        <Grid item xs={6} sm={4} md={3}><StatCard label={t('admin.overview.paidProjects')} value={stats.paidProjects} icon={<AttachMoneyIcon />} /></Grid>
+        <Grid item xs={6} sm={4} md={3}><StatCard label={t('admin.overview.hosted')} value={stats.hostedProjects} icon={<CloudIcon />} /></Grid>
+        <Grid item xs={6} sm={4} md={3}><StatCard label={t('admin.overview.errors')} value={stats.errorProjects} icon={<ErrorIcon />} /></Grid>
+        <Grid item xs={6} sm={4} md={3}><StatCard label={t('admin.overview.avgGenTime')} value={formatSeconds(stats.avgGenerationSeconds, t('admin.common.na'))} icon={<TimerIcon />} /></Grid>
+        <Grid item xs={6} sm={4} md={3}><StatCard label={t('admin.overview.paidGenerations')} value={stats.paidGenerations} icon={<TrendingUpIcon />} sub={t('admin.overview.retries', { n: stats.retryGenerations })} /></Grid>
+        <Grid item xs={6} sm={4} md={3}><StatCard label={t('admin.overview.totalSessions')} value={stats.totalSessions} icon={<DescriptionIcon />} /></Grid>
       </Grid>
 
       <Grid container spacing={2}>
         <Grid item xs={12} md={8}>
           <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
-            <Typography variant="subtitle2" fontWeight={700} mb={2}>Daily Activity (30 days)</Typography>
+            <Typography variant="subtitle2" fontWeight={700} mb={2}>{t('admin.overview.dailyActivity')}</Typography>
             {chartData.length === 0 ? (
-              <Box sx={{ py: 4, textAlign: 'center' }}><Typography color="text.secondary" variant="body2">No data yet</Typography></Box>
+              <Box sx={{ py: 4, textAlign: 'center' }}><Typography color="text.secondary" variant="body2">{t('admin.overview.noDataYet')}</Typography></Box>
             ) : (
               <ResponsiveContainer width="100%" height={250}>
                 <AreaChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
@@ -241,8 +243,8 @@ function OverviewPanel() {
                   <XAxis dataKey="date" tickFormatter={formatShortDate} tick={{ fontSize: 11, fill: '#9ca3af' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
                   <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} tickLine={false} axisLine={false} allowDecimals={false} />
                   <RechartsTooltip contentStyle={{ background: '#1e1b4b', border: '1px solid #3b3077', borderRadius: 8, fontSize: 12 }} labelFormatter={formatShortDate} />
-                  <Area type="monotone" dataKey="users" stroke="#7c3aed" fill="url(#gradUsers)" name="Users" />
-                  <Area type="monotone" dataKey="projects" stroke="#10b981" fill="url(#gradProjects)" name="Projects" />
+                  <Area type="monotone" dataKey="users" stroke="#7c3aed" fill="url(#gradUsers)" name={t('admin.overview.chartUsers')} />
+                  <Area type="monotone" dataKey="projects" stroke="#10b981" fill="url(#gradProjects)" name={t('admin.overview.chartProjects')} />
                 </AreaChart>
               </ResponsiveContainer>
             )}
@@ -250,13 +252,13 @@ function OverviewPanel() {
         </Grid>
         <Grid item xs={12} md={4}>
           <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2, height: '100%' }}>
-            <Typography variant="subtitle2" fontWeight={700} mb={2}>Projects by Status</Typography>
+            <Typography variant="subtitle2" fontWeight={700} mb={2}>{t('admin.overview.projectsByStatus')}</Typography>
             {statusData.length === 0 ? (
-              <Typography color="text.secondary" variant="body2">No projects</Typography>
+              <Typography color="text.secondary" variant="body2">{t('admin.overview.noProjects')}</Typography>
             ) : (
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
-                  <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, value }) => `${name}: ${value}`}>
+                  <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, value }) => `${t(`admin.statusLabels.${name}`, { defaultValue: name })}: ${value}`}>
                     {statusData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                   </Pie>
                   <RechartsTooltip contentStyle={{ background: '#1e1b4b', border: '1px solid #3b3077', borderRadius: 8, fontSize: 12 }} />
@@ -271,6 +273,7 @@ function OverviewPanel() {
 }
 
 function UsersPanel() {
+  const { t } = useTranslation();
   const [users, setUsers] = useState<UserRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -290,7 +293,7 @@ function UsersPanel() {
   return (
     <Stack spacing={2}>
       <TextField
-        size="small" placeholder="Search by email..." value={search}
+        size="small" placeholder={t('admin.users.searchPlaceholder')} value={search}
         onChange={(e) => { setSearch(e.target.value); setPage(0); }}
         sx={{ maxWidth: 350 }}
       />
@@ -299,25 +302,25 @@ function UsersPanel() {
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Email</TableCell>
-                <TableCell>Admin</TableCell>
-                <TableCell>Sessions</TableCell>
-                <TableCell>Free Used</TableCell>
-                <TableCell>Joined</TableCell>
+                <TableCell>{t('admin.users.colEmail')}</TableCell>
+                <TableCell>{t('admin.users.colAdmin')}</TableCell>
+                <TableCell>{t('admin.users.colSessions')}</TableCell>
+                <TableCell>{t('admin.users.colFreeUsed')}</TableCell>
+                <TableCell>{t('admin.users.colJoined')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {users.map((u) => (
                 <TableRow key={u.id} hover>
                   <TableCell>{u.email}</TableCell>
-                  <TableCell>{u.isAdmin ? <Chip label="Admin" size="small" color="primary" /> : '-'}</TableCell>
+                  <TableCell>{u.isAdmin ? <Chip label={t('admin.users.adminChip')} size="small" color="primary" /> : '-'}</TableCell>
                   <TableCell>{u._count.sessions}</TableCell>
-                  <TableCell>{u.freeProjectUsed ? 'Yes' : 'No'}</TableCell>
+                  <TableCell>{u.freeProjectUsed ? t('admin.common.yes') : t('admin.common.no')}</TableCell>
                   <TableCell>{formatDate(u.createdAt)}</TableCell>
                 </TableRow>
               ))}
               {users.length === 0 && (
-                <TableRow><TableCell colSpan={5} align="center">No users found</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} align="center">{t('admin.users.noUsers')}</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -332,6 +335,7 @@ function UsersPanel() {
 }
 
 function ProjectsPanel() {
+  const { t } = useTranslation();
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -353,13 +357,13 @@ function ProjectsPanel() {
   return (
     <Stack spacing={2}>
       <FormControl size="small" sx={{ maxWidth: 200 }}>
-        <InputLabel>Status</InputLabel>
-        <Select value={status} label="Status" onChange={(e) => { setStatus(e.target.value); setPage(0); }}>
-          <MenuItem value="">All</MenuItem>
-          <MenuItem value="running">Running</MenuItem>
-          <MenuItem value="error">Error</MenuItem>
-          <MenuItem value="generating">Generating</MenuItem>
-          <MenuItem value="building">Building</MenuItem>
+        <InputLabel>{t('admin.projects.statusLabel')}</InputLabel>
+        <Select value={status} label={t('admin.projects.statusLabel')} onChange={(e) => { setStatus(e.target.value); setPage(0); }}>
+          <MenuItem value="">{t('admin.common.all')}</MenuItem>
+          <MenuItem value="running">{t('admin.statusLabels.running')}</MenuItem>
+          <MenuItem value="error">{t('admin.statusLabels.error')}</MenuItem>
+          <MenuItem value="generating">{t('admin.statusLabels.generating')}</MenuItem>
+          <MenuItem value="building">{t('admin.statusLabels.building')}</MenuItem>
         </Select>
       </FormControl>
       {loading ? <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress size={28} /></Box> : (
@@ -368,14 +372,14 @@ function ProjectsPanel() {
             <TableHead>
               <TableRow>
                 <TableCell />
-                <TableCell>ID</TableCell>
-                <TableCell>Owner</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Paid</TableCell>
-                <TableCell>Hosted</TableCell>
-                <TableCell>Iterations</TableCell>
-                <TableCell>Fix Attempts</TableCell>
-                <TableCell>Created</TableCell>
+                <TableCell>{t('admin.projects.colId')}</TableCell>
+                <TableCell>{t('admin.projects.colOwner')}</TableCell>
+                <TableCell>{t('admin.projects.colStatus')}</TableCell>
+                <TableCell>{t('admin.projects.colPaid')}</TableCell>
+                <TableCell>{t('admin.projects.colHosted')}</TableCell>
+                <TableCell>{t('admin.projects.colIterations')}</TableCell>
+                <TableCell>{t('admin.projects.colFixAttempts')}</TableCell>
+                <TableCell>{t('admin.projects.colCreated')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -387,10 +391,10 @@ function ProjectsPanel() {
                     </TableCell>
                     <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{p.id.slice(0, 8)}</TableCell>
                     <TableCell>{p.session.user.email}</TableCell>
-                    <TableCell><Chip label={p.status} size="small" color={STATUS_COLORS[p.status] ?? 'default'} /></TableCell>
-                    <TableCell>{p.paid ? 'Yes' : 'No'}</TableCell>
-                    <TableCell>{p.hosted ? 'Yes' : 'No'}{p.customDomain ? ` (${p.customDomain})` : ''}</TableCell>
-                    <TableCell>{p._count.iterationLogs} ({p.paidIterationCredits} paid)</TableCell>
+                    <TableCell><Chip label={t(`admin.statusLabels.${p.status}`, { defaultValue: p.status })} size="small" color={STATUS_COLORS[p.status] ?? 'default'} /></TableCell>
+                    <TableCell>{p.paid ? t('admin.common.yes') : t('admin.common.no')}</TableCell>
+                    <TableCell>{p.hosted ? t('admin.common.yes') : t('admin.common.no')}{p.customDomain ? ` (${p.customDomain})` : ''}</TableCell>
+                    <TableCell>{t('admin.projects.iterationsCell', { n: p._count.iterationLogs, paid: p.paidIterationCredits })}</TableCell>
                     <TableCell>{p.fixAttempts}</TableCell>
                     <TableCell>{formatDate(p.createdAt)}</TableCell>
                   </TableRow>
@@ -398,10 +402,10 @@ function ProjectsPanel() {
                     <TableCell colSpan={9} sx={{ p: 0, border: 0 }}>
                       <Collapse in={expanded === p.id}>
                         <Box sx={{ p: 2, bgcolor: 'background.default' }}>
-                          <Typography variant="caption" fontWeight={700}>Session ID:</Typography>
+                          <Typography variant="caption" fontWeight={700}>{t('admin.projects.sessionId')}</Typography>
                           <Typography variant="body2" fontFamily="monospace" mb={1}>{p.session.id}</Typography>
-                          {p.runPort && <><Typography variant="caption" fontWeight={700}>Port:</Typography><Typography variant="body2" mb={1}>{p.runPort}</Typography></>}
-                          <Typography variant="caption" fontWeight={700}>Updated:</Typography>
+                          {p.runPort && <><Typography variant="caption" fontWeight={700}>{t('admin.projects.port')}</Typography><Typography variant="body2" mb={1}>{p.runPort}</Typography></>}
+                          <Typography variant="caption" fontWeight={700}>{t('admin.projects.updated')}</Typography>
                           <Typography variant="body2">{formatDate(p.updatedAt)}</Typography>
                         </Box>
                       </Collapse>
@@ -410,7 +414,7 @@ function ProjectsPanel() {
                 </Box>
               ))}
               {projects.length === 0 && (
-                <TableRow><TableCell colSpan={9} align="center">No projects found</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} align="center">{t('admin.projects.noProjects')}</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -425,6 +429,7 @@ function ProjectsPanel() {
 }
 
 function RevenuePanel() {
+  const { t } = useTranslation();
   const [data, setData] = useState<Revenue | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -433,43 +438,45 @@ function RevenuePanel() {
   }, []);
 
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}><CircularProgress /></Box>;
-  if (!data) return <Typography color="error">Failed to load revenue data</Typography>;
+  if (!data) return <Typography color="error">{t('admin.failed.revenue')}</Typography>;
 
   return (
     <Grid container spacing={2}>
       <Grid item xs={12} sm={4}>
         <StatCard
-          label="Generation Revenue"
+          label={t('admin.revenue.generationRevenue')}
           value={`€${data.estimatedGenerationRevenue.toLocaleString()}`}
           icon={<AttachMoneyIcon />}
-          sub={`${data.paidProjectCount} paid projects`}
+          sub={t('admin.revenue.paidProjectsSub', { n: data.paidProjectCount })}
         />
       </Grid>
       <Grid item xs={12} sm={4}>
         <StatCard
-          label="Monthly Hosting"
-          value={`€${data.estimatedMonthlyHostingRevenue.toLocaleString()}/mo`}
+          label={t('admin.revenue.monthlyHosting')}
+          value={t('admin.revenue.monthlyHostingValue', { value: data.estimatedMonthlyHostingRevenue.toLocaleString() })}
           icon={<CloudIcon />}
-          sub={`${data.hostedProjectCount} hosted`}
+          sub={t('admin.revenue.hostedSub', { n: data.hostedProjectCount })}
         />
       </Grid>
       <Grid item xs={12} sm={4}>
         <StatCard
-          label="Iteration Revenue"
-          value={`���${data.estimatedIterationRevenue.toLocaleString()}`}
+          label={t('admin.revenue.iterationRevenue')}
+          value={`€${data.estimatedIterationRevenue.toLocaleString()}`}
           icon={<TrendingUpIcon />}
-          sub={`${data.totalIterationCredits} credits sold`}
+          sub={t('admin.revenue.creditsSub', { n: data.totalIterationCredits })}
         />
       </Grid>
       <Grid item xs={12}>
         <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
-          <Typography variant="subtitle2" fontWeight={700} mb={1}>Summary</Typography>
+          <Typography variant="subtitle2" fontWeight={700} mb={1}>{t('admin.revenue.summary')}</Typography>
           <Typography variant="body2" color="text.secondary">
-            Total estimated revenue: €{(data.estimatedGenerationRevenue + data.estimatedIterationRevenue).toLocaleString()} (one-time)
-            + €{data.estimatedMonthlyHostingRevenue.toLocaleString()}/mo (recurring)
+            {t('admin.revenue.summaryBody', {
+              oneTime: (data.estimatedGenerationRevenue + data.estimatedIterationRevenue).toLocaleString(),
+              recurring: data.estimatedMonthlyHostingRevenue.toLocaleString(),
+            })}
           </Typography>
           <Typography variant="body2" color="text.secondary" mt={0.5}>
-            Paid generations: {data.paidGenerationCount}
+            {t('admin.revenue.paidGenerations', { n: data.paidGenerationCount })}
           </Typography>
         </Paper>
       </Grid>
@@ -478,6 +485,7 @@ function RevenuePanel() {
 }
 
 function EmailHealthPanel() {
+  const { t } = useTranslation();
   const [data, setData] = useState<EmailHealth | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -486,21 +494,21 @@ function EmailHealthPanel() {
   }, []);
 
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}><CircularProgress /></Box>;
-  if (!data) return <Typography color="error">Failed to load email data</Typography>;
+  if (!data) return <Typography color="error">{t('admin.failed.email')}</Typography>;
 
   const pieData = Object.entries(data.byStatus).map(([name, value]) => ({ name, value }));
 
   return (
     <Stack spacing={3}>
       <Grid container spacing={2}>
-        <Grid item xs={6} sm={3}><StatCard label="Total Sent" value={data.totalSent} icon={<EmailIcon />} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard label="Delivery Rate" value={`${data.deliveryRate}%`} icon={<TrendingUpIcon />} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard label="Bounce Rate" value={`${data.bounceRate}%`} icon={<ErrorIcon />} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard label="Domains" value={`${data.verifiedDomains}/${data.totalDomains}`} icon={<StorageIcon />} sub="verified / total" /></Grid>
+        <Grid item xs={6} sm={3}><StatCard label={t('admin.email.totalSent')} value={data.totalSent} icon={<EmailIcon />} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard label={t('admin.email.deliveryRate')} value={`${data.deliveryRate}%`} icon={<TrendingUpIcon />} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard label={t('admin.email.bounceRate')} value={`${data.bounceRate}%`} icon={<ErrorIcon />} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard label={t('admin.email.domains')} value={`${data.verifiedDomains}/${data.totalDomains}`} icon={<StorageIcon />} sub={t('admin.email.verifiedTotal')} /></Grid>
       </Grid>
       {pieData.length > 0 && (
         <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
-          <Typography variant="subtitle2" fontWeight={700} mb={2}>Email Status Breakdown</Typography>
+          <Typography variant="subtitle2" fontWeight={700} mb={2}>{t('admin.email.breakdown')}</Typography>
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
               <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, value }) => `${name}: ${value}`}>
@@ -516,6 +524,7 @@ function EmailHealthPanel() {
 }
 
 function PlansPanel() {
+  const { t } = useTranslation();
   const [plans, setPlans] = useState<PlanRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -523,9 +532,9 @@ function PlansPanel() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const load = (p: number, t: string) => {
+  const load = (p: number, filter: string) => {
     setLoading(true);
-    const q = t ? `&appType=${encodeURIComponent(t)}` : '';
+    const q = filter ? `&appType=${encodeURIComponent(filter)}` : '';
     api.get<{ plans: PlanRow[]; total: number }>(`/admin/plans?page=${p + 1}&limit=20${q}`)
       .then((d) => { setPlans(d.plans); setTotal(d.total); })
       .catch(() => {})
@@ -537,14 +546,14 @@ function PlansPanel() {
   return (
     <Stack spacing={2}>
       <FormControl size="small" sx={{ maxWidth: 200 }}>
-        <InputLabel>App Type</InputLabel>
-        <Select value={appType} label="App Type" onChange={(e) => { setAppType(e.target.value); setPage(0); }}>
-          <MenuItem value="">All</MenuItem>
-          <MenuItem value="e-shop">E-Shop</MenuItem>
-          <MenuItem value="booking">Booking</MenuItem>
-          <MenuItem value="blog">Blog</MenuItem>
-          <MenuItem value="portfolio">Portfolio</MenuItem>
-          <MenuItem value="contact">Contact</MenuItem>
+        <InputLabel>{t('admin.plans.appTypeLabel')}</InputLabel>
+        <Select value={appType} label={t('admin.plans.appTypeLabel')} onChange={(e) => { setAppType(e.target.value); setPage(0); }}>
+          <MenuItem value="">{t('admin.common.all')}</MenuItem>
+          <MenuItem value="e-shop">{t('admin.plans.appTypeEShop')}</MenuItem>
+          <MenuItem value="booking">{t('admin.plans.appTypeBooking')}</MenuItem>
+          <MenuItem value="blog">{t('admin.plans.appTypeBlog')}</MenuItem>
+          <MenuItem value="portfolio">{t('admin.plans.appTypePortfolio')}</MenuItem>
+          <MenuItem value="contact">{t('admin.plans.appTypeContact')}</MenuItem>
         </Select>
       </FormControl>
       {loading ? <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress size={28} /></Box> : (
@@ -553,12 +562,12 @@ function PlansPanel() {
             <TableHead>
               <TableRow>
                 <TableCell />
-                <TableCell>Owner</TableCell>
-                <TableCell>App Type</TableCell>
-                <TableCell>Locked</TableCell>
-                <TableCell>Session Status</TableCell>
-                <TableCell>Project</TableCell>
-                <TableCell>Created</TableCell>
+                <TableCell>{t('admin.plans.colOwner')}</TableCell>
+                <TableCell>{t('admin.plans.colAppType')}</TableCell>
+                <TableCell>{t('admin.plans.colLocked')}</TableCell>
+                <TableCell>{t('admin.plans.colSessionStatus')}</TableCell>
+                <TableCell>{t('admin.plans.colProject')}</TableCell>
+                <TableCell>{t('admin.plans.colCreated')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -574,11 +583,11 @@ function PlansPanel() {
                       <TableCell>
                         {planData.appType ? <Chip label={String(planData.appType)} size="small" color="primary" variant="outlined" /> : '-'}
                       </TableCell>
-                      <TableCell>{p.locked ? <Chip label="Locked" size="small" color="success" /> : <Chip label="Draft" size="small" variant="outlined" />}</TableCell>
-                      <TableCell><Chip label={p.session.status} size="small" color={STATUS_COLORS[p.session.status] ?? 'default'} /></TableCell>
+                      <TableCell>{p.locked ? <Chip label={t('admin.plans.chipLocked')} size="small" color="success" /> : <Chip label={t('admin.plans.chipDraft')} size="small" variant="outlined" />}</TableCell>
+                      <TableCell><Chip label={t(`admin.statusLabels.${p.session.status}`, { defaultValue: p.session.status })} size="small" color={STATUS_COLORS[p.session.status] ?? 'default'} /></TableCell>
                       <TableCell>
                         {p.session.project
-                          ? <Chip label={p.session.project.status} size="small" color={STATUS_COLORS[p.session.project.status] ?? 'default'} />
+                          ? <Chip label={t(`admin.statusLabels.${p.session.project.status}`, { defaultValue: p.session.project.status })} size="small" color={STATUS_COLORS[p.session.project.status] ?? 'default'} />
                           : '-'}
                       </TableCell>
                       <TableCell>{formatDate(p.createdAt)}</TableCell>
@@ -587,26 +596,26 @@ function PlansPanel() {
                       <TableCell colSpan={7} sx={{ p: 0, border: 0 }}>
                         <Collapse in={expanded === p.id}>
                           <Box sx={{ p: 2, bgcolor: 'background.default' }}>
-                            <Typography variant="caption" fontWeight={700} display="block" mb={0.5}>Plan Data</Typography>
+                            <Typography variant="caption" fontWeight={700} display="block" mb={0.5}>{t('admin.plans.planData')}</Typography>
                             {Boolean(planData.description) && (
                               <Box mb={1}>
-                                <Typography variant="caption" fontWeight={600} color="primary.light">Description:</Typography>
+                                <Typography variant="caption" fontWeight={600} color="primary.light">{t('admin.plans.description')}</Typography>
                                 <Typography variant="body2">{String(planData.description)}</Typography>
                               </Box>
                             )}
                             {Array.isArray(planData.pages) && planData.pages.length > 0 && (
                               <Box mb={1}>
-                                <Typography variant="caption" fontWeight={600} color="primary.light">Pages:</Typography>
+                                <Typography variant="caption" fontWeight={600} color="primary.light">{t('admin.plans.pages')}</Typography>
                                 <Stack direction="row" gap={0.5} flexWrap="wrap" mt={0.5}>
                                   {(planData.pages as Array<{ name?: string }>).map((pg, i) => (
-                                    <Chip key={i} label={pg.name || `Page ${i + 1}`} size="small" variant="outlined" />
+                                    <Chip key={i} label={pg.name || t('admin.plans.pageFallback', { n: i + 1 })} size="small" variant="outlined" />
                                   ))}
                                 </Stack>
                               </Box>
                             )}
                             {Array.isArray(planData.features) && planData.features.length > 0 && (
                               <Box mb={1}>
-                                <Typography variant="caption" fontWeight={600} color="primary.light">Features:</Typography>
+                                <Typography variant="caption" fontWeight={600} color="primary.light">{t('admin.plans.features')}</Typography>
                                 <Stack direction="row" gap={0.5} flexWrap="wrap" mt={0.5}>
                                   {(planData.features as string[]).map((f, i) => (
                                     <Chip key={i} label={String(f)} size="small" variant="outlined" />
@@ -616,7 +625,7 @@ function PlansPanel() {
                             )}
                             {Array.isArray(planData.dataModels) && planData.dataModels.length > 0 && (
                               <Box mb={1}>
-                                <Typography variant="caption" fontWeight={600} color="primary.light">Data Models:</Typography>
+                                <Typography variant="caption" fontWeight={600} color="primary.light">{t('admin.plans.dataModels')}</Typography>
                                 <Stack direction="row" gap={0.5} flexWrap="wrap" mt={0.5}>
                                   {(planData.dataModels as Array<{ name: string }>).map((m, i) => (
                                     <Chip key={i} label={m.name} size="small" color="secondary" variant="outlined" />
@@ -626,14 +635,14 @@ function PlansPanel() {
                             )}
                             {Boolean(planData.colorTheme) && (
                               <Box mb={1}>
-                                <Typography variant="caption" fontWeight={600} color="primary.light">Color Theme:</Typography>
+                                <Typography variant="caption" fontWeight={600} color="primary.light">{t('admin.plans.colorTheme')}</Typography>
                                 <Typography variant="body2" fontFamily="monospace" fontSize={12}>
                                   {JSON.stringify(planData.colorTheme)}
                                 </Typography>
                               </Box>
                             )}
                             <Box mt={1}>
-                              <Typography variant="caption" fontWeight={600} color="primary.light">Full JSON:</Typography>
+                              <Typography variant="caption" fontWeight={600} color="primary.light">{t('admin.plans.fullJson')}</Typography>
                               <Box
                                 component="pre"
                                 sx={{
@@ -655,7 +664,7 @@ function PlansPanel() {
                 );
               })}
               {plans.length === 0 && (
-                <TableRow><TableCell colSpan={7} align="center">No plans found</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} align="center">{t('admin.plans.noPlans')}</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -670,6 +679,7 @@ function PlansPanel() {
 }
 
 function ErrorsPanel() {
+  const { t } = useTranslation();
   const [projects, setProjects] = useState<ErrorProject[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -688,17 +698,17 @@ function ErrorsPanel() {
 
   return (
     <Stack spacing={2}>
-      <Typography variant="body2" color="text.secondary">{total} project(s) in error state</Typography>
+      <Typography variant="body2" color="text.secondary">{t('admin.errorsTab.countInfo', { n: total })}</Typography>
       {loading ? <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress size={28} /></Box> : (
         <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
           <Table size="small">
             <TableHead>
               <TableRow>
                 <TableCell />
-                <TableCell>ID</TableCell>
-                <TableCell>Owner</TableCell>
-                <TableCell>Fix Attempts</TableCell>
-                <TableCell>Updated</TableCell>
+                <TableCell>{t('admin.errorsTab.colId')}</TableCell>
+                <TableCell>{t('admin.errorsTab.colOwner')}</TableCell>
+                <TableCell>{t('admin.errorsTab.colFixAttempts')}</TableCell>
+                <TableCell>{t('admin.errorsTab.colUpdated')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -719,7 +729,7 @@ function ErrorsPanel() {
                         <Box sx={{ p: 2, bgcolor: 'background.default' }}>
                           {p.errorLog && (
                             <Box mb={2}>
-                              <Typography variant="caption" fontWeight={700} color="error.main">Error Log:</Typography>
+                              <Typography variant="caption" fontWeight={700} color="error.main">{t('admin.errorsTab.errorLog')}</Typography>
                               <Box component="pre" sx={{ mt: 0.5, p: 1.5, borderRadius: 1, bgcolor: 'rgba(0,0,0,0.3)', fontSize: 11, fontFamily: 'monospace', overflow: 'auto', maxHeight: 200, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                                 {p.errorLog}
                               </Box>
@@ -727,7 +737,7 @@ function ErrorsPanel() {
                           )}
                           {p.buildLog && (
                             <Box>
-                              <Typography variant="caption" fontWeight={700}>Build Log:</Typography>
+                              <Typography variant="caption" fontWeight={700}>{t('admin.errorsTab.buildLog')}</Typography>
                               <Box component="pre" sx={{ mt: 0.5, p: 1.5, borderRadius: 1, bgcolor: 'rgba(0,0,0,0.3)', fontSize: 11, fontFamily: 'monospace', overflow: 'auto', maxHeight: 200, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                                 {p.buildLog}
                               </Box>
@@ -740,7 +750,7 @@ function ErrorsPanel() {
                 </Box>
               ))}
               {projects.length === 0 && (
-                <TableRow><TableCell colSpan={5} align="center">No errors</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} align="center">{t('admin.errorsTab.noErrors')}</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -755,6 +765,7 @@ function ErrorsPanel() {
 }
 
 function SystemPanel() {
+  const { t } = useTranslation();
   const [data, setData] = useState<SystemInfo | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -766,25 +777,25 @@ function SystemPanel() {
   useEffect(() => { load(); }, []);
 
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}><CircularProgress /></Box>;
-  if (!data) return <Typography color="error">Failed to load system info</Typography>;
+  if (!data) return <Typography color="error">{t('admin.failed.system')}</Typography>;
 
   return (
     <Stack spacing={2}>
       <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <Button startIcon={<RefreshIcon />} size="small" onClick={load}>Refresh</Button>
+        <Button startIcon={<RefreshIcon />} size="small" onClick={load}>{t('admin.common.refresh')}</Button>
       </Box>
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6} md={3}>
-          <StatCard label="Disk Usage" value={data.diskUsage} icon={<StorageIcon />} sub="generated-apps volume" />
+          <StatCard label={t('admin.system.diskUsage')} value={data.diskUsage} icon={<StorageIcon />} sub={t('admin.system.diskUsageSub')} />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <StatCard label="Project Dirs" value={data.projectDirCount} icon={<FolderIcon />} />
+          <StatCard label={t('admin.system.projectDirs')} value={data.projectDirCount} icon={<FolderIcon />} />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <StatCard label="Memory (RSS)" value={`${data.memoryUsage.rss} MB`} icon={<StorageIcon />} sub={`Heap: ${data.memoryUsage.heapUsed}/${data.memoryUsage.heapTotal} MB`} />
+          <StatCard label={t('admin.system.memoryRss')} value={`${data.memoryUsage.rss} MB`} icon={<StorageIcon />} sub={t('admin.system.memoryRssSub', { used: data.memoryUsage.heapUsed, total: data.memoryUsage.heapTotal })} />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <StatCard label="Uptime" value={formatUptime(data.uptime)} icon={<TimerIcon />} />
+          <StatCard label={t('admin.system.uptime')} value={formatUptime(data.uptime)} icon={<TimerIcon />} />
         </Grid>
       </Grid>
     </Stack>
@@ -794,6 +805,7 @@ function SystemPanel() {
 /* ─── Main Admin Page ───────────��────────────────────────────────────────── */
 
 export default function AdminPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [tab, setTab] = useState(0);
 
@@ -807,7 +819,7 @@ export default function AdminPage() {
           <AppLogo size="small" />
           <Box sx={{ mx: 0.5, width: '1px', height: 20, bgcolor: 'divider' }} />
           <AdminPanelSettingsIcon color="primary" sx={{ mr: 0.5 }} />
-          <Typography variant="h6" fontWeight={700} sx={{ flex: 1 }}>Админ панел</Typography>
+          <Typography variant="h6" fontWeight={700} sx={{ flex: 1 }}>{t('admin.title')}</Typography>
         </Toolbar>
       </AppBar>
 
@@ -818,14 +830,14 @@ export default function AdminPage() {
           variant="scrollable"
           scrollButtons="auto"
         >
-          <Tab label="Overview" />
-          <Tab label="Users" />
-          <Tab label="Projects" />
-          <Tab label="Revenue" />
-          <Tab label="Email" />
-          <Tab label="Plans" />
-          <Tab label="Errors" />
-          <Tab label="System" />
+          <Tab label={t('admin.tabs.overview')} />
+          <Tab label={t('admin.tabs.users')} />
+          <Tab label={t('admin.tabs.projects')} />
+          <Tab label={t('admin.tabs.revenue')} />
+          <Tab label={t('admin.tabs.email')} />
+          <Tab label={t('admin.tabs.plans')} />
+          <Tab label={t('admin.tabs.errors')} />
+          <Tab label={t('admin.tabs.system')} />
         </Tabs>
       </Box>
 

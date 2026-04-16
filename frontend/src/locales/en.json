@@ -519,5 +519,148 @@
     "confirmDelete": "Delete forever",
     "deleting": "Deleting…",
     "deleteSuccess": "Account deleted."
+  },
+  "sidebar": {
+    "adminPanel": "Admin"
+  },
+  "admin": {
+    "title": "Admin panel",
+    "common": {
+      "yes": "Yes",
+      "no": "No",
+      "na": "N/A",
+      "all": "All",
+      "refresh": "Refresh"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "users": "Users",
+      "projects": "Projects",
+      "revenue": "Revenue",
+      "email": "Email",
+      "plans": "Plans",
+      "errors": "Errors",
+      "system": "System"
+    },
+    "failed": {
+      "stats": "Failed to load stats",
+      "revenue": "Failed to load revenue data",
+      "email": "Failed to load email data",
+      "system": "Failed to load system info"
+    },
+    "statusLabels": {
+      "running": "Running",
+      "error": "Error",
+      "generating": "Generating",
+      "building": "Building",
+      "planning": "Planning"
+    },
+    "overview": {
+      "totalUsers": "Total Users",
+      "totalProjects": "Total Projects",
+      "paidProjects": "Paid Projects",
+      "hosted": "Hosted",
+      "errors": "Errors",
+      "avgGenTime": "Avg Gen Time",
+      "paidGenerations": "Paid Generations",
+      "totalSessions": "Total Sessions",
+      "last7d": "+{{n}} last 7d",
+      "retries": "{{n}} retries",
+      "dailyActivity": "Daily Activity (30 days)",
+      "noDataYet": "No data yet",
+      "chartUsers": "Users",
+      "chartProjects": "Projects",
+      "projectsByStatus": "Projects by Status",
+      "noProjects": "No projects"
+    },
+    "users": {
+      "searchPlaceholder": "Search by email…",
+      "colEmail": "Email",
+      "colAdmin": "Admin",
+      "colSessions": "Sessions",
+      "colFreeUsed": "Free Used",
+      "colJoined": "Joined",
+      "adminChip": "Admin",
+      "noUsers": "No users found"
+    },
+    "projects": {
+      "statusLabel": "Status",
+      "colId": "ID",
+      "colOwner": "Owner",
+      "colStatus": "Status",
+      "colPaid": "Paid",
+      "colHosted": "Hosted",
+      "colIterations": "Iterations",
+      "colFixAttempts": "Fix Attempts",
+      "colCreated": "Created",
+      "iterationsCell": "{{n}} ({{paid}} paid)",
+      "sessionId": "Session ID:",
+      "port": "Port:",
+      "updated": "Updated:",
+      "noProjects": "No projects found"
+    },
+    "revenue": {
+      "generationRevenue": "Generation Revenue",
+      "paidProjectsSub": "{{n}} paid projects",
+      "monthlyHosting": "Monthly Hosting",
+      "monthlyHostingValue": "€{{value}}/mo",
+      "hostedSub": "{{n}} hosted",
+      "iterationRevenue": "Iteration Revenue",
+      "creditsSub": "{{n}} credits sold",
+      "summary": "Summary",
+      "summaryBody": "Total estimated revenue: €{{oneTime}} (one-time) + €{{recurring}}/mo (recurring)",
+      "paidGenerations": "Paid generations: {{n}}"
+    },
+    "email": {
+      "totalSent": "Total Sent",
+      "deliveryRate": "Delivery Rate",
+      "bounceRate": "Bounce Rate",
+      "domains": "Domains",
+      "verifiedTotal": "verified / total",
+      "breakdown": "Email Status Breakdown"
+    },
+    "plans": {
+      "appTypeLabel": "App Type",
+      "appTypeEShop": "E-Shop",
+      "appTypeBooking": "Booking",
+      "appTypeBlog": "Blog",
+      "appTypePortfolio": "Portfolio",
+      "appTypeContact": "Contact",
+      "colOwner": "Owner",
+      "colAppType": "App Type",
+      "colLocked": "Locked",
+      "colSessionStatus": "Session Status",
+      "colProject": "Project",
+      "colCreated": "Created",
+      "chipLocked": "Locked",
+      "chipDraft": "Draft",
+      "planData": "Plan Data",
+      "description": "Description:",
+      "pages": "Pages:",
+      "pageFallback": "Page {{n}}",
+      "features": "Features:",
+      "dataModels": "Data Models:",
+      "colorTheme": "Color Theme:",
+      "fullJson": "Full JSON:",
+      "noPlans": "No plans found"
+    },
+    "errorsTab": {
+      "countInfo": "{{n}} project(s) in error state",
+      "colId": "ID",
+      "colOwner": "Owner",
+      "colFixAttempts": "Fix Attempts",
+      "colUpdated": "Updated",
+      "errorLog": "Error Log:",
+      "buildLog": "Build Log:",
+      "noErrors": "No errors"
+    },
+    "system": {
+      "diskUsage": "Disk Usage",
+      "diskUsageSub": "generated-apps volume",
+      "projectDirs": "Project Dirs",
+      "memoryRss": "Memory (RSS)",
+      "memoryRssSub": "Heap: {{used}}/{{total}} MB",
+      "uptime": "Uptime"
+    }
   }
 }

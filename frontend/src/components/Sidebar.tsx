@@ -293,9 +293,6 @@ export default function Sidebar({ onNewProject, onClose }: Props) {
             }}
           >
             <AdminPanelSettingsIcon sx={{ fontSize: 16, color: 'primary.light' }} />
-            <Typography variant="caption" fontWeight={600} color="primary.light" sx={{ display: 'none' }}>
-              Админ панел
-            </Typography>
             <Typography variant="caption" fontWeight={600} color="primary.light">
               {t('sidebar.adminPanel')}
             </Typography>

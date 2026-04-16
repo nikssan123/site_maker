@@ -679,5 +679,145 @@
     "confirmDelete": "Изтрий завинаги",
     "deleting": "Изтриване…",
     "deleteSuccess": "Акаунтът беше изтрит."
+  },
+  "admin": {
+    "title": "Админ панел",
+    "common": {
+      "yes": "Да",
+      "no": "Не",
+      "na": "Няма",
+      "all": "Всички",
+      "refresh": "Опресни"
+    },
+    "tabs": {
+      "overview": "Преглед",
+      "users": "Потребители",
+      "projects": "Проекти",
+      "revenue": "Приходи",
+      "email": "Имейли",
+      "plans": "Планове",
+      "errors": "Грешки",
+      "system": "Система"
+    },
+    "failed": {
+      "stats": "Неуспех при зареждане на статистиките",
+      "revenue": "Неуспех при зареждане на данните за приходи",
+      "email": "Неуспех при зареждане на имейл данните",
+      "system": "Неуспех при зареждане на системната информация"
+    },
+    "statusLabels": {
+      "running": "Работи",
+      "error": "Грешка",
+      "generating": "Генериране",
+      "building": "Изграждане",
+      "planning": "Планиране"
+    },
+    "overview": {
+      "totalUsers": "Общо потребители",
+      "totalProjects": "Общо проекти",
+      "paidProjects": "Платени проекти",
+      "hosted": "Хоствани",
+      "errors": "Грешки",
+      "avgGenTime": "Ср. време за ген.",
+      "paidGenerations": "Платени генерирания",
+      "totalSessions": "Общо сесии",
+      "last7d": "+{{n}} за 7 дни",
+      "retries": "{{n}} повторения",
+      "dailyActivity": "Дневна активност (30 дни)",
+      "noDataYet": "Все още няма данни",
+      "chartUsers": "Потребители",
+      "chartProjects": "Проекти",
+      "projectsByStatus": "Проекти по статус",
+      "noProjects": "Няма проекти"
+    },
+    "users": {
+      "searchPlaceholder": "Търси по имейл…",
+      "colEmail": "Имейл",
+      "colAdmin": "Админ",
+      "colSessions": "Сесии",
+      "colFreeUsed": "Използван безплатен",
+      "colJoined": "Регистриран",
+      "adminChip": "Админ",
+      "noUsers": "Няма намерени потребители"
+    },
+    "projects": {
+      "statusLabel": "Статус",
+      "colId": "ID",
+      "colOwner": "Собственик",
+      "colStatus": "Статус",
+      "colPaid": "Платен",
+      "colHosted": "Хостван",
+      "colIterations": "Итерации",
+      "colFixAttempts": "Опити за поправка",
+      "colCreated": "Създаден",
+      "iterationsCell": "{{n}} ({{paid}} платени)",
+      "sessionId": "ID на сесия:",
+      "port": "Порт:",
+      "updated": "Обновен:",
+      "noProjects": "Няма намерени проекти"
+    },
+    "revenue": {
+      "generationRevenue": "Приход от генериране",
+      "paidProjectsSub": "{{n}} платени проекти",
+      "monthlyHosting": "Месечен хостинг",
+      "monthlyHostingValue": "€{{value}}/мес",
+      "hostedSub": "{{n}} хоствани",
+      "iterationRevenue": "Приход от итерации",
+      "creditsSub": "{{n}} продадени кредита",
+      "summary": "Обобщение",
+      "summaryBody": "Общ приблизителен приход: €{{oneTime}} (еднократно) + €{{recurring}}/мес (повтарящ се)",
+      "paidGenerations": "Платени генерирания: {{n}}"
+    },
+    "email": {
+      "totalSent": "Общо изпратени",
+      "deliveryRate": "Процент на доставка",
+      "bounceRate": "Процент на връщане",
+      "domains": "Домейни",
+      "verifiedTotal": "потвърдени / общо",
+      "breakdown": "Разпределение на имейл статуси"
+    },
+    "plans": {
+      "appTypeLabel": "Тип приложение",
+      "appTypeEShop": "Магазин",
+      "appTypeBooking": "Резервации",
+      "appTypeBlog": "Блог",
+      "appTypePortfolio": "Портфолио",
+      "appTypeContact": "Контакт",
+      "colOwner": "Собственик",
+      "colAppType": "Тип приложение",
+      "colLocked": "Заключен",
+      "colSessionStatus": "Статус на сесия",
+      "colProject": "Проект",
+      "colCreated": "Създаден",
+      "chipLocked": "Заключен",
+      "chipDraft": "Чернова",
+      "planData": "Данни за плана",
+      "description": "Описание:",
+      "pages": "Страници:",
+      "pageFallback": "Страница {{n}}",
+      "features": "Функции:",
+      "dataModels": "Таблици:",
+      "colorTheme": "Цветова тема:",
+      "fullJson": "Пълен JSON:",
+      "noPlans": "Няма намерени планове"
+    },
+    "errorsTab": {
+      "countInfo": "{{n}} проект(и) в състояние на грешка",
+      "colId": "ID",
+      "colOwner": "Собственик",
+      "colFixAttempts": "Опити за поправка",
+      "colUpdated": "Обновен",
+      "errorLog": "Лог на грешка:",
+      "buildLog": "Лог на изграждане:",
+      "noErrors": "Няма грешки"
+    },
+    "system": {
+      "diskUsage": "Заето дисково пространство",
+      "diskUsageSub": "том на генерираните приложения",
+      "projectDirs": "Проектни директории",
+      "memoryRss": "Памет (RSS)",
+      "memoryRssSub": "Heap: {{used}}/{{total}} MB",
+      "uptime": "Време на работа"
+    }
   }
 }
