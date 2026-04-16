@@ -58,6 +58,7 @@ export default function PreviewFrame({ projectId, port, editToken }: Props) {
   const waitingRef = useRef(true);
   const warnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  const escapeAttemptsRef = useRef(0);
 
   /** Inject the overlay script once into the iframe (idempotent). */
   const injectOverlay = useCallback(() => {
@@ -224,15 +225,22 @@ export default function PreviewFrame({ projectId, port, editToken }: Props) {
         const pathname = iframe.contentWindow?.location.pathname;
         const base = `/preview-app/${projectId}/`;
         if (pathname && !pathname.startsWith(base)) {
-          iframe.contentWindow!.location.replace(previewUrl);
+          // Cap retries so a buggy app that immediately navigates away can't spam the network.
+          if (escapeAttemptsRef.current < 2) {
+            escapeAttemptsRef.current += 1;
+            iframe.contentWindow!.location.replace(previewUrl);
+            return;
+          }
+          setPhase('error');
+          setErrorTitle(t('previewFrame.errorLoad'));
+          setErrorHint(t('previewFrame.errorLoadHint'));
           return;
         }
       } catch {
-        /* cross-origin — preview escaped to another origin, force it back */
-        iframe.src = previewUrl;
-        return;
+        /* cross-origin access blocked — nothing we can do; let it render. */
       }
     }
+    escapeAttemptsRef.current = 0;
     waitingRef.current = false;
     clearWarnTimer();
     setSoftHint(null);
