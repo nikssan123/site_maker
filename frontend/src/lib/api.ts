@@ -124,6 +124,18 @@ export const api = {
   get: <T>(path: string) => request<T>('GET', path),
   download: (path: string, fallbackFilename: string) => downloadWithAuth(path, fallbackFilename),
 
+  changePassword: (body: { currentPassword: string; newPassword: string }) =>
+    request<{ ok: true }>('POST', '/auth/change-password', body),
+  requestEmailChange: (body: { newEmail: string; password: string }) =>
+    request<{ pending: true; newEmail: string }>('POST', '/auth/request-email-change', body),
+  confirmEmailChange: (body: { code: string }) =>
+    request<{
+      token: string;
+      user: { id: string; email: string; isAdmin: boolean; freeProjectUsed: boolean; createdAt: string };
+    }>('POST', '/auth/confirm-email-change', body),
+  deleteAccount: (body: { password: string }) =>
+    request<{ ok: true }>('POST', '/auth/delete-account', body),
+
   getCatalogModels: (projectId: string) =>
     request<{ appType: string | null; models: Array<{ name: string; fields: Array<{ name: string; type: string }> | null }> }>('GET', `/preview/${projectId}/catalog-models`),
 

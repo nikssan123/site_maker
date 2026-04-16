@@ -204,8 +204,19 @@ export default function LandingPage({ scrollTo }: Props) {
                 </Button>
               </>
             )}
+            <Box
+              sx={{
+                display: { xs: 'none', sm: 'block' },
+                width: '1px',
+                height: 22,
+                mx: 1.25,
+                background: 'linear-gradient(180deg, transparent, rgba(255,255,255,0.18), transparent)',
+              }}
+            />
+            <Box sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>
+              <LanguageSwitcher />
+            </Box>
           </Stack>
-          <LanguageSwitcher />
         </Toolbar>
       </AppBar>
 

@@ -244,5 +244,129 @@ export async function getMe(userId: string) {
     email: user.email,
     freeProjectUsed: user.freeProjectUsed,
     isAdmin: user.isAdmin,
+    createdAt: user.createdAt.toISOString(),
   };
+}
+
+export async function changePassword(
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+) {
+  if (typeof newPassword !== 'string' || newPassword.length < MIN_PASSWORD_LENGTH) {
+    throw new AppError(400, `Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+  }
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!valid) throw new AppError(401, 'Current password is incorrect');
+
+  const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: userId }, data: { passwordHash } }),
+    prisma.passwordReset.updateMany({
+      where: { userId, usedAt: null, expiresAt: { gt: new Date() } },
+      data: { usedAt: new Date() },
+    }),
+  ]);
+  return { ok: true as const };
+}
+
+export async function requestEmailChange(
+  userId: string,
+  rawNewEmail: string,
+  password: string,
+) {
+  const newEmail = normalizeEmail(rawNewEmail);
+  if (!newEmail) throw new AppError(400, 'Email is required');
+
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  if (newEmail === user.email) throw new AppError(400, 'This is already your email');
+
+  const valid = await bcrypt.compare(password, user.passwordHash);
+  if (!valid) throw new AppError(401, 'Password is incorrect');
+
+  const other = await prisma.user.findUnique({ where: { email: newEmail } });
+  if (other) throw new AppError(409, 'Email already in use');
+
+  const code = generateCode();
+  const codeHash = await bcrypt.hash(code, SALT_ROUNDS);
+  const expiresAt = new Date(Date.now() + CODE_TTL_MS);
+
+  await prisma.pendingEmailChange.upsert({
+    where: { userId },
+    create: { userId, newEmail, codeHash, expiresAt, attempts: 0 },
+    update: { newEmail, codeHash, expiresAt, attempts: 0 },
+  });
+
+  await sendVerificationCode(newEmail, code);
+  return { pending: true as const, newEmail };
+}
+
+export async function confirmEmailChange(userId: string, rawCode: string) {
+  const code = String(rawCode ?? '').trim();
+  if (!code) throw new AppError(400, 'Code is required');
+
+  const pending = await prisma.pendingEmailChange.findUnique({ where: { userId } });
+  if (!pending) throw new AppError(400, 'No pending email change');
+
+  if (pending.expiresAt.getTime() < Date.now()) {
+    await prisma.pendingEmailChange.delete({ where: { userId } }).catch(() => undefined);
+    throw new AppError(400, 'Verification code expired');
+  }
+
+  if (pending.attempts >= MAX_CODE_ATTEMPTS) {
+    await prisma.pendingEmailChange.delete({ where: { userId } }).catch(() => undefined);
+    throw new AppError(429, 'Too many attempts. Start the change again.');
+  }
+
+  const valid = await bcrypt.compare(code, pending.codeHash);
+  if (!valid) {
+    await prisma.pendingEmailChange.update({
+      where: { userId },
+      data: { attempts: { increment: 1 } },
+    });
+    throw new AppError(400, 'Invalid verification code');
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email: pending.newEmail } });
+  if (existing && existing.id !== userId) {
+    await prisma.pendingEmailChange.delete({ where: { userId } }).catch(() => undefined);
+    throw new AppError(409, 'Email already in use');
+  }
+
+  const [updated] = await prisma.$transaction([
+    prisma.user.update({ where: { id: userId }, data: { email: pending.newEmail } }),
+    prisma.pendingEmailChange.delete({ where: { userId } }),
+  ]);
+
+  return {
+    token: signToken(updated.id, updated.email, updated.isAdmin),
+    user: {
+      id: updated.id,
+      email: updated.email,
+      isAdmin: updated.isAdmin,
+      freeProjectUsed: updated.freeProjectUsed,
+      createdAt: updated.createdAt.toISOString(),
+    },
+  };
+}
+
+export async function deleteAccount(userId: string, password: string) {
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  const valid = await bcrypt.compare(password, user.passwordHash);
+  if (!valid) throw new AppError(401, 'Password is incorrect');
+
+  const sessionCount = await prisma.session.count({ where: { userId } });
+  if (sessionCount > 0) {
+    throw new AppError(
+      409,
+      'Delete your projects first. Contact support if you need help removing hosted projects.',
+    );
+  }
+
+  await prisma.$transaction([
+    prisma.passwordReset.deleteMany({ where: { userId } }),
+    prisma.user.delete({ where: { id: userId } }),
+  ]);
+  return { ok: true as const };
 }

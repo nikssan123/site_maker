@@ -6,6 +6,7 @@ export interface UserProfile {
   email: string;
   freeProjectUsed: boolean;
   isAdmin: boolean;
+  createdAt?: string;
 }
 
 interface AuthState {

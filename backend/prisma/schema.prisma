@@ -17,6 +17,20 @@ model User {
   freeProjectUsed  Boolean   @default(false)
   createdAt        DateTime  @default(now())
   sessions         Session[]
+  emailChange      PendingEmailChange?
+}
+
+model PendingEmailChange {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  newEmail  String
+  codeHash  String
+  attempts  Int      @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([expiresAt])
 }
 
 model PendingRegistration {

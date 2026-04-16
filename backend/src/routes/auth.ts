@@ -8,6 +8,10 @@ import {
   resetPassword,
   login,
   getMe,
+  changePassword,
+  requestEmailChange,
+  confirmEmailChange,
+  deleteAccount,
 } from '../services/authService';
 import { requireAuth } from '../middleware/requireAuth';
 
@@ -99,6 +103,64 @@ router.post('/login', async (req, res, next) => {
 router.get('/me', requireAuth, async (req, res, next) => {
   try {
     const result = await getMe(req.user.userId);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8),
+});
+
+router.post('/change-password', requireAuth, async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
+    const result = await changePassword(req.user.userId, currentPassword, newPassword);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+const requestEmailChangeSchema = z.object({
+  newEmail: z.string().email(),
+  password: z.string().min(1),
+});
+
+router.post('/request-email-change', requireAuth, async (req, res, next) => {
+  try {
+    const { newEmail, password } = requestEmailChangeSchema.parse(req.body);
+    const result = await requestEmailChange(req.user.userId, newEmail, password);
+    res.status(202).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+const confirmEmailChangeSchema = z.object({
+  code: z.string().regex(/^\d{6}$/, 'Code must be 6 digits'),
+});
+
+router.post('/confirm-email-change', requireAuth, async (req, res, next) => {
+  try {
+    const { code } = confirmEmailChangeSchema.parse(req.body);
+    const result = await confirmEmailChange(req.user.userId, code);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+const deleteAccountSchema = z.object({
+  password: z.string().min(1),
+});
+
+router.post('/delete-account', requireAuth, async (req, res, next) => {
+  try {
+    const { password } = deleteAccountSchema.parse(req.body);
+    const result = await deleteAccount(req.user.userId, password);
     res.json(result);
   } catch (err) {
     next(err);

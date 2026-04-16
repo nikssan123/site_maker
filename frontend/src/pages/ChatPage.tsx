@@ -7,6 +7,7 @@ import {
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import LogoutIcon from '@mui/icons-material/Logout';
+import SettingsIcon from '@mui/icons-material/Settings';
 import MenuIcon from '@mui/icons-material/Menu';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
@@ -227,8 +228,9 @@ export default function ChatPage() {
 
   // Load session from backend when navigating to a different session
   useEffect(() => {
+    const st = useProjectStore.getState();
     if (!paramSessionId) {
-      store.reset();
+      st.reset();
       loadedSessionRef.current = null;
       buildStartedInTabRef.current = false;
       return;
@@ -244,11 +246,11 @@ export default function ChatPage() {
     loadedSessionRef.current = paramSessionId;
 
     // Only reset when truly switching sessions
-    if (store.sessionId !== paramSessionId) {
-      store.reset();
+    if (st.sessionId !== paramSessionId) {
+      st.reset();
       buildStartedInTabRef.current = false;
     }
-    store.setSessionId(paramSessionId);
+    st.setSessionId(paramSessionId);
 
     api.get<any>(`/sessions/${paramSessionId}`)
       .then((session) => {
@@ -262,9 +264,10 @@ export default function ChatPage() {
         if (preservePendingGenerationUi) {
           setPlanVisible(false);
           setChatUnlockedForEditing(false);
-          store.setPhase('generating');
-          store.setIsStreaming(true);
-          store.clearStreamBuffer();
+          const s = useProjectStore.getState();
+          s.setPhase('generating');
+          s.setIsStreaming(true);
+          s.clearStreamBuffer();
           useProjectStore.setState({
             generationSteps: INITIAL_STEPS.map((step) => (
               step.step === 1
@@ -273,7 +276,7 @@ export default function ChatPage() {
             )),
             fixAttempts: [],
           });
-          store.setGenerationFriendlyMessage(t('chat.buildStarted'));
+          s.setGenerationFriendlyMessage(t('chat.buildStarted'));
           return;
         }
 
@@ -285,7 +288,7 @@ export default function ChatPage() {
         }
       })
       .catch(() => {});
-  }, [isSessionGenerating, paramSessionId, shouldAutoStartGeneration, store, t]);
+  }, [isSessionGenerating, paramSessionId, shouldAutoStartGeneration, t]);
 
   useEffect(() => {
     if (shouldAutoStartGeneration && paramSessionId) {
@@ -547,6 +550,11 @@ export default function ChatPage() {
           {isFreeProject && (
             <Chip label={t('chat.freeProjectChip')} color="success" size="small" sx={{ height: 24, fontSize: 11 }} />
           )}
+          <Tooltip title={t('settings.title')}>
+            <IconButton onClick={() => navigate('/settings')} size="small" sx={{ color: 'text.secondary' }}>
+              <SettingsIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
           <Tooltip title={t('common.signOut')}>
             <IconButton onClick={logout} size="small" sx={{ color: 'text.secondary' }}>
               <LogoutIcon fontSize="small" />

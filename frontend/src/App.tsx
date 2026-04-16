@@ -13,6 +13,7 @@ import PreviewPage from './pages/PreviewPage';
 import FilesPage from './pages/FilesPage';
 import EmailPage from './pages/EmailPage';
 import BillingPage from './pages/BillingPage';
+import SettingsPage from './pages/SettingsPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import ConnectDomainDocsPage from './pages/ConnectDomainDocsPage';
 import AdminPage from './pages/AdminPage';
@@ -130,6 +131,7 @@ export default function App() {
           <Route path="/email/:projectId" element={<EmailPage />} />
           <Route path="/analytics/:projectId" element={<AnalyticsPage />} />
           <Route path="/billing" element={<BillingPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="/docs/connect-domain" element={<ConnectDomainDocsPage />} />
           <Route path="/payments/:projectId" element={<PaymentsRedirect />} />
           <Route element={<AdminRequired />}>
