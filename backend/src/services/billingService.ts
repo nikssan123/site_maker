@@ -1,7 +1,7 @@
 import Stripe from 'stripe';
 import { prisma } from '../index';
 import { AppError } from '../middleware/errorHandler';
-import { startPersistentHosting } from './appRunner';
+import { startPersistentHosting, stopPersistentHosting } from './appRunner';
 import { decrypt } from '../lib/encryption';
 import {
   extendHostingFreeUntil,
@@ -305,9 +305,16 @@ export async function handleWebhook(rawBody: Buffer, signature: string) {
 
     case 'customer.subscription.deleted': {
       const sub = event.data.object as Stripe.Subscription;
+      const cancelled = await prisma.project.findMany({
+        where: { hostingSubscriptionId: sub.id },
+        select: { id: true },
+      });
+      for (const p of cancelled) {
+        await stopPersistentHosting(p.id).catch(() => {});
+      }
       await prisma.project.updateMany({
         where: { hostingSubscriptionId: sub.id },
-        data: { hosted: false, hostingSubscriptionId: null },
+        data: { hosted: false, hostingSubscriptionId: null, runPort: null },
       });
       break;
     }

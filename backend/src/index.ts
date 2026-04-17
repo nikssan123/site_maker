@@ -18,6 +18,7 @@ import emailRouter from './routes/email';
 import adminRouter from './routes/admin';
 import { errorHandler } from './middleware/errorHandler';
 import { startEmailQueue, stopEmailQueue } from './services/emailQueue';
+import { stopPersistentHosting } from './services/appRunner';
 
 export const prisma = new PrismaClient();
 
@@ -103,11 +104,41 @@ async function pruneOldStripeEvents() {
   } catch { /* non-critical */ }
 }
 
+const HOSTING_SWEEP_INTERVAL = 60 * 60 * 1000; // 1 hour
+
+async function sweepExpiredHosting() {
+  try {
+    const expired = await prisma.project.findMany({
+      where: {
+        hosted: true,
+        hostingSubscriptionId: null,
+        hostingFreeUntil: { lt: new Date() },
+      },
+      select: { id: true },
+    });
+    for (const p of expired) {
+      console.log(`[hosting-sweep] stopping expired project ${p.id}`);
+      await stopPersistentHosting(p.id).catch(() => {});
+      await prisma.project.update({
+        where: { id: p.id },
+        data: { hosted: false, runPort: null },
+      });
+    }
+    if (expired.length > 0) {
+      console.log(`[hosting-sweep] stopped ${expired.length} expired project(s)`);
+    }
+  } catch (err) {
+    console.error('[hosting-sweep] failed:', err);
+  }
+}
+
 async function main() {
   await prisma.$connect();
   console.log('Database connected');
   await startEmailQueue(prisma);
   setInterval(() => { pruneOldEvents(); pruneOldStripeEvents(); }, EVENT_PRUNE_INTERVAL);
+  setInterval(sweepExpiredHosting, HOSTING_SWEEP_INTERVAL);
+  sweepExpiredHosting();
   app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));
 }
 
