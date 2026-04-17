@@ -168,7 +168,7 @@ export default function PreviewPage() {
   const paymentsOauthError = searchParams.get('error') ?? null;
 
   const store = useProjectStore();
-  const tour = usePreviewTour(store.projectPaid);
+  const tour = usePreviewTour();
 
   const [paymentsConfigured, setPaymentsConfigured] = useState(true);
   const [planNeedsPayments, setPlanNeedsPayments] = useState(false);
@@ -669,8 +669,10 @@ export default function PreviewPage() {
           primaryColor: '#6366f1',
           backgroundColor: '#1e293b',
           textColor: '#f1f5f9',
+          arrowColor: '#1e293b',
           zIndex: 1400,
           showProgress: true,
+          skipScroll: true,
           buttons: ['back', 'skip', 'primary'],
         }}
         locale={{
@@ -678,15 +680,47 @@ export default function PreviewPage() {
           close: t('tour.finish'),
           last: t('tour.finish'),
           next: t('tour.next'),
-          nextWithProgress: t('tour.nextWithProgress', { current: '{current}', total: '{total}' }),
           skip: t('tour.skip'),
         }}
         styles={{
-          tooltip: { borderRadius: 12, overflow: 'visible' },
-          arrow: { zIndex: 1 },
-          buttonBack: { fontWeight: 700 },
-          buttonPrimary: { fontWeight: 700 },
-          buttonSkip: { fontWeight: 700 },
+          tooltip: {
+            borderRadius: 14,
+            padding: '20px 22px 16px',
+            boxShadow: '0 12px 40px rgba(0,0,0,0.45)',
+          },
+          tooltipTitle: {
+            fontSize: 15,
+            fontWeight: 700,
+            marginBottom: 4,
+          },
+          tooltipContent: {
+            fontSize: 13,
+            lineHeight: 1.6,
+            padding: '8px 0 0',
+          },
+          tooltipFooter: {
+            marginTop: 12,
+          },
+          buttonPrimary: {
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 600,
+            padding: '6px 18px',
+          },
+          buttonBack: {
+            fontSize: 13,
+            fontWeight: 600,
+            color: '#94a3b8',
+            marginRight: 8,
+          },
+          buttonSkip: {
+            fontSize: 12,
+            fontWeight: 600,
+            color: '#64748b',
+          },
+          overlay: {
+            backgroundColor: 'rgba(0, 0, 0, 0.55)',
+          },
         }}
       />
       <Backdrop
@@ -729,13 +763,7 @@ export default function PreviewPage() {
           <Box sx={{ flex: 1 }} />
           <Tooltip title={t('tour.replayTooltip')}>
             <span>
-              <IconButton
-                size="small"
-                onClick={() => {
-                  if (store.projectPaid) tour.replayTourB();
-                  else tour.replayTourA();
-                }}
-              >
+              <IconButton size="small" onClick={tour.replay}>
                 <HelpOutlineIcon fontSize="small" />
               </IconButton>
             </span>
