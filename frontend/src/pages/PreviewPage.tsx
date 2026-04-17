@@ -163,8 +163,8 @@ export default function PreviewPage() {
   const paymentsOauthResult = searchParams.get('connected') === 'true'
     ? 'connected' as const
     : searchParams.get('error')
-    ? 'error' as const
-    : null;
+      ? 'error' as const
+      : null;
   const paymentsOauthError = searchParams.get('error') ?? null;
 
   const store = useProjectStore();
@@ -226,7 +226,7 @@ export default function PreviewPage() {
       // Webhooks can take a moment; poll briefly so the UI reflects payment without a manual refresh.
       // (Also covers cases where the user returns before the CLI-forwarded webhook lands.)
       for (let i = 0; i < 15 && !cancelled; i++) {
-        await loadProject().catch(() => {});
+        await loadProject().catch(() => { });
         const st = useProjectStore.getState();
         const okPaid = searchParams.get('paid') !== 'true' || st.projectPaid;
         const okHosted = searchParams.get('hosted') !== 'true' || st.projectHosted;
@@ -237,9 +237,9 @@ export default function PreviewPage() {
     };
 
     if (wantsRefresh) {
-      pollForBillingUpdate().catch(() => {});
+      pollForBillingUpdate().catch(() => { });
     } else {
-      loadProject().catch(() => {});
+      loadProject().catch(() => { });
     }
 
     return () => {
@@ -524,7 +524,7 @@ export default function PreviewPage() {
         `/preview/${projectId}/iteration-history`,
       )
       .then(setIterationHistory)
-      .catch(() => {});
+      .catch(() => { });
   }, [projectId]);
 
   // Load iteration history when the improvements drawer is visible (initial mount + switching back from other panels).
@@ -574,7 +574,7 @@ export default function PreviewPage() {
         if (event.type === 'preview_updated') {
           store.setRunPort(event.port);
           setRefreshKey((k) => k + 1);
-          loadProject().catch(() => {});
+          loadProject().catch(() => { });
           fetchHistory();
           setIterateChat((prev) => [...prev, { role: 'assistant', content: t('preview.changesApplied') }]);
         }
@@ -603,14 +603,14 @@ export default function PreviewPage() {
       const res = await api.post<
         | { kind: 'question'; message: string }
         | {
-            kind: 'ready';
-            summary: string;
-            planBulletsBg: string[];
-            spec: string;
-            targetFiles: string[];
-            nonGoals: string[];
-            explorerContextNotes?: string;
-          }
+          kind: 'ready';
+          summary: string;
+          planBulletsBg: string[];
+          spec: string;
+          targetFiles: string[];
+          nonGoals: string[];
+          explorerContextNotes?: string;
+        }
       >(
         '/iterate/clarify',
         { sessionId: store.sessionId, messages: [...iterateChat, { role: 'user', content: text }] },
@@ -823,92 +823,22 @@ export default function PreviewPage() {
             </Box>
           </Tooltip>
 
-          {planAppType === 'booking' ? (
-            <Tooltip title="Admin" placement="right">
-              <Box data-tour="action-data-panel">
-                <ActionButton
-                  icon={<AdminPanelSettingsIcon fontSize="inherit" />}
-                  label="Admin"
-                  onClick={() => {
-                    setEditDynamicError(false);
-                    if (workspaceOpen) setDrawerMode('improvements');
-                    else { setDrawerMode('dashboard'); setDrawerOpen(false); }
-                  }}
-                  active={workspaceOpen}
-                  pulsing={editDynamicError}
-                  color="#34d399"
-                />
-              </Box>
-            </Tooltip>
-          ) : planAppType === 'blog' ? (
-            <Tooltip title="Admin" placement="right">
-              <Box data-tour="action-data-panel">
-                <ActionButton
-                  icon={<AdminPanelSettingsIcon fontSize="inherit" />}
-                  label="Admin"
-                  onClick={() => {
-                    setEditDynamicError(false);
-                    if (workspaceOpen) setDrawerMode('improvements');
-                    else { setDrawerMode('dashboard'); setDrawerOpen(false); }
-                  }}
-                  active={workspaceOpen}
-                  pulsing={editDynamicError}
-                  color="#34d399"
-                />
-              </Box>
-            </Tooltip>
-          ) : planAppType === 'dashboard' ? (
-            <Tooltip title="Admin" placement="right">
-              <Box data-tour="action-data-panel">
-                <ActionButton
-                  icon={<AdminPanelSettingsIcon fontSize="inherit" />}
-                  label="Admin"
-                  onClick={() => {
-                    setEditDynamicError(false);
-                    if (workspaceOpen) setDrawerMode('improvements');
-                    else { setDrawerMode('dashboard'); setDrawerOpen(false); }
-                  }}
-                  active={workspaceOpen}
-                  pulsing={editDynamicError}
-                  color="#34d399"
-                />
-              </Box>
-            </Tooltip>
-          ) : planAppType === 'portfolio' || planAppType === 'landing_page' || planAppType === 'saas' ? (
-            <Tooltip title="Admin" placement="right">
-              <Box data-tour="action-data-panel">
-                <ActionButton
-                  icon={<AdminPanelSettingsIcon fontSize="inherit" />}
-                  label="Admin"
-                  onClick={() => {
-                    setEditDynamicError(false);
-                    if (workspaceOpen) setDrawerMode('improvements');
-                    else { setDrawerMode('dashboard'); setDrawerOpen(false); }
-                  }}
-                  active={workspaceOpen}
-                  pulsing={editDynamicError}
-                  color="#34d399"
-                />
-              </Box>
-            </Tooltip>
-          ) : (
-            <Tooltip title="Admin" placement="right">
-              <Box data-tour="action-data-panel">
-                <ActionButton
-                  icon={<AdminPanelSettingsIcon fontSize="inherit" />}
-                  label="Admin"
-                  onClick={() => {
-                    setEditDynamicError(false);
-                    if (workspaceOpen) setDrawerMode('improvements');
-                    else { setDrawerMode('dashboard'); setDrawerOpen(false); }
-                  }}
-                  active={workspaceOpen}
-                  pulsing={editDynamicError}
-                  color="#34d399"
-                />
-              </Box>
-            </Tooltip>
-          )}
+          <Tooltip title={t('admin.title')} placement="right">
+            <Box data-tour="action-data-panel">
+              <ActionButton
+                icon={<AdminPanelSettingsIcon fontSize="inherit" />}
+                label={t('admin.title')}
+                onClick={() => {
+                  setEditDynamicError(false);
+                  if (workspaceOpen) setDrawerMode('improvements');
+                  else { setDrawerMode('dashboard'); setDrawerOpen(false); }
+                }}
+                active={workspaceOpen}
+                pulsing={editDynamicError}
+                color="#34d399"
+              />
+            </Box>
+          </Tooltip>
 
           {planHasContactForm && (
             <Tooltip title={t('inquiries.tooltip')} placement="right">
@@ -947,7 +877,7 @@ export default function PreviewPage() {
             <Box data-tour="action-payments">
               <ActionButton
                 icon={<PaymentsIcon fontSize="inherit" />}
-                label="Плащания"
+                label={t('payments.setupCta')}
                 onClick={() => setPaymentsOpen(true)}
                 color="#f59e0b"
               />
@@ -1005,7 +935,7 @@ export default function PreviewPage() {
               onModeChange={setDrawerMode}
               onBackToPreview={() => setDrawerMode('improvements')}
               onRefreshPreview={() => setRefreshKey((k) => k + 1)}
-              onHostingUpdated={() => loadProject().catch(() => {})}
+              onHostingUpdated={() => loadProject().catch(() => { })}
               onOpenLogoUpload={() => setLogoDialogOpen(true)}
               onOpenHeroUpload={() => setHeroBgDialogOpen(true)}
             />
@@ -1081,86 +1011,86 @@ export default function PreviewPage() {
             </Box>
 
             <>
-                {/* Scrollable middle */}
-                <Box
-                  data-tour="drawer-improvements"
-                  sx={{ flex: 1, overflow: 'auto', p: 1.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}
-                >
-                  {allowUnpaidDownload && !projectPaid && (
-                    <Alert severity="warning" sx={{ py: 0.5, fontSize: 12 }}>
-                      {t('preview.testModeAlert')}
-                    </Alert>
-                  )}
+              {/* Scrollable middle */}
+              <Box
+                data-tour="drawer-improvements"
+                sx={{ flex: 1, overflow: 'auto', p: 1.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}
+              >
+                {allowUnpaidDownload && !projectPaid && (
+                  <Alert severity="warning" sx={{ py: 0.5, fontSize: 12 }}>
+                    {t('preview.testModeAlert')}
+                  </Alert>
+                )}
 
-                  {iterateChat.length === 0 && (
-                    <MessageBubble
-                      role="assistant"
-                      content={t('preview.improvementsHint')}
-                    />
-                  )}
-                  {iterateChat.map((m, idx) => (
-                    <MessageBubble key={idx} role={m.role} content={m.content} />
-                  ))}
+                {iterateChat.length === 0 && (
+                  <MessageBubble
+                    role="assistant"
+                    content={t('preview.improvementsHint')}
+                  />
+                )}
+                {iterateChat.map((m, idx) => (
+                  <MessageBubble key={idx} role={m.role} content={m.content} />
+                ))}
 
-                  {clarifyingIteration && (
-                    <MessageBubble
-                      role="assistant"
-                      content={t('preview.improvementsThinking', {
-                        defaultValue: 'Reviewing your request and preparing the improvement plan…',
-                      })}
-                    />
-                  )}
+                {clarifyingIteration && (
+                  <MessageBubble
+                    role="assistant"
+                    content={t('preview.improvementsThinking', {
+                      defaultValue: 'Reviewing your request and preparing the improvement plan…',
+                    })}
+                  />
+                )}
 
-                  {pendingIterationPlan && (
-                    <IterationPlanCard
-                      summary={pendingIterationPlan.summary}
-                      planBulletsBg={pendingIterationPlan.planBulletsBg}
-                      loading={iterating}
-                      onConfirm={() => executeIteration(pendingIterationPlan)}
-                      onEdit={() => setPendingIterationPlan(null)}
-                      showUnlockHint={false}
-                    />
-                  )}
+                {pendingIterationPlan && (
+                  <IterationPlanCard
+                    summary={pendingIterationPlan.summary}
+                    planBulletsBg={pendingIterationPlan.planBulletsBg}
+                    loading={iterating}
+                    onConfirm={() => executeIteration(pendingIterationPlan)}
+                    onEdit={() => setPendingIterationPlan(null)}
+                    showUnlockHint={false}
+                  />
+                )}
 
-                  {iterating && (
-                    <MessageBubble
-                      role="assistant"
-                      content={store.generationFriendlyMessage || t('preview.applyingChanges')}
-                    />
-                  )}
+                {iterating && (
+                  <MessageBubble
+                    role="assistant"
+                    content={store.generationFriendlyMessage || t('preview.applyingChanges')}
+                  />
+                )}
 
-                  {/* History section */}
-                  {iterationHistory.length > 0 && (
-                    <Box sx={{ mt: 0.5 }}>
-                      <Box
-                        component="button"
-                        onClick={() => {
-                          if (!historyOpen) fetchHistory();
-                          setHistoryOpen((v) => !v);
-                        }}
-                        sx={{
-                          all: 'unset', display: 'flex', alignItems: 'center', gap: 0.75,
-                          width: '100%', cursor: 'pointer', py: 0.5, px: 0.5, borderRadius: 1,
-                          color: 'text.secondary', '&:hover': { color: 'text.primary' },
-                        }}
-                      >
-                        <HistoryIcon sx={{ fontSize: 14 }} />
-                        <Typography variant="caption" fontWeight={600} sx={{ flex: 1, fontSize: 11 }}>
-                          {t('preview.historyLabel', { n: iterationHistory.length })}
-                        </Typography>
-                        <ExpandMoreIcon sx={{ fontSize: 14, transform: historyOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-                      </Box>
-                      <Collapse in={historyOpen}>
-                        <List dense disablePadding sx={{ mt: 0.5 }}>
-                          {iterationHistory.map((entry, i) => {
-                            const titleRaw = entry.title?.trim() ?? '';
-                            const descRaw = entry.description?.trim() ?? '';
-                            const titleBad = titleRaw && looksLikeInternalIterationSpec(titleRaw);
-                            const descBad = descRaw && looksLikeInternalIterationSpec(descRaw);
-                            const displayTitle =
-                              titleBad || !titleRaw ? t('preview.historyUntitled') : titleRaw;
-                            const displayDesc = !descBad && descRaw ? descRaw : null;
-                            return (
+                {/* History section */}
+                {iterationHistory.length > 0 && (
+                  <Box sx={{ mt: 0.5 }}>
+                    <Box
+                      component="button"
+                      onClick={() => {
+                        if (!historyOpen) fetchHistory();
+                        setHistoryOpen((v) => !v);
+                      }}
+                      sx={{
+                        all: 'unset', display: 'flex', alignItems: 'center', gap: 0.75,
+                        width: '100%', cursor: 'pointer', py: 0.5, px: 0.5, borderRadius: 1,
+                        color: 'text.secondary', '&:hover': { color: 'text.primary' },
+                      }}
+                    >
+                      <HistoryIcon sx={{ fontSize: 14 }} />
+                      <Typography variant="caption" fontWeight={600} sx={{ flex: 1, fontSize: 11 }}>
+                        {t('preview.historyLabel', { n: iterationHistory.length })}
+                      </Typography>
+                      <ExpandMoreIcon sx={{ fontSize: 14, transform: historyOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                    </Box>
+                    <Collapse in={historyOpen}>
+                      <List dense disablePadding sx={{ mt: 0.5 }}>
+                        {iterationHistory.map((entry, i) => {
+                          const titleRaw = entry.title?.trim() ?? '';
+                          const descRaw = entry.description?.trim() ?? '';
+                          const titleBad = titleRaw && looksLikeInternalIterationSpec(titleRaw);
+                          const descBad = descRaw && looksLikeInternalIterationSpec(descRaw);
+                          const displayTitle =
+                            titleBad || !titleRaw ? t('preview.historyUntitled') : titleRaw;
+                          const displayDesc = !descBad && descRaw ? descRaw : null;
+                          return (
                             <Box key={entry.id}>
                               <ListItem sx={{ px: 0.5, py: 0.75, alignItems: 'flex-start' }}>
                                 <ListItemText
@@ -1203,29 +1133,29 @@ export default function PreviewPage() {
                               </ListItem>
                               {i < iterationHistory.length - 1 && <Divider sx={{ opacity: 0.4 }} />}
                             </Box>
-                            );
-                          })}
-                        </List>
-                      </Collapse>
-                    </Box>
-                  )}
-                </Box>
+                          );
+                        })}
+                      </List>
+                    </Collapse>
+                  </Box>
+                )}
+              </Box>
 
-                {/* Pinned iteration input */}
-                <Box sx={{ p: 1.5, borderTop: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
-                  <IterationBar
-                    onSubmit={handleIterate}
-                    loading={clarifyingIteration || iterating}
-                    loadingLabel={
-                      clarifyingIteration
-                        ? t('preview.improvementsThinking', {
-                            defaultValue: 'Reviewing your request and preparing the improvement plan…',
-                          })
-                        : t('preview.applyingChanges')
-                    }
-                    onBuyIteration={handleBuyIteration}
-                  />
-                </Box>
+              {/* Pinned iteration input */}
+              <Box sx={{ p: 1.5, borderTop: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
+                <IterationBar
+                  onSubmit={handleIterate}
+                  loading={clarifyingIteration || iterating}
+                  loadingLabel={
+                    clarifyingIteration
+                      ? t('preview.improvementsThinking', {
+                        defaultValue: 'Reviewing your request and preparing the improvement plan…',
+                      })
+                      : t('preview.applyingChanges')
+                  }
+                  onBuyIteration={handleBuyIteration}
+                />
+              </Box>
             </>
           </Box>
         </Box>
@@ -1283,8 +1213,8 @@ export default function PreviewPage() {
                   loadingLabel={
                     clarifyingIteration
                       ? t('preview.improvementsThinking', {
-                          defaultValue: 'Reviewing your request and preparing the improvement plan…',
-                        })
+                        defaultValue: 'Reviewing your request and preparing the improvement plan…',
+                      })
                       : t('preview.applyingChanges')
                   }
                   onBuyIteration={handleBuyIteration}
@@ -1299,7 +1229,7 @@ export default function PreviewPage() {
       {/* ── Dialogs ── */}
       <Dialog
         open={downloadPreparingOpen}
-        onClose={() => {}}
+        onClose={() => { }}
         disableEscapeKeyDown
         aria-labelledby="download-prep-title"
         PaperProps={{ sx: { borderRadius: 2, minWidth: { xs: '100%', sm: 360 } } }}
@@ -1357,9 +1287,9 @@ export default function PreviewPage() {
                 setEditDynamicError(false);
                 setDrawerMode(
                   planAppType === 'booking' ? 'booking_slots'
-                  : planAppType === 'blog' ? 'blog'
-                  : planAppType === 'dashboard' ? 'dashboard'
-                  : 'catalog',
+                    : planAppType === 'blog' ? 'blog'
+                      : planAppType === 'dashboard' ? 'dashboard'
+                        : 'catalog',
                 );
                 setDrawerOpen(false);
               }}

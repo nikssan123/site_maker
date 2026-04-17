@@ -138,6 +138,7 @@
     "projectLockedHint": "Use iterations in the preview to make changes"
   },
   "sidebar": {
+    "adminPanel": "Admin",
     "projects": "Projects",
     "newProject": "New project",
     "built": "Built",
@@ -212,7 +213,14 @@
     "historyUntitled": "Improvement"
   },
   "billing": {
-    "title": "Billing"
+    "title": "Billing",
+    "backBuilder": "Back to builder",
+    "successPay": "Payment successful! The project is saved.",
+    "subtitle": "Manage hosting subscriptions or payment history.",
+    "hostingTitle": "Hosting subscriptions",
+    "hostingDesc": "Cancel or change hosted projects through the Stripe portal.",
+    "manage": "Manage",
+    "loadingManage": "Loading…"
   },
   "analytics": {
     "title": "Analytics",
@@ -246,7 +254,32 @@
   },
   "pricing": {
     "generatePrice": "150 €",
-    "hostPrice": "20 €"
+    "hostPrice": "20 €",
+    "title": "Clear pricing",
+    "subtitle": "Start free. Pay when you are ready to go live.",
+    "chipFree": "First 2 changes are free",
+    "chipPlan": "Activate the €20/month plan for unlimited changes at any time",
+    "generateTitle": "Website creation",
+    "generatePeriod": "one-time",
+    "generateDesc": "Includes everything you need to launch your business online.",
+    "hostTitle": "Hosting & support",
+    "hostPeriod": "per month",
+    "hostDesc": "Keep your site online with support and changes when you need them.",
+    "hostBadge": "Recommended",
+    "featGenerate1": "Modern design + ready-made copy",
+    "featGenerate2": "Easy and intuitive editor (no coding)",
+    "featGenerate3": "Admin panel for site control",
+    "featGenerate4": "Automatic emails",
+    "featGenerate5": "Social media integration",
+    "featGenerate6": "Download the files — the site is fully yours",
+    "featGenerate7": "2 free edits after launch",
+    "featHost1": "Reliable hosting provided",
+    "featHost2": "Connect the site to hosting",
+    "featHost3": "Initial setup and configuration",
+    "featHost4": "Guaranteed site launch online",
+    "featHost5": "Fast and secure site performance",
+    "featHost6": "Assistance for future adjustments if needed",
+    "footnote": "The first two site changes are free. For unlimited changes, activate the €20/month plan."
   },
   "checkout": {
     "title": "Unlock project",
@@ -259,7 +292,8 @@
     "hostTitle": "App hosting — $20/month",
     "hostChip": "Optional",
     "hostDesc": "Keep the app online with a public address and domain options.",
-    "maybeLater": "Maybe later"
+    "maybeLater": "Maybe later",
+    "close": "Close"
   },
   "catalog": {
     "notRunning": "The app is not running right now.",
@@ -279,16 +313,58 @@
     "clickToUpload": "Click to upload",
     "orPasteUrl": "or paste URL",
     "imageUrl": "Image URL",
-    "fileTooLarge": "The file is too large."
+    "fileTooLarge": "The file is too large.",
+    "label": "Catalog",
+    "tooltip": "Data management",
+    "uploadImage": "Upload image from computer",
+    "uploading": "Uploading…"
   },
   "bookingSlots": {
-    "title": "Blocked time slots"
+    "heading": "Taken times",
+    "chip": "for booking projects",
+    "intro": "Mark times as taken (unavailable) and see them in a calendar. This is stored in the generated app (API: <code>/api/takenSlots</code>).",
+    "markHeading": "Mark a time as taken",
+    "timeLabel": "Time",
+    "noteLabel": "Note (optional)",
+    "notePlaceholder": "e.g. Lunch break",
+    "saving": "Saving…",
+    "markCta": "Mark as taken",
+    "listHeading": "Taken times for {{date}}",
+    "refresh": "Refresh",
+    "none": "No taken times for this date.",
+    "remove": "Remove",
+    "errors": {
+      "noApi": "This project does not expose the `GET /api/takenSlots` API (returns HTML instead of JSON). Most commonly this means the generated app has no `server.js` (no database) or has no routes for `takenSlots`.",
+      "invalidJson": "Invalid response from server (JSON expected): {{text}}",
+      "load": "Failed to load.",
+      "save": "Failed to save.",
+      "delete": "Failed to delete."
+    }
   },
   "inquiries": {
-    "title": "Messages"
+    "heading": "Inquiries",
+    "subtitle": "See new messages from your contact form here.",
+    "total": "{{n}} total",
+    "refresh": "Refresh",
+    "emptyTitle": "No inquiries yet",
+    "emptyBody": "When someone writes to you through the contact form, the message will appear here.",
+    "delete": "Delete",
+    "errors": {
+      "noApi": "This project doesn't return valid data for inquiries. Check whether the contact form records messages.",
+      "invalidJson": "Invalid response from server: {{text}}",
+      "load": "Failed to load.",
+      "delete": "Failed to delete."
+    }
   },
   "blog": {
-    "title": "Articles"
+    "title": "Articles",
+    "label": "Blog",
+    "tooltip": "Manage posts",
+    "addPost": "Add post",
+    "addFirst": "Add the first post",
+    "editPost": "Edit post",
+    "empty": "No posts yet.",
+    "confirmDelete": "Delete post"
   },
   "dashboard": {
     "heading": "Overview",
@@ -297,17 +373,20 @@
     "records": "records",
     "refresh": "Refresh",
     "noData": "No data yet",
-    "moreRows": "more rows"
+    "moreRows": "more rows",
+    "label": "Data",
+    "tooltip": "View data"
   },
   "editMode": {
-    "label": "Бързи редакции",
-    "enter": "Влез в режим за бързи редакции",
-    "exit": "Излез от режима за бързи редакции",
-    "active": "Режимът за бързи редакции е активен",
+    "label": "Quick edits",
+    "enter": "Edit content",
+    "exit": "Stop editing",
+    "active": "Edit mode — click text or image",
     "saving": "Saving changes…",
     "openCatalog": "Open content",
     "dynamicContentError": "This content is managed from the admin workspace. Open the correct panel to edit it safely.",
-    "patchFailed": "The change could not be saved. Try again or edit via chat."
+    "patchFailed": "The change could not be saved. Try again or edit via chat.",
+    "useCatalogTooltip": "Open catalog — edit dynamic content here"
   },
   "iconPicker": {
     "title": "Pick an icon",
@@ -360,7 +439,13 @@
     "disconnect": "Disconnect",
     "disconnecting": "Disconnecting…",
     "errorTitle": "Something went wrong",
-    "retryButton": "Try again"
+    "retryButton": "Try again",
+    "introPoint1": "Payments from your customers go directly to your Stripe account",
+    "introPoint2": "We do not take a commission on your customer payments",
+    "introPoint3": "Stripe is a global payment platform — secure and reliable",
+    "createStep1": "Go to stripe.com and click “Start now”",
+    "createStep2": "Enter your email, password, and business details",
+    "createStep3": "Confirm your email and complete registration"
   },
   "logo": {
     "tooltip": "Replace logo",
@@ -372,7 +457,8 @@
     "success": "The logo was replaced successfully.",
     "successManual": "The logo was uploaded, but the app needs a manual placement update.",
     "error": "Unable to replace the logo right now.",
-    "fileTooLarge": "The selected logo file is too large."
+    "fileTooLarge": "The selected logo file is too large.",
+    "label": "Logo"
   },
   "heroBg": {
     "dialogTitle": "Replace hero image",
@@ -383,7 +469,9 @@
     "success": "The hero image was replaced successfully.",
     "successManual": "The hero image was uploaded, but the app needs a manual placement update.",
     "error": "Unable to replace the hero image right now.",
-    "fileTooLarge": "The selected hero image is too large."
+    "fileTooLarge": "The selected hero image is too large.",
+    "label": "Background",
+    "tooltip": "Upload a background image for the main section"
   },
   "plan": {
     "languages": "App languages",
@@ -417,7 +505,19 @@
     },
     "socialLinks": "Social links",
     "socialLinksHint": "Add your brand profile links here. They are not collected in the planning chat anymore, and you can fill them in or adjust them directly from this card.",
-    "socialLinksOptional": "Optional — leave blank for any network you do not use."
+    "socialLinksOptional": "Optional — leave blank for any network you do not use.",
+    "header": "App plan",
+    "reviewStructured": "Review the structure below, then build when you are ready.",
+    "reviewSimple": "The plan is saved. Use “Build” to generate or “Edit” to continue chatting.",
+    "sections": "Sections",
+    "whatItDoes": "What it does",
+    "withData": "data storage",
+    "dataTooltip": "Stores data: {{models}}",
+    "buildProcessing": "Processing…",
+    "buildDefault": "Build",
+    "buildFree": "Build — it’s free",
+    "buildPaid": "Buy and build — $150",
+    "edit": "Edit"
   },
   "workspace": {
     "brandVisionTitle": "Brand look",
@@ -491,7 +591,15 @@
     "removeFailed": "Removing failed",
     "copyPrompt": "Copy {{label}}",
     "copyCnameTarget": "CNAME target",
-    "copyTxtValue": "TXT value"
+    "copyTxtValue": "TXT value",
+    "docsTitle": "Domains and your site",
+    "panelTitle": "Connect the domain",
+    "panelSubtitle": "Point a name purchased from a registrar to this hosted app.",
+    "hostnameLabel": "Your hostname",
+    "hostnameHint": "Usually www + your domain",
+    "saveDomain": "Save domain",
+    "continueApp": "Continue in AppMaker",
+    "txtNamePrefix": "Name:"
   },
   "files": {
     "title": "Files",
@@ -577,9 +685,6 @@
     "confirmDelete": "Delete forever",
     "deleting": "Deleting…",
     "deleteSuccess": "Account deleted."
-  },
-  "sidebar": {
-    "adminPanel": "Admin"
   },
   "admin": {
     "title": "Admin panel",
@@ -809,43 +914,6 @@
     "manageSubscription": "Manage subscription",
     "activateHint": "Pick \"{{cta}}\" to activate hosting and put your site online."
   },
-  "inquiries": {
-    "heading": "Inquiries",
-    "subtitle": "See new messages from your contact form here.",
-    "total": "{{n}} total",
-    "refresh": "Refresh",
-    "emptyTitle": "No inquiries yet",
-    "emptyBody": "When someone writes to you through the contact form, the message will appear here.",
-    "delete": "Delete",
-    "errors": {
-      "noApi": "This project doesn't return valid data for inquiries. Check whether the contact form records messages.",
-      "invalidJson": "Invalid response from server: {{text}}",
-      "load": "Failed to load.",
-      "delete": "Failed to delete."
-    }
-  },
-  "bookingSlots": {
-    "heading": "Taken times",
-    "chip": "for booking projects",
-    "intro": "Mark times as taken (unavailable) and see them in a calendar. This is stored in the generated app (API: <code>/api/takenSlots</code>).",
-    "markHeading": "Mark a time as taken",
-    "timeLabel": "Time",
-    "noteLabel": "Note (optional)",
-    "notePlaceholder": "e.g. Lunch break",
-    "saving": "Saving…",
-    "markCta": "Mark as taken",
-    "listHeading": "Taken times for {{date}}",
-    "refresh": "Refresh",
-    "none": "No taken times for this date.",
-    "remove": "Remove",
-    "errors": {
-      "noApi": "This project does not expose the `GET /api/takenSlots` API (returns HTML instead of JSON). Most commonly this means the generated app has no `server.js` (no database) or has no routes for `takenSlots`.",
-      "invalidJson": "Invalid response from server (JSON expected): {{text}}",
-      "load": "Failed to load.",
-      "save": "Failed to save.",
-      "delete": "Failed to delete."
-    }
-  },
   "emailPanel": {
     "tabs": {
       "domains": "Domains",
@@ -971,5 +1039,123 @@
     "s9Body": "AppMaker is not directed at children under 16. We do not knowingly collect data from anyone under 16. If you believe a child has created an account, please contact us so we can delete it.",
     "s10Title": "10. Contact",
     "s10Body": "For privacy questions or data requests, email us at <b>support@fornaxelit.com</b>."
+  },
+  "usage": {
+    "limitBuild": "You have used the free planning budget — click “Build” to create your app!",
+    "limitWrap": "You have used the free planning budget. Finish your idea and build the app!",
+    "warningRemaining": "{{pct}}% of free planning budget remaining",
+    "used": "{{pct}}% of free planning budget used"
+  },
+  "iteration": {
+    "freeRemaining": "{{n}} of {{total}} free improvements remaining",
+    "paidRemaining": "{{n}} paid improvements remaining",
+    "paidRemainingOne": "1 paid improvement remaining",
+    "noneLeft": "No improvements remaining",
+    "placeholder": "Describe what to change…",
+    "placeholderLong": "Describe the change… e.g. “make the header sticky” or “add a contact form”",
+    "noCreditsPlaceholder": "No improvements remaining — buy more to continue",
+    "submit": "Apply change",
+    "apply": "Apply",
+    "buyCredits": "Buy improvements",
+    "buyPackBadge": "Best value",
+    "buyDialogTitle": "Buy improvements",
+    "buyDialogQty": "Number of improvements",
+    "buyDialogOne": "1 improvement",
+    "buyDialogMany": "{{n}} improvements",
+    "buyDialogPackHint": "Choose 20 for {{price}} — best value",
+    "buyDialogConfirm": "Buy for {{price}}",
+    "barLabel": "Improvements"
+  },
+  "previewFrame": {
+    "connecting": "Connecting to preview…",
+    "loadingApp": "Loading the app…",
+    "hintWait": "Please wait — we start the preview when you open it. Larger apps may take a bit longer on first open.",
+    "stillLoading": "Still loading… The first open can take up to a minute while the app starts.",
+    "retryPreview": "Try the preview again",
+    "errorReach": "Failed to reach the preview.",
+    "errorLoad": "The preview frame did not load.",
+    "errorLoadHint": "Try again or rebuild the project from chat.",
+    "errorNotYet": "The preview is not available yet.",
+    "errorNotYetHint": "The preview server may still be starting or the project is not ready. Try “Try again” in a minute or go back to chat and start a build.",
+    "errorCouldNotStart": "The preview could not start.",
+    "errorCouldNotStartHint": "Files are missing or the preview service needs a restart. For Docker: docker compose restart app-runner",
+    "errorHttp": "The preview returned an error ({{status}}).",
+    "errorHttpHint": "Use refresh in the toolbar or “Try again” below. If it continues, rebuild from chat.",
+    "iframeTitle": "App preview"
+  },
+  "generation": {
+    "buildingApp": "Building the app",
+    "updatingApp": "Updating the app",
+    "percent": "{{n}}%",
+    "autoFixAttempt": "Auto-fix — attempt {{attempt}} of 5"
+  },
+  "theme": {
+    "sectionTitle": "Color theme",
+    "customColors": "Custom colors",
+    "uploadTooltip": "Upload a logo or photo — we will extract the colors automatically",
+    "fromImage": "From image",
+    "fromImageTitle": "Generate from logo or photo",
+    "fromImageHint": "Upload an image — we will extract the palette automatically",
+    "extracting": "Extracting colors…",
+    "primary": "Primary",
+    "secondary": "Secondary",
+    "background": "Background",
+    "apply": "Apply",
+    "extractError": "Failed to extract colors. Try a different image.",
+    "customApplied": "Custom theme applied",
+    "extractedFromImage": "“{{name}}” from your image",
+    "presets": {
+      "Midnight": "Midnight",
+      "Noir": "Noir",
+      "Ocean": "Ocean",
+      "Sunset": "Sunset",
+      "Mint": "Mint",
+      "Rose": "Rose"
+    }
+  },
+  "domainDocs": {
+    "back": "Back",
+    "title": "Domains and your online site",
+    "intro": "AppMaker hosts your app. You can use a custom domain (e.g. www.yourbrand.com) by purchasing it from a registrar and pointing it to the address we show on the preview screen. This guide explains both steps in plain language.",
+    "alertNoSell": "AppMaker does not sell domains. You buy a domain from a registrar (an accredited company), then connect it here.",
+    "glossaryTitle": "Quick glossary",
+    "glossaryDomain": "Domain — the address people type in the browser, e.g. coffeehouse.com.",
+    "glossaryRegistrar": "Registrar — the company where you search for, buy, and renew domains.",
+    "glossaryDns": "DNS — the system that tells the internet where to send visitors (records like CNAME and TXT).",
+    "glossarySubdomain": "Subdomain — a prefix, e.g. www in www.coffeehouse.com.",
+    "buyTitle": "1. Buying a domain",
+    "buyIntro": "A one-time step per brand. The process is similar across most registrars.",
+    "whereBuy": "Where to buy",
+    "whereBuyBody": "Common options: Cloudflare Registrar, Namecheap, Porkbun, Google Domains (now Squarespace Domains), and others. Compare first-year and renewal prices; pick a company you are comfortable logging into when changing DNS.",
+    "typicalFlow": "Typical purchase flow",
+    "typicalFlowL1": "Create an account at the registrar.",
+    "typicalFlowL2": "Search for the name you want (e.g. yourbrand + .com).",
+    "typicalFlowL3": "Add to cart and pay. You rent the name annually (renewing keeps it yours).",
+    "typicalFlowL4": "Confirm the email from the registrar to complete the order.",
+    "typicalFlowL5": "Open the registrar panel and find DNS, DNS records, or Manage DNS — this is where you will add the records AppMaker shows.",
+    "costsTitle": "Pricing and renewal",
+    "costsBody": "The first year is often discounted; subsequent years cost more. Enable auto-renew if you do not want to lose the name when it expires. If payment fails, the domain may become available to others.",
+    "privacyTitle": "Privacy (WHOIS)",
+    "privacyBody": "Many registrars offer free or paid WHOIS privacy so your personal details are not published. Enable it to reduce spam.",
+    "dnsTitle": "2. DNS basics (what you add at the registrar)",
+    "dnsAfterHosting": "After you enable hosting in AppMaker, the preview page shows two types of records:",
+    "cnameTitle": "CNAME record",
+    "cnameBody": "A CNAME says “this hostname is an alias for another.” For example, www can point to the AppMaker target (project ID + our hosting host). This routes traffic to the hosted app.",
+    "txtTitle": "TXT record",
+    "txtBody": "A TXT record stores text. We add a short string to verify that you control the domain before we accept it as connected.",
+    "propTitle": "Propagation",
+    "propBody": "DNS changes are not instant everywhere. From a few minutes to up to 48 hours (rare). If verification fails, wait and try again. TTL on old records slows the update.",
+    "connectTitle": "3. Connecting a domain in AppMaker",
+    "connectL1": "Open the Preview page for the project (active hosting subscription required).",
+    "connectL2": "In “Connect the domain” enter the exact hostname visitors will use (often www.yourbrand.com).",
+    "connectL3": "Click “Save domain”, then copy the TXT and CNAME records to your registrar.",
+    "connectL4": "Click “Verify DNS” after the records are saved. If it fails, check for typos.",
+    "apexWarn": "Apex domains (yourbrand.com without www) work if your registrar supports CNAME flattening or ALIAS/ANAME records at the root. Cloudflare does this automatically. If your registrar does not support it, use www.yourbrand.com or redirect the apex to www.",
+    "httpsTitle": "4. HTTPS on a custom domain",
+    "httpsBody": "Browsers expect encrypted HTTPS. After DNS points to AppMaker hosting, the operator provides a certificate for the hostname (e.g. Let’s Encrypt or a load balancer). A certificate warning may mean propagation is still in progress or an edge setup is missing — check with your AppMaker administrator.",
+    "continueApp": "Continue in AppMaker"
+  },
+  "errors": {
+    "generic": "Something went wrong"
   }
 }
