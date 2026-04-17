@@ -110,7 +110,9 @@
     "resetting": "Saving…",
     "resetDone": "Password changed successfully. Redirecting you to sign in…",
     "resetMismatch": "Passwords do not match.",
-    "resetMissingToken": "The link is invalid or missing. Request a new password reset link."
+    "resetMissingToken": "The link is invalid or missing. Request a new password reset link.",
+    "agreePrefix": "By signing up you agree to our",
+    "agreeAnd": "and"
   },
   "chat": {
     "headerTitle": "AppMaker",
@@ -886,5 +888,63 @@
       "cancel": "Cancel",
       "add": "Add"
     }
+  },
+  "legal": {
+    "termsLink": "Terms of Service",
+    "privacyLink": "Privacy Policy"
+  },
+  "cookie": {
+    "message": "We use local storage for authentication and preferences. No third-party tracking cookies are used. Learn more in our",
+    "accept": "Got it"
+  },
+  "terms": {
+    "title": "Terms of Service",
+    "lastUpdated": "Last updated: April 17, 2026",
+    "s1Title": "1. About AppMaker",
+    "s1Body": "AppMaker (<b>fornaxelit.com</b>) is an AI-powered platform that lets you create, host, and manage a business website without writing code. By creating an account or using the service you agree to these Terms. If you do not agree, please do not use AppMaker.",
+    "s2Title": "2. Eligibility",
+    "s2Body": "You must be at least <b>16 years old</b> (or the age of digital consent in your jurisdiction, whichever is higher) to create an account. By registering you confirm that you meet this requirement.",
+    "s3Title": "3. Account & Security",
+    "s3Body": "<p>You register with an email address and password. You are responsible for keeping your credentials secure.</p><ul><li>Passwords must be at least 8 characters.</li><li>Email changes and password changes require a 6-digit verification code sent to your email.</li><li>You may delete your account at any time from <b>Settings</b>. You must remove hosted projects first.</li></ul>",
+    "s4Title": "4. Services & Pricing",
+    "s4Body": "<p>AppMaker offers the following paid services, billed in EUR through <b>Stripe</b>:</p><ul><li><b>Site generation</b> — one-time payment of €150. Includes the AI-generated website, source code download, 1 month of free hosting, and bonus improvement credits.</li><li><b>Hosting</b> — €20/month recurring subscription. Keeps your site online with a public address or custom domain. If the subscription is not activated after the free month, the site is taken offline automatically.</li><li><b>Improvement credits</b> — €1.50 per credit (pack of 20 for €20). Each credit allows one AI-powered change to your site.</li></ul><p>All prices include VAT where applicable. You can manage or cancel subscriptions via the Stripe customer portal at any time.</p>",
+    "s5Title": "5. AI-Generated Content",
+    "s5Body": "<p>Websites are generated using third-party AI models (Anthropic Claude and OpenAI). You should review the generated content before publishing.</p><ul><li>AI output may occasionally be inaccurate or inappropriate. You are responsible for reviewing and editing your site content.</li><li>AppMaker does not guarantee that the generated code will be error-free or fit any particular purpose.</li><li>You must not use AppMaker to generate content that is illegal, harmful, defamatory, or infringes third-party rights.</li></ul>",
+    "s6Title": "6. Intellectual Property",
+    "s6Body": "<p><b>Your content:</b> You own the text, images, product listings, blog posts, and other content you add to your site.</p><p><b>Generated code:</b> Once you pay for a project, you receive full rights to download, modify, and use the generated source code for your business purposes.</p><p><b>Our platform:</b> The AppMaker platform, branding, and underlying technology remain our property.</p>",
+    "s7Title": "7. Hosting & Uptime",
+    "s7Body": "<p>We strive for high availability but do not guarantee 100% uptime. Scheduled maintenance, infrastructure incidents, or abuse may cause temporary interruptions.</p><ul><li>Hosting is provided on our infrastructure at <b>fornaxelit.com</b>.</li><li>You may connect a custom domain by configuring DNS records as described in the documentation.</li><li>If your hosting subscription lapses or is cancelled, your site will be taken offline. Your project files remain available for download as long as your account exists.</li></ul>",
+    "s8Title": "8. Email Sending",
+    "s8Body": "<p>AppMaker can send transactional emails on behalf of your site (e.g. order confirmations, booking notifications) through <b>Resend</b>.</p><ul><li>You may configure a custom sender domain with DNS verification.</li><li>You must not use the email feature for spam, bulk marketing, or unsolicited messages.</li><li>We may suspend email sending if we detect abuse or high bounce/complaint rates.</li></ul>",
+    "s9Title": "9. Acceptable Use",
+    "s9Body": "<ul><li>Do not use AppMaker for illegal activities, fraud, phishing, or distributing malware.</li><li>Do not attempt to access other users' accounts or data.</li><li>Do not reverse-engineer, scrape, or overload the platform infrastructure.</li><li>We reserve the right to suspend or terminate accounts that violate these terms.</li></ul>",
+    "s10Title": "10. Limitation of Liability",
+    "s10Body": "To the maximum extent permitted by law, AppMaker and its operators are not liable for indirect, incidental, or consequential damages arising from the use of the service, including but not limited to lost profits, data loss, or business interruption. Our total liability is limited to the amount you have paid us in the 12 months preceding the claim.",
+    "s11Title": "11. Changes to These Terms",
+    "s11Body": "We may update these Terms from time to time. Material changes will be communicated by email or a notice on the platform. Continued use of AppMaker after such changes constitutes your acceptance of the updated Terms."
+  },
+  "privacy": {
+    "title": "Privacy Policy",
+    "lastUpdated": "Last updated: April 17, 2026",
+    "s1Title": "1. Who We Are",
+    "s1Body": "AppMaker (<b>fornaxelit.com</b>) is an AI-powered website builder. This policy explains what personal data we collect, why, and how we protect it.",
+    "s2Title": "2. Data We Collect",
+    "s2Body": "<p><b>Account data:</b> email address and a securely hashed password (bcrypt). We also store the date you registered.</p><p><b>Payment data:</b> payments are processed by <b>Stripe</b>. We store your Stripe customer ID but never see or store your card number. Please see <a href=\"https://stripe.com/privacy\" target=\"_blank\" rel=\"noopener\">Stripe's Privacy Policy</a>.</p><p><b>Project data:</b> the website content and source files you create through AppMaker, including text, images you upload, product listings, blog posts, and configuration.</p><p><b>Chat messages:</b> your conversations with the AI planning assistant are stored so you can return to them.</p><p><b>Email data:</b> if you use the transactional email feature, we store sender configuration, templates, and delivery logs (recipient address, status, timestamps).</p>",
+    "s3Title": "3. Analytics & Visitor Tracking",
+    "s3Body": "<p>When visitors browse a site hosted on AppMaker, we collect:</p><ul><li><b>Page path</b> and <b>referrer URL</b></li><li><b>Device type</b> (desktop, mobile, tablet) derived from the user agent string</li><li>A <b>daily visitor identifier</b> — a truncated SHA-256 hash of the visitor's IP address combined with the project ID and the current date. The raw IP address is never stored.</li></ul><p>This data helps site owners understand traffic patterns. We do not use it for advertising or cross-site tracking.</p><p><b>No cookies:</b> AppMaker does not set cookies. Authentication uses a JWT token stored in your browser's local storage.</p>",
+    "s4Title": "4. Third-Party Services",
+    "s4Body": "<ul><li><b>Stripe</b> — payment processing (<a href=\"https://stripe.com/privacy\" target=\"_blank\" rel=\"noopener\">privacy policy</a>)</li><li><b>Anthropic (Claude)</b> and <b>OpenAI</b> — AI generation. Your planning conversation and project description are sent to these providers to generate your website. See <a href=\"https://www.anthropic.com/privacy\" target=\"_blank\" rel=\"noopener\">Anthropic's</a> and <a href=\"https://openai.com/policies/privacy-policy\" target=\"_blank\" rel=\"noopener\">OpenAI's</a> privacy policies.</li><li><b>Resend</b> — transactional email delivery (<a href=\"https://resend.com/legal/privacy-policy\" target=\"_blank\" rel=\"noopener\">privacy policy</a>)</li><li><b>Cloudflare</b> — DNS and TLS certificates for custom domains</li></ul>",
+    "s5Title": "5. How We Use Your Data",
+    "s5Body": "<ul><li>To create and maintain your account</li><li>To generate, build, and host your website</li><li>To process payments and manage subscriptions</li><li>To send transactional emails (verification codes, order notifications) to you and your customers</li><li>To provide analytics about visitors to your hosted site</li><li>To detect and prevent abuse of the platform</li></ul><p>We do <b>not</b> sell your data or use it for advertising.</p>",
+    "s6Title": "6. Data Retention & Deletion",
+    "s6Body": "<p>Your account data and project files are retained for as long as your account is active.</p><ul><li>You can delete your account from <b>Settings</b>. This permanently removes your user record.</li><li>You must remove hosted projects before deleting your account. Project source files are deleted when the project is deleted.</li><li>Analytics page views and email logs associated with a deleted project are removed automatically (cascade delete).</li><li>Stripe retains its own payment records independently according to their retention policies.</li></ul>",
+    "s7Title": "7. Data Security",
+    "s7Body": "Passwords are hashed with bcrypt. Sensitive environment variables (e.g. connected Stripe keys for your project) are encrypted with AES-256-GCM at rest. All traffic is served over HTTPS. We follow industry-standard practices, but no system can guarantee absolute security.",
+    "s8Title": "8. Your Rights (GDPR)",
+    "s8Body": "If you are in the European Economic Area, you have the right to access, correct, or delete your personal data, restrict or object to processing, and data portability. To exercise these rights, contact us at the email below. We will respond within 30 days.",
+    "s9Title": "9. Children",
+    "s9Body": "AppMaker is not directed at children under 16. We do not knowingly collect data from anyone under 16. If you believe a child has created an account, please contact us so we can delete it.",
+    "s10Title": "10. Contact",
+    "s10Body": "For privacy questions or data requests, email us at <b>support@fornaxelit.com</b>."
   }
 }

@@ -9,6 +9,7 @@ import {
   Toolbar,
   Chip,
   Paper,
+  Link as MuiLink,
 } from '@mui/material';
 import { keyframes } from '@mui/material/styles';
 import { Link as RouterLink } from 'react-router-dom';
@@ -638,6 +639,10 @@ export default function LandingPage({ scrollTo }: Props) {
           <Typography variant="body2" color="text.disabled">
             {t('landing.footer', { year: new Date().getFullYear() })}
           </Typography>
+          <Stack direction="row" justifyContent="center" gap={2} mt={1}>
+            <MuiLink component={RouterLink} to="/terms" variant="body2" color="text.disabled" underline="hover">{t('legal.termsLink')}</MuiLink>
+            <MuiLink component={RouterLink} to="/privacy" variant="body2" color="text.disabled" underline="hover">{t('legal.privacyLink')}</MuiLink>
+          </Stack>
         </Box>
       </Box>
 

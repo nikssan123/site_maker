@@ -17,6 +17,9 @@ import SettingsPage from './pages/SettingsPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import ConnectDomainDocsPage from './pages/ConnectDomainDocsPage';
 import AdminPage from './pages/AdminPage';
+import TermsPage from './pages/TermsPage';
+import PrivacyPage from './pages/PrivacyPage';
+import CookieBanner from './components/CookieBanner';
 import { useParams, useSearchParams } from 'react-router-dom';
 
 function PaymentsRedirect() {
@@ -113,9 +116,12 @@ function AdminRequired() {
 export default function App() {
   return (
     <BrowserRouter>
+      <CookieBanner />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/pricing" element={<LandingPage scrollTo="pricing" />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
         <Route element={<GuestOnly />}>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />

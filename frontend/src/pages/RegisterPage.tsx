@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Box, Paper, Typography, TextField, Button, Stack, Alert, Link } from '@mui/material';
+import { Box, Paper, Typography, TextField, Button, Stack, Alert, Link, Checkbox, FormControlLabel } from '@mui/material';
+import { Link as RouterLink } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
@@ -17,6 +18,7 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
+  const [agreed, setAgreed] = useState(false);
   const { setAuth } = useAuthStore();
   const navigate = useNavigate();
 
@@ -99,7 +101,19 @@ export default function RegisterPage() {
                   fullWidth
                   helperText={t('auth.passwordHint')}
                 />
-                <Button type="submit" variant="contained" fullWidth disabled={loading}>
+                <FormControlLabel
+                  control={<Checkbox checked={agreed} onChange={(e) => setAgreed(e.target.checked)} size="small" />}
+                  label={
+                    <Typography variant="caption" color="text.secondary" sx={{ '& a': { color: 'primary.main' } }}>
+                      {t('auth.agreePrefix')}{' '}
+                      <Link component={RouterLink} to="/terms" underline="hover">{t('legal.termsLink')}</Link>{' '}
+                      {t('auth.agreeAnd')}{' '}
+                      <Link component={RouterLink} to="/privacy" underline="hover">{t('legal.privacyLink')}</Link>
+                    </Typography>
+                  }
+                  sx={{ alignItems: 'flex-start', mx: 0, '& .MuiCheckbox-root': { pt: 0 } }}
+                />
+                <Button type="submit" variant="contained" fullWidth disabled={loading || !agreed}>
                   {loading ? t('auth.creating') : t('auth.getStartedFree')}
                 </Button>
               </Stack>
