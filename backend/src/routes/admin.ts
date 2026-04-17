@@ -3,9 +3,16 @@ import { requireAuth } from '../middleware/requireAuth';
 import { requireAdmin } from '../middleware/requireAdmin';
 import { prisma } from '../index';
 import { exec } from 'child_process';
+import { promises as fs } from 'fs';
+import path from 'path';
+import os from 'os';
+import { stopProject, buildProject, runProject, stopPersistentHosting } from '../services/appRunner';
+import { AppError } from '../middleware/errorHandler';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ─── Overview stats ─────────────────────────────────────────────────────────
 
@@ -44,10 +51,13 @@ router.get('/stats', async (_req: Request, res: Response, next: NextFunction) =>
       prisma.user.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
       prisma.user.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
       prisma.project.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
+      // Only fresh projects that reached "running" quickly on first build — reflects actual generation duration.
       prisma.$queryRaw<[{ avg_seconds: number | null }]>`
         SELECT EXTRACT(EPOCH FROM AVG("updatedAt" - "createdAt"))::float AS avg_seconds
         FROM "Project"
         WHERE status = 'running'
+          AND "fixAttempts" = 0
+          AND ("updatedAt" - "createdAt") < INTERVAL '30 minutes'
       `,
     ]);
 
@@ -180,28 +190,101 @@ router.get('/projects', async (req: Request, res: Response, next: NextFunction) 
   }
 });
 
+// ─── Project control actions ────────────────────────────────────────────────
+
+async function loadAdminProject(projectId: string) {
+  if (!UUID_RE.test(projectId)) throw new AppError(400, 'Invalid project id');
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { id: true, status: true, hosted: true, sessionId: true },
+  });
+  if (!project) throw new AppError(404, 'Project not found');
+  return project;
+}
+
+router.post('/projects/:id/stop', async (req, res, next) => {
+  try {
+    const project = await loadAdminProject(String(req.params.id));
+    await stopProject(project.id);
+    if (project.hosted) await stopPersistentHosting(project.id);
+    await prisma.project.update({
+      where: { id: project.id },
+      data: { runPort: null, status: project.status === 'error' ? 'error' : 'stopped' },
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/projects/:id/restart', async (req, res, next) => {
+  try {
+    const project = await loadAdminProject(String(req.params.id));
+    await stopProject(project.id);
+    const build = await buildProject(project.id);
+    if (!build.success) {
+      await prisma.project.update({
+        where: { id: project.id },
+        data: { status: 'error', errorLog: build.log?.slice(-10_000) ?? null },
+      });
+      throw new AppError(500, 'Build failed during restart');
+    }
+    const run = await runProject(project.id);
+    await prisma.project.update({
+      where: { id: project.id },
+      data: {
+        status: run.success ? 'running' : 'error',
+        runPort: run.port ?? null,
+        errorLog: run.success ? null : run.log?.slice(-10_000) ?? null,
+      },
+    });
+    res.json({ ok: run.success, port: run.port ?? null });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/projects/:id/clear-error', async (req, res, next) => {
+  try {
+    const project = await loadAdminProject(String(req.params.id));
+    await prisma.project.update({
+      where: { id: project.id },
+      data: { errorLog: null, buildLog: null, fixAttempts: 0 },
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/projects/:id', async (req, res, next) => {
+  try {
+    const project = await loadAdminProject(String(req.params.id));
+    await stopProject(project.id).catch(() => {});
+    if (project.hosted) await stopPersistentHosting(project.id).catch(() => {});
+    await prisma.project.delete({ where: { id: project.id } });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── Revenue ────────────────────────────────────────────────────────────────
 
 router.get('/revenue', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const [paidProjectCount, hostedProjectCount, iterationCredits, paidGenerationCount] =
-      await Promise.all([
-        prisma.project.count({ where: { paid: true } }),
-        prisma.project.count({ where: { hosted: true } }),
-        prisma.project.aggregate({ _sum: { paidIterationCredits: true } }),
-        prisma.planExecution.count({ where: { projectPaid: true } }),
-      ]);
-
-    const totalIterationCredits = iterationCredits._sum.paidIterationCredits ?? 0;
+    const [paidProjectCount, hostedProjectCount, paidGenerationCount] = await Promise.all([
+      prisma.project.count({ where: { paid: true } }),
+      prisma.project.count({ where: { hosted: true } }),
+      prisma.planExecution.count({ where: { projectPaid: true } }),
+    ]);
 
     res.json({
       paidProjectCount,
       hostedProjectCount,
       paidGenerationCount,
-      totalIterationCredits,
       estimatedGenerationRevenue: paidProjectCount * 150,
       estimatedMonthlyHostingRevenue: hostedProjectCount * 20,
-      estimatedIterationRevenue: totalIterationCredits * 1.5,
     });
   } catch (err) {
     next(err);
@@ -318,31 +401,90 @@ router.get('/plans', async (req: Request, res: Response, next: NextFunction) => 
 
 // ─── System ─────────────────────────────────────────────────────────────────
 
+function humanizeBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return 'N/A';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let v = bytes;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+async function measureDirUnix(dir: string): Promise<{ size: string; count: number } | null> {
+  return new Promise((resolve) => {
+    exec(
+      `du -sb "${dir}" 2>/dev/null && ls -1 "${dir}" 2>/dev/null | wc -l`,
+      { timeout: 8000 },
+      (err, stdout) => {
+        if (err) return resolve(null);
+        const lines = stdout.trim().split('\n');
+        const bytesStr = lines[0]?.split(/\s+/)[0] ?? '';
+        const bytes = Number(bytesStr);
+        const count = parseInt(lines[1] ?? '0', 10) || 0;
+        if (!Number.isFinite(bytes)) return resolve(null);
+        resolve({ size: humanizeBytes(bytes), count });
+      },
+    );
+  });
+}
+
+async function measureDirNative(dir: string): Promise<{ size: string; count: number }> {
+  let total = 0;
+  let topLevelCount = 0;
+  let topLevelEntries: string[] = [];
+  try {
+    topLevelEntries = await fs.readdir(dir);
+    topLevelCount = topLevelEntries.length;
+  } catch {
+    return { size: 'N/A', count: 0 };
+  }
+
+  const walk = async (p: string): Promise<void> => {
+    let names: string[];
+    try {
+      names = await fs.readdir(p);
+    } catch {
+      return;
+    }
+    for (const name of names) {
+      const full = path.join(p, name);
+      try {
+        const stat = await fs.stat(full);
+        if (stat.isDirectory()) {
+          await walk(full);
+        } else if (stat.isFile()) {
+          total += stat.size;
+        }
+      } catch {
+        // skip unreadable entries
+      }
+    }
+  };
+
+  await walk(dir);
+  return { size: humanizeBytes(total), count: topLevelCount };
+}
+
 router.get('/system', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const mem = process.memoryUsage();
     const generatedAppsDir = process.env.GENERATED_APPS_DIR || '/generated-apps';
 
-    const diskInfo = await new Promise<{ diskUsage: string; dirCount: number }>((resolve) => {
-      exec(
-        `du -sh "${generatedAppsDir}" 2>/dev/null && ls -1 "${generatedAppsDir}" 2>/dev/null | wc -l`,
-        { timeout: 5000 },
-        (err, stdout) => {
-          if (err) {
-            resolve({ diskUsage: 'N/A', dirCount: 0 });
-            return;
-          }
-          const lines = stdout.trim().split('\n');
-          const diskUsage = lines[0]?.split('\t')[0] ?? 'N/A';
-          const dirCount = parseInt(lines[1] ?? '0', 10) || 0;
-          resolve({ diskUsage, dirCount });
-        },
-      );
-    });
+    let disk: { size: string; count: number } = { size: 'N/A', count: 0 };
+    if (os.platform() !== 'win32') {
+      const unix = await measureDirUnix(generatedAppsDir);
+      if (unix) disk = unix;
+    }
+    if (disk.size === 'N/A') {
+      disk = await measureDirNative(generatedAppsDir);
+    }
 
     res.json({
-      diskUsage: diskInfo.diskUsage,
-      projectDirCount: diskInfo.dirCount,
+      diskUsage: disk.size,
+      projectDirCount: disk.count,
       memoryUsage: {
         rss: Math.round(mem.rss / 1024 / 1024),
         heapUsed: Math.round(mem.heapUsed / 1024 / 1024),

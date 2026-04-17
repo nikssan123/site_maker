@@ -714,7 +714,8 @@
       "error": "Грешка",
       "generating": "Генериране",
       "building": "Изграждане",
-      "planning": "Планиране"
+      "planning": "Планиране",
+      "stopped": "Спрян"
     },
     "overview": {
       "totalUsers": "Общо потребители",
@@ -754,11 +755,22 @@
       "colIterations": "Итерации",
       "colFixAttempts": "Опити за поправка",
       "colCreated": "Създаден",
+      "colActions": "Действия",
       "iterationsCell": "{{n}} ({{paid}} платени)",
       "sessionId": "ID на сесия:",
       "port": "Порт:",
       "updated": "Обновен:",
-      "noProjects": "Няма намерени проекти"
+      "noProjects": "Няма намерени проекти",
+      "actionStop": "Спри",
+      "actionRestart": "Рестартирай",
+      "actionClearError": "Изчисти грешка",
+      "actionDelete": "Изтрий",
+      "confirmStop": "Да спрем ли това приложение? То няма повече да обслужва трафик за preview.",
+      "confirmRestart": "Да прекомпилираме и рестартираме проекта? Всяка активна инстанция ще бъде спряна първо.",
+      "confirmClearError": "Да изчистим грешката и да нулираме опитите за поправка? Файловете не се променят.",
+      "confirmDelete": "Да изтрием окончателно този проект и данните му? Действието е необратимо.",
+      "actionSuccess": "Действието е изпълнено.",
+      "actionFailed": "Действието е неуспешно: {{message}}"
     },
     "revenue": {
       "generationRevenue": "Приход от генериране",
@@ -766,11 +778,10 @@
       "monthlyHosting": "Месечен хостинг",
       "monthlyHostingValue": "€{{value}}/мес",
       "hostedSub": "{{n}} хоствани",
-      "iterationRevenue": "Приход от итерации",
-      "creditsSub": "{{n}} продадени кредита",
       "summary": "Обобщение",
       "summaryBody": "Общ приблизителен приход: €{{oneTime}} (еднократно) + €{{recurring}}/мес (повтарящ се)",
-      "paidGenerations": "Платени генерирания: {{n}}"
+      "paidGenerations": "Платени генерирания: {{n}}",
+      "iterationNote": "Итерациите в чата засега са безплатни — не се отчита приход от тях."
     },
     "email": {
       "totalSent": "Общо изпратени",

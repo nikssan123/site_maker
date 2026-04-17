@@ -7,3 +7,4 @@ dist/
 generated-apps/
 *.txt
 .claude/
+gen_project/

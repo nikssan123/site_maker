@@ -557,7 +557,8 @@
       "error": "Error",
       "generating": "Generating",
       "building": "Building",
-      "planning": "Planning"
+      "planning": "Planning",
+      "stopped": "Stopped"
     },
     "overview": {
       "totalUsers": "Total Users",
@@ -597,11 +598,22 @@
       "colIterations": "Iterations",
       "colFixAttempts": "Fix Attempts",
       "colCreated": "Created",
+      "colActions": "Actions",
       "iterationsCell": "{{n}} ({{paid}} paid)",
       "sessionId": "Session ID:",
       "port": "Port:",
       "updated": "Updated:",
-      "noProjects": "No projects found"
+      "noProjects": "No projects found",
+      "actionStop": "Stop",
+      "actionRestart": "Restart",
+      "actionClearError": "Clear error",
+      "actionDelete": "Delete",
+      "confirmStop": "Stop this generated app? It will no longer serve preview traffic.",
+      "confirmRestart": "Rebuild and restart this project? Any running instance will be stopped first.",
+      "confirmClearError": "Clear the error state and reset fix attempts? This keeps files untouched.",
+      "confirmDelete": "Permanently delete this project and its data? This cannot be undone.",
+      "actionSuccess": "Action completed.",
+      "actionFailed": "Action failed: {{message}}"
     },
     "revenue": {
       "generationRevenue": "Generation Revenue",
@@ -609,11 +621,10 @@
       "monthlyHosting": "Monthly Hosting",
       "monthlyHostingValue": "€{{value}}/mo",
       "hostedSub": "{{n}} hosted",
-      "iterationRevenue": "Iteration Revenue",
-      "creditsSub": "{{n}} credits sold",
       "summary": "Summary",
       "summaryBody": "Total estimated revenue: €{{oneTime}} (one-time) + €{{recurring}}/mo (recurring)",
-      "paidGenerations": "Paid generations: {{n}}"
+      "paidGenerations": "Paid generations: {{n}}",
+      "iterationNote": "Iteration chat is currently free — no revenue is counted for it."
     },
     "email": {
       "totalSent": "Total Sent",

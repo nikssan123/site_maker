@@ -161,6 +161,7 @@ Layout & grids:
 - All card grids MUST use responsive columns: use MUI Grid with xs={12} sm={6} md={4} (or similar)
 - Alternatively use CSS grid: gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }
 - Hero sections: split layouts must stack vertically on mobile — flexDirection: { xs: 'column', md: 'row' }
+- For split hero sections specifically: on mobile the visual/image/mockup block MUST appear above the headline/title block. Use ordering or column-reverse as needed so the hero image is shown first on small screens.
 - Sidebar layouts (dashboards): sidebar must be a temporary Drawer on mobile, permanent on desktop
 - Forms must be full-width on mobile (maxWidth: { xs: '100%', sm: 400 })
 - Images must be responsive: width: '100%', height: 'auto', maxWidth: '100%'
@@ -419,6 +420,7 @@ KEY RULES FOR server.js ROBUSTNESS:
 EMAIL EVENTS (required for apps with contact forms, bookings, orders, or payments):
 - The generated server.js MUST trigger platform email events on key actions by calling the internal platform endpoint:
   POST (process.env.BACKEND_INTERNAL_URL + '/api/internal/project-email')
+- The request MUST include header: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_SECRET || '' }
 - The request body MUST be JSON:
   { projectId: process.env.PROJECT_ID, eventType: 'form.submitted'|'booking.created'|'order.created'|'payment.received', data: { ... } }
 - This call MUST be fire-and-forget and MUST NOT break the user request:
@@ -441,7 +443,25 @@ PAYMENTS (only when paymentsEnabled is true):
 - Do NOT use Stripe.js or any Stripe npm package in the generated app. Payments go through our backend proxy.
 - Read env vars: const PAYMENTS_ENABLED = import.meta.env.VITE_PAYMENTS_ENABLED === 'true'; const PAYMENTS_URL = import.meta.env.VITE_PAYMENTS_URL ?? '';
 - Checkout flow: POST to PAYMENTS_URL with { amount (cents), currency ('eur'), productName, successUrl, cancelUrl } → get back { url } → window.location.href = url
-- successUrl and cancelUrl: use window.location.origin + import.meta.env.BASE_URL (e.g. successUrl = window.location.origin + import.meta.env.BASE_URL + '?payment=success')
+- successUrl MUST include the Stripe session placeholder so the generated app can verify payment server-side after redirect:
+  successUrl = window.location.origin + import.meta.env.BASE_URL + 'checkout?payment=success&session_id={CHECKOUT_SESSION_ID}'
+- cancelUrl = window.location.origin + import.meta.env.BASE_URL + 'checkout?payment=cancel'
+- NEVER trust ?payment=success by itself and NEVER create a paid order before payment succeeds.
+- For payment-enabled apps that persist orders/bookings in server.js:
+  1. The frontend may collect customer details before redirecting to checkout, but MUST NOT finalize the order yet.
+  2. After Stripe redirects back with session_id, the generated app's own server.js MUST verify that session by POSTing to:
+     process.env.BACKEND_INTERNAL_URL + '/api/project-payments/verify-checkout-session/' + process.env.PROJECT_ID
+     with headers { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_SECRET || '' }
+     and body { sessionId }
+  3. Only if verification returns ok=true / payment_status='paid' may server.js create the order/booking in SQLite.
+  4. After that successful DB write, trigger the correct email events:
+     - ecommerce: order.created
+     - booking: booking.created
+     - payment-enabled apps after confirmation: payment.received
+- Payment-enabled apps that persist orders/bookings MUST store enough state to prevent duplicate writes on refresh/retry:
+  - add canonical DB fields for the payment record, at minimum paymentSessionId and paymentStatus; ecommerce orders should also have an order status field
+  - before creating a new order/booking, check whether the verified paymentSessionId already exists; if it does, return the existing success result instead of inserting again
+  - refreshing the success page or re-sending the same session_id must NEVER create a second order
 - When PAYMENTS_ENABLED is false: disable checkout buttons and show an MUI Alert severity="warning" with text "Плащанията не са активирани. Собственикът трябва да свърже Stripe акаунт." — do NOT hide the checkout UI entirely, just show the notice above it.
 - scripts: { "build": "vite build" } only — no "start" script
 
@@ -821,6 +841,14 @@ server.js requirements (MUST follow the exact skeleton from the system prompt):
 - NO optional chaining (?.) — use explicit null checks
 - REQUIRED: inside main(), before app.listen(), call fs.writeFileSync(require('path').join(__dirname, '__admin_config.json'), JSON.stringify(${buildAdminConfig(appType, dataModels)}));`;
 
+    if (appType === 'ecommerce') {
+      prompt += `\n- ECOMMERCE STOCK RULES (REQUIRED): stock is authoritative on the server, not just in the UI.
+- POST /api/orders (or the app's canonical order-finalization route) MUST validate each requested line item against current product stock before writing the order.
+- If any item exceeds available stock, reject the request with 400 and a clear Bulgarian error JSON message; do not partially create the order.
+- After a successful order is finalized, decrement product stock in SQLite and persist(db).
+- The frontend may show stock and disable buttons proactively, but server-side validation is mandatory because client checks are not trusted.`;
+    }
+
   } else if (hasDatabase && appType === 'booking') {
     // Booking apps need taken-slots persistence even if the model forgot to include it.
     prompt += `\n\nBOOKING DATABASE REQUIREMENT:\n- Add the EXACT canonical model/table name takenSlots with fields [date, time, note] and expose routes GET /api/takenSlots, POST /api/takenSlots, and DELETE /api/takenSlots/:id in server.js using the same REST pattern. The calendar and booking form must use this exact API name to prevent unavailable selections. Do not invent alternate names like blockedSlots, unavailableSlots, or busySlots.`;
@@ -839,6 +867,8 @@ server.js requirements (MUST follow the exact skeleton from the system prompt):
 - Add a clearly visible language switcher/dropdown in the shared app shell or header.
 - Translate all user-visible UI copy for every selected language: navigation, headings, buttons, forms, helper text, alerts, empty states, validation, checkout text, footer, and seeded content.
 - Do NOT leave fallback text, placeholders, or untranslated strings in only one language.
+- All generated source files and seeded text MUST be valid UTF-8. Never output mojibake/garbled text such as "Ð..." sequences, broken euro symbols, or corrupted localized strings.
+- Final output must not contain placeholder/debug copy such as "test", "todo", "placeholder", "lorem ipsum", "sample text", or similar scaffolding in any visible UI text or seeded content.
 - Keep route paths and code identifiers in English if needed, but the visible UI must switch languages correctly.
 - A simple in-app translation dictionary/i18n setup is acceptable, but it must cover the full generated app.`;
   prompt += `\n\nBRANDING MARKERS (REQUIRED): mark every visible logo/brand render with the exact APPMAKER_LOGO_SLOT_START/END JSX comments and use <Box data-appmaker-logo-slot="true"> as the wrapper. Mark the main hero root with data-appmaker-hero="true" and include the exact APPMAKER_HERO_BG_START/END comments inside its sx object around the hero background styles. Do not rename or omit these markers.`;

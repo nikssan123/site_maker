@@ -5,7 +5,7 @@ import {
   CircularProgress, Paper, Grid, Chip, Tabs, Tab,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   TablePagination, TextField, Select, MenuItem, FormControl, InputLabel,
-  Collapse, Button,
+  Collapse, Button, Snackbar, Alert, Tooltip,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
@@ -22,6 +22,10 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import StopIcon from '@mui/icons-material/Stop';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
+import CleaningServicesIcon from '@mui/icons-material/CleaningServices';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
   ResponsiveContainer, PieChart, Pie, Cell,
@@ -83,10 +87,8 @@ interface Revenue {
   paidProjectCount: number;
   hostedProjectCount: number;
   paidGenerationCount: number;
-  totalIterationCredits: number;
   estimatedGenerationRevenue: number;
   estimatedMonthlyHostingRevenue: number;
-  estimatedIterationRevenue: number;
 }
 
 interface EmailHealth {
@@ -130,6 +132,11 @@ interface SystemInfo {
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 
+const ROWS_PER_PAGE_OPTIONS = [10, 20, 50, 100];
+
+const TH_SX = { fontWeight: 700, textAlign: 'center' as const, whiteSpace: 'nowrap' as const } as const;
+const TD_SX = { textAlign: 'center' as const } as const;
+
 function StatCard({ label, value, icon, sub }: { label: string; value: string | number; icon: ReactNode; sub?: string }) {
   return (
     <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
@@ -151,6 +158,7 @@ const STATUS_COLORS: Record<string, 'success' | 'error' | 'warning' | 'info' | '
   generating: 'warning',
   building: 'info',
   planning: 'default',
+  stopped: 'default',
 };
 
 const PIE_COLORS = ['#7c3aed', '#06b6d4', '#f59e0b', '#ef4444', '#10b981', '#ec4899', '#8b5cf6'];
@@ -176,7 +184,7 @@ function formatUptime(s: number): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-/* ─── Tab Panels ─────��────────────────────────���──────────────────────────── */
+/* ─── Tab Panels ─────────────────────────────────────────────────────────── */
 
 function OverviewPanel() {
   const { t } = useTranslation();
@@ -277,18 +285,19 @@ function UsersPanel() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const load = (p: number, s: string) => {
+  const load = (p: number, rpp: number, s: string) => {
     setLoading(true);
-    api.get<{ users: UserRow[]; total: number }>(`/admin/users?page=${p + 1}&limit=20&search=${encodeURIComponent(s)}`)
+    api.get<{ users: UserRow[]; total: number }>(`/admin/users?page=${p + 1}&limit=${rpp}&search=${encodeURIComponent(s)}`)
       .then((d) => { setUsers(d.users); setTotal(d.total); })
       .catch(() => {})
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(page, search); }, [page, search]);
+  useEffect(() => { load(page, rowsPerPage, search); }, [page, rowsPerPage, search]);
 
   return (
     <Stack spacing={2}>
@@ -302,21 +311,21 @@ function UsersPanel() {
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>{t('admin.users.colEmail')}</TableCell>
-                <TableCell>{t('admin.users.colAdmin')}</TableCell>
-                <TableCell>{t('admin.users.colSessions')}</TableCell>
-                <TableCell>{t('admin.users.colFreeUsed')}</TableCell>
-                <TableCell>{t('admin.users.colJoined')}</TableCell>
+                <TableCell sx={TH_SX}>{t('admin.users.colEmail')}</TableCell>
+                <TableCell sx={TH_SX}>{t('admin.users.colAdmin')}</TableCell>
+                <TableCell sx={TH_SX}>{t('admin.users.colSessions')}</TableCell>
+                <TableCell sx={TH_SX}>{t('admin.users.colFreeUsed')}</TableCell>
+                <TableCell sx={TH_SX}>{t('admin.users.colJoined')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {users.map((u) => (
                 <TableRow key={u.id} hover>
-                  <TableCell>{u.email}</TableCell>
-                  <TableCell>{u.isAdmin ? <Chip label={t('admin.users.adminChip')} size="small" color="primary" /> : '-'}</TableCell>
-                  <TableCell>{u._count.sessions}</TableCell>
-                  <TableCell>{u.freeProjectUsed ? t('admin.common.yes') : t('admin.common.no')}</TableCell>
-                  <TableCell>{formatDate(u.createdAt)}</TableCell>
+                  <TableCell sx={TD_SX}>{u.email}</TableCell>
+                  <TableCell sx={TD_SX}>{u.isAdmin ? <Chip label={t('admin.users.adminChip')} size="small" color="primary" /> : '-'}</TableCell>
+                  <TableCell sx={TD_SX}>{u._count.sessions}</TableCell>
+                  <TableCell sx={TD_SX}>{u.freeProjectUsed ? t('admin.common.yes') : t('admin.common.no')}</TableCell>
+                  <TableCell sx={TD_SX}>{formatDate(u.createdAt)}</TableCell>
                 </TableRow>
               ))}
               {users.length === 0 && (
@@ -325,8 +334,10 @@ function UsersPanel() {
             </TableBody>
           </Table>
           <TablePagination
-            component="div" count={total} page={page} rowsPerPage={20}
-            onPageChange={(_, p) => setPage(p)} rowsPerPageOptions={[20]}
+            component="div" count={total} page={page} rowsPerPage={rowsPerPage}
+            onPageChange={(_, p) => setPage(p)}
+            onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
+            rowsPerPageOptions={ROWS_PER_PAGE_OPTIONS}
           />
         </TableContainer>
       )}
@@ -339,20 +350,43 @@ function ProjectsPanel() {
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [acting, setActing] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ open: boolean; severity: 'success' | 'error'; message: string }>({ open: false, severity: 'success', message: '' });
 
-  const load = (p: number, s: string) => {
+  const load = (p: number, rpp: number, s: string) => {
     setLoading(true);
     const q = s ? `&status=${s}` : '';
-    api.get<{ projects: ProjectRow[]; total: number }>(`/admin/projects?page=${p + 1}&limit=20${q}`)
+    api.get<{ projects: ProjectRow[]; total: number }>(`/admin/projects?page=${p + 1}&limit=${rpp}${q}`)
       .then((d) => { setProjects(d.projects); setTotal(d.total); })
       .catch(() => {})
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(page, status); }, [page, status]);
+  useEffect(() => { load(page, rowsPerPage, status); }, [page, rowsPerPage, status]);
+
+  const doAction = async (projectId: string, action: 'stop' | 'restart' | 'clear-error' | 'delete', confirmKey: string) => {
+    if (!window.confirm(t(`admin.projects.${confirmKey}`))) return;
+    setActing(projectId);
+    try {
+      if (action === 'delete') {
+        await api.delete(`/admin/projects/${projectId}`);
+      } else {
+        await api.post(`/admin/projects/${projectId}/${action}`);
+      }
+      setToast({ open: true, severity: 'success', message: t('admin.projects.actionSuccess') });
+      load(page, rowsPerPage, status);
+    } catch (e: any) {
+      setToast({ open: true, severity: 'error', message: t('admin.projects.actionFailed', { message: e?.message ?? '?' }) });
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const COL_COUNT = 10;
 
   return (
     <Stack spacing={2}>
@@ -364,6 +398,7 @@ function ProjectsPanel() {
           <MenuItem value="error">{t('admin.statusLabels.error')}</MenuItem>
           <MenuItem value="generating">{t('admin.statusLabels.generating')}</MenuItem>
           <MenuItem value="building">{t('admin.statusLabels.building')}</MenuItem>
+          <MenuItem value="stopped">{t('admin.statusLabels.stopped')}</MenuItem>
         </Select>
       </FormControl>
       {loading ? <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress size={28} /></Box> : (
@@ -371,35 +406,67 @@ function ProjectsPanel() {
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell />
-                <TableCell>{t('admin.projects.colId')}</TableCell>
-                <TableCell>{t('admin.projects.colOwner')}</TableCell>
-                <TableCell>{t('admin.projects.colStatus')}</TableCell>
-                <TableCell>{t('admin.projects.colPaid')}</TableCell>
-                <TableCell>{t('admin.projects.colHosted')}</TableCell>
-                <TableCell>{t('admin.projects.colIterations')}</TableCell>
-                <TableCell>{t('admin.projects.colFixAttempts')}</TableCell>
-                <TableCell>{t('admin.projects.colCreated')}</TableCell>
+                <TableCell sx={{ ...TH_SX, width: 30 }} />
+                <TableCell sx={TH_SX}>{t('admin.projects.colId')}</TableCell>
+                <TableCell sx={TH_SX}>{t('admin.projects.colOwner')}</TableCell>
+                <TableCell sx={TH_SX}>{t('admin.projects.colStatus')}</TableCell>
+                <TableCell sx={TH_SX}>{t('admin.projects.colPaid')}</TableCell>
+                <TableCell sx={TH_SX}>{t('admin.projects.colHosted')}</TableCell>
+                <TableCell sx={TH_SX}>{t('admin.projects.colIterations')}</TableCell>
+                <TableCell sx={TH_SX}>{t('admin.projects.colFixAttempts')}</TableCell>
+                <TableCell sx={TH_SX}>{t('admin.projects.colCreated')}</TableCell>
+                <TableCell sx={TH_SX}>{t('admin.projects.colActions')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {projects.map((p) => (
                 <Box component="tbody" key={p.id}>
-                  <TableRow hover onClick={() => setExpanded(expanded === p.id ? null : p.id)} sx={{ cursor: 'pointer' }}>
-                    <TableCell sx={{ width: 30 }}>
+                  <TableRow hover sx={{ cursor: 'pointer' }}>
+                    <TableCell sx={{ ...TD_SX, width: 30 }} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>
                       {expanded === p.id ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                     </TableCell>
-                    <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{p.id.slice(0, 8)}</TableCell>
-                    <TableCell>{p.session.user.email}</TableCell>
-                    <TableCell><Chip label={t(`admin.statusLabels.${p.status}`, { defaultValue: p.status })} size="small" color={STATUS_COLORS[p.status] ?? 'default'} /></TableCell>
-                    <TableCell>{p.paid ? t('admin.common.yes') : t('admin.common.no')}</TableCell>
-                    <TableCell>{p.hosted ? t('admin.common.yes') : t('admin.common.no')}{p.customDomain ? ` (${p.customDomain})` : ''}</TableCell>
-                    <TableCell>{t('admin.projects.iterationsCell', { n: p._count.iterationLogs, paid: p.paidIterationCredits })}</TableCell>
-                    <TableCell>{p.fixAttempts}</TableCell>
-                    <TableCell>{formatDate(p.createdAt)}</TableCell>
+                    <TableCell sx={{ ...TD_SX, fontFamily: 'monospace', fontSize: 12 }} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.id.slice(0, 8)}</TableCell>
+                    <TableCell sx={TD_SX} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.session.user.email}</TableCell>
+                    <TableCell sx={TD_SX} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>
+                      <Chip label={t(`admin.statusLabels.${p.status}`, { defaultValue: p.status })} size="small" color={STATUS_COLORS[p.status] ?? 'default'} />
+                    </TableCell>
+                    <TableCell sx={TD_SX} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.paid ? t('admin.common.yes') : t('admin.common.no')}</TableCell>
+                    <TableCell sx={TD_SX} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.hosted ? t('admin.common.yes') : t('admin.common.no')}{p.customDomain ? ` (${p.customDomain})` : ''}</TableCell>
+                    <TableCell sx={TD_SX} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{t('admin.projects.iterationsCell', { n: p._count.iterationLogs, paid: p.paidIterationCredits })}</TableCell>
+                    <TableCell sx={TD_SX} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.fixAttempts}</TableCell>
+                    <TableCell sx={TD_SX} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{formatDate(p.createdAt)}</TableCell>
+                    <TableCell sx={TD_SX}>
+                      <Stack direction="row" gap={0.5} justifyContent="center" flexWrap="wrap">
+                        {(p.status === 'running' || p.runPort) && (
+                          <Tooltip title={t('admin.projects.actionStop')}>
+                            <IconButton size="small" color="warning" disabled={acting === p.id} onClick={() => doAction(p.id, 'stop', 'confirmStop')}>
+                              <StopIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        <Tooltip title={t('admin.projects.actionRestart')}>
+                          <IconButton size="small" color="primary" disabled={acting === p.id} onClick={() => doAction(p.id, 'restart', 'confirmRestart')}>
+                            <RestartAltIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        {p.status === 'error' && (
+                          <Tooltip title={t('admin.projects.actionClearError')}>
+                            <IconButton size="small" color="info" disabled={acting === p.id} onClick={() => doAction(p.id, 'clear-error', 'confirmClearError')}>
+                              <CleaningServicesIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        <Tooltip title={t('admin.projects.actionDelete')}>
+                          <IconButton size="small" color="error" disabled={acting === p.id} onClick={() => doAction(p.id, 'delete', 'confirmDelete')}>
+                            <DeleteForeverIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        {acting === p.id && <CircularProgress size={16} />}
+                      </Stack>
+                    </TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell colSpan={9} sx={{ p: 0, border: 0 }}>
+                    <TableCell colSpan={COL_COUNT} sx={{ p: 0, border: 0 }}>
                       <Collapse in={expanded === p.id}>
                         <Box sx={{ p: 2, bgcolor: 'background.default' }}>
                           <Typography variant="caption" fontWeight={700}>{t('admin.projects.sessionId')}</Typography>
@@ -414,16 +481,22 @@ function ProjectsPanel() {
                 </Box>
               ))}
               {projects.length === 0 && (
-                <TableRow><TableCell colSpan={9} align="center">{t('admin.projects.noProjects')}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={COL_COUNT} align="center">{t('admin.projects.noProjects')}</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
           <TablePagination
-            component="div" count={total} page={page} rowsPerPage={20}
-            onPageChange={(_, p) => setPage(p)} rowsPerPageOptions={[20]}
+            component="div" count={total} page={page} rowsPerPage={rowsPerPage}
+            onPageChange={(_, p) => setPage(p)}
+            onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
+            rowsPerPageOptions={ROWS_PER_PAGE_OPTIONS}
           />
         </TableContainer>
       )}
+
+      <Snackbar open={toast.open} autoHideDuration={5000} onClose={() => setToast((t) => ({ ...t, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert severity={toast.severity} onClose={() => setToast((t) => ({ ...t, open: false }))} sx={{ width: '100%' }}>{toast.message}</Alert>
+      </Snackbar>
     </Stack>
   );
 }
@@ -442,7 +515,7 @@ function RevenuePanel() {
 
   return (
     <Grid container spacing={2}>
-      <Grid item xs={12} sm={4}>
+      <Grid item xs={12} sm={6}>
         <StatCard
           label={t('admin.revenue.generationRevenue')}
           value={`€${data.estimatedGenerationRevenue.toLocaleString()}`}
@@ -450,7 +523,7 @@ function RevenuePanel() {
           sub={t('admin.revenue.paidProjectsSub', { n: data.paidProjectCount })}
         />
       </Grid>
-      <Grid item xs={12} sm={4}>
+      <Grid item xs={12} sm={6}>
         <StatCard
           label={t('admin.revenue.monthlyHosting')}
           value={t('admin.revenue.monthlyHostingValue', { value: data.estimatedMonthlyHostingRevenue.toLocaleString() })}
@@ -458,25 +531,20 @@ function RevenuePanel() {
           sub={t('admin.revenue.hostedSub', { n: data.hostedProjectCount })}
         />
       </Grid>
-      <Grid item xs={12} sm={4}>
-        <StatCard
-          label={t('admin.revenue.iterationRevenue')}
-          value={`€${data.estimatedIterationRevenue.toLocaleString()}`}
-          icon={<TrendingUpIcon />}
-          sub={t('admin.revenue.creditsSub', { n: data.totalIterationCredits })}
-        />
-      </Grid>
       <Grid item xs={12}>
         <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
           <Typography variant="subtitle2" fontWeight={700} mb={1}>{t('admin.revenue.summary')}</Typography>
           <Typography variant="body2" color="text.secondary">
             {t('admin.revenue.summaryBody', {
-              oneTime: (data.estimatedGenerationRevenue + data.estimatedIterationRevenue).toLocaleString(),
+              oneTime: data.estimatedGenerationRevenue.toLocaleString(),
               recurring: data.estimatedMonthlyHostingRevenue.toLocaleString(),
             })}
           </Typography>
           <Typography variant="body2" color="text.secondary" mt={0.5}>
             {t('admin.revenue.paidGenerations', { n: data.paidGenerationCount })}
+          </Typography>
+          <Typography variant="caption" color="text.disabled" mt={0.5} display="block">
+            {t('admin.revenue.iterationNote')}
           </Typography>
         </Paper>
       </Grid>
@@ -528,20 +596,21 @@ function PlansPanel() {
   const [plans, setPlans] = useState<PlanRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
   const [appType, setAppType] = useState('');
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const load = (p: number, filter: string) => {
+  const load = (p: number, rpp: number, filter: string) => {
     setLoading(true);
     const q = filter ? `&appType=${encodeURIComponent(filter)}` : '';
-    api.get<{ plans: PlanRow[]; total: number }>(`/admin/plans?page=${p + 1}&limit=20${q}`)
+    api.get<{ plans: PlanRow[]; total: number }>(`/admin/plans?page=${p + 1}&limit=${rpp}${q}`)
       .then((d) => { setPlans(d.plans); setTotal(d.total); })
       .catch(() => {})
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(page, appType); }, [page, appType]);
+  useEffect(() => { load(page, rowsPerPage, appType); }, [page, rowsPerPage, appType]);
 
   return (
     <Stack spacing={2}>
@@ -561,13 +630,13 @@ function PlansPanel() {
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell />
-                <TableCell>{t('admin.plans.colOwner')}</TableCell>
-                <TableCell>{t('admin.plans.colAppType')}</TableCell>
-                <TableCell>{t('admin.plans.colLocked')}</TableCell>
-                <TableCell>{t('admin.plans.colSessionStatus')}</TableCell>
-                <TableCell>{t('admin.plans.colProject')}</TableCell>
-                <TableCell>{t('admin.plans.colCreated')}</TableCell>
+                <TableCell sx={{ ...TH_SX, width: 30 }} />
+                <TableCell sx={TH_SX}>{t('admin.plans.colOwner')}</TableCell>
+                <TableCell sx={TH_SX}>{t('admin.plans.colAppType')}</TableCell>
+                <TableCell sx={TH_SX}>{t('admin.plans.colLocked')}</TableCell>
+                <TableCell sx={TH_SX}>{t('admin.plans.colSessionStatus')}</TableCell>
+                <TableCell sx={TH_SX}>{t('admin.plans.colProject')}</TableCell>
+                <TableCell sx={TH_SX}>{t('admin.plans.colCreated')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -576,21 +645,21 @@ function PlansPanel() {
                 return (
                   <Box component="tbody" key={p.id}>
                     <TableRow hover onClick={() => setExpanded(expanded === p.id ? null : p.id)} sx={{ cursor: 'pointer' }}>
-                      <TableCell sx={{ width: 30 }}>
+                      <TableCell sx={{ ...TD_SX, width: 30 }}>
                         {expanded === p.id ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                       </TableCell>
-                      <TableCell>{p.session.user.email}</TableCell>
-                      <TableCell>
+                      <TableCell sx={TD_SX}>{p.session.user.email}</TableCell>
+                      <TableCell sx={TD_SX}>
                         {planData.appType ? <Chip label={String(planData.appType)} size="small" color="primary" variant="outlined" /> : '-'}
                       </TableCell>
-                      <TableCell>{p.locked ? <Chip label={t('admin.plans.chipLocked')} size="small" color="success" /> : <Chip label={t('admin.plans.chipDraft')} size="small" variant="outlined" />}</TableCell>
-                      <TableCell><Chip label={t(`admin.statusLabels.${p.session.status}`, { defaultValue: p.session.status })} size="small" color={STATUS_COLORS[p.session.status] ?? 'default'} /></TableCell>
-                      <TableCell>
+                      <TableCell sx={TD_SX}>{p.locked ? <Chip label={t('admin.plans.chipLocked')} size="small" color="success" /> : <Chip label={t('admin.plans.chipDraft')} size="small" variant="outlined" />}</TableCell>
+                      <TableCell sx={TD_SX}><Chip label={t(`admin.statusLabels.${p.session.status}`, { defaultValue: p.session.status })} size="small" color={STATUS_COLORS[p.session.status] ?? 'default'} /></TableCell>
+                      <TableCell sx={TD_SX}>
                         {p.session.project
                           ? <Chip label={t(`admin.statusLabels.${p.session.project.status}`, { defaultValue: p.session.project.status })} size="small" color={STATUS_COLORS[p.session.project.status] ?? 'default'} />
                           : '-'}
                       </TableCell>
-                      <TableCell>{formatDate(p.createdAt)}</TableCell>
+                      <TableCell sx={TD_SX}>{formatDate(p.createdAt)}</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell colSpan={7} sx={{ p: 0, border: 0 }}>
@@ -669,8 +738,10 @@ function PlansPanel() {
             </TableBody>
           </Table>
           <TablePagination
-            component="div" count={total} page={page} rowsPerPage={20}
-            onPageChange={(_, p) => setPage(p)} rowsPerPageOptions={[20]}
+            component="div" count={total} page={page} rowsPerPage={rowsPerPage}
+            onPageChange={(_, p) => setPage(p)}
+            onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
+            rowsPerPageOptions={ROWS_PER_PAGE_OPTIONS}
           />
         </TableContainer>
       )}
@@ -683,18 +754,19 @@ function ErrorsPanel() {
   const [projects, setProjects] = useState<ErrorProject[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const load = (p: number) => {
+  const load = (p: number, rpp: number) => {
     setLoading(true);
-    api.get<{ projects: ErrorProject[]; total: number }>(`/admin/errors?page=${p + 1}&limit=20`)
+    api.get<{ projects: ErrorProject[]; total: number }>(`/admin/errors?page=${p + 1}&limit=${rpp}`)
       .then((d) => { setProjects(d.projects); setTotal(d.total); })
       .catch(() => {})
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(page); }, [page]);
+  useEffect(() => { load(page, rowsPerPage); }, [page, rowsPerPage]);
 
   return (
     <Stack spacing={2}>
@@ -704,24 +776,24 @@ function ErrorsPanel() {
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell />
-                <TableCell>{t('admin.errorsTab.colId')}</TableCell>
-                <TableCell>{t('admin.errorsTab.colOwner')}</TableCell>
-                <TableCell>{t('admin.errorsTab.colFixAttempts')}</TableCell>
-                <TableCell>{t('admin.errorsTab.colUpdated')}</TableCell>
+                <TableCell sx={{ ...TH_SX, width: 30 }} />
+                <TableCell sx={TH_SX}>{t('admin.errorsTab.colId')}</TableCell>
+                <TableCell sx={TH_SX}>{t('admin.errorsTab.colOwner')}</TableCell>
+                <TableCell sx={TH_SX}>{t('admin.errorsTab.colFixAttempts')}</TableCell>
+                <TableCell sx={TH_SX}>{t('admin.errorsTab.colUpdated')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {projects.map((p) => (
                 <Box component="tbody" key={p.id}>
                   <TableRow hover onClick={() => setExpanded(expanded === p.id ? null : p.id)} sx={{ cursor: 'pointer' }}>
-                    <TableCell sx={{ width: 30 }}>
+                    <TableCell sx={{ ...TD_SX, width: 30 }}>
                       {expanded === p.id ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                     </TableCell>
-                    <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{p.id.slice(0, 8)}</TableCell>
-                    <TableCell>{p.session.user.email}</TableCell>
-                    <TableCell>{p.fixAttempts}</TableCell>
-                    <TableCell>{formatDate(p.updatedAt)}</TableCell>
+                    <TableCell sx={{ ...TD_SX, fontFamily: 'monospace', fontSize: 12 }}>{p.id.slice(0, 8)}</TableCell>
+                    <TableCell sx={TD_SX}>{p.session.user.email}</TableCell>
+                    <TableCell sx={TD_SX}>{p.fixAttempts}</TableCell>
+                    <TableCell sx={TD_SX}>{formatDate(p.updatedAt)}</TableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell colSpan={5} sx={{ p: 0, border: 0 }}>
@@ -755,8 +827,10 @@ function ErrorsPanel() {
             </TableBody>
           </Table>
           <TablePagination
-            component="div" count={total} page={page} rowsPerPage={20}
-            onPageChange={(_, p) => setPage(p)} rowsPerPageOptions={[20]}
+            component="div" count={total} page={page} rowsPerPage={rowsPerPage}
+            onPageChange={(_, p) => setPage(p)}
+            onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
+            rowsPerPageOptions={ROWS_PER_PAGE_OPTIONS}
           />
         </TableContainer>
       )}
@@ -802,7 +876,7 @@ function SystemPanel() {
   );
 }
 
-/* ─── Main Admin Page ───────────��────────────────────────────────────────── */
+/* ─── Main Admin Page ────────────────────────────────────────────────────── */
 
 export default function AdminPage() {
   const { t } = useTranslation();

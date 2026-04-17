@@ -17,6 +17,13 @@ const APP_BASE_URL = process.env.APP_BASE_URL ?? 'http://localhost';
 const CLIENT_ID = process.env.STRIPE_CLIENT_ID ?? '';
 const CALLBACK_URL = `${APP_BASE_URL}/api/project-payments/oauth/callback`;
 
+function requireInternalSecret(req: { header: (name: string) => string | undefined }) {
+  const secret = (process.env.INTERNAL_SECRET ?? '').trim();
+  if (!secret) return;
+  const got = String(req.header('x-internal-secret') ?? '').trim();
+  if (!got || got !== secret) throw new AppError(401, 'Unauthorized');
+}
+
 /** Sign state to prevent CSRF on the OAuth callback. Encodes both projectId and userId. */
 function signState(projectId: string, userId: string): string {
   const payload = `${projectId}:${userId}`;
@@ -206,6 +213,50 @@ router.post('/create-checkout-session/:projectId', async (req, res, next) => {
     );
 
     return res.json({ url: session.url });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ─── POST /verify-checkout-session/:projectId  (internal — called by generated server.js) ───
+router.post('/verify-checkout-session/:projectId', async (req, res, next) => {
+  try {
+    requireInternalSecret(req);
+
+    const body = z.object({
+      sessionId: z.string().min(1),
+    }).parse(req.body);
+
+    const project = await prisma.project.findUniqueOrThrow({
+      where: { id: req.params.projectId },
+    });
+
+    if (!project.paymentsEnabled || !project.stripeAccountId) {
+      throw new AppError(400, 'Payments not configured for this project');
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(
+      body.sessionId,
+      {},
+      { stripeAccount: project.stripeAccountId },
+    );
+
+    if (session.mode !== 'payment') {
+      throw new AppError(400, 'Invalid checkout session mode');
+    }
+    if (session.payment_status !== 'paid') {
+      throw new AppError(400, 'Payment not completed');
+    }
+
+    return res.json({
+      ok: true,
+      sessionId: session.id,
+      amountTotal: session.amount_total ?? 0,
+      currency: String(session.currency ?? '').toLowerCase(),
+      customerEmail: session.customer_details?.email ?? session.customer_email ?? null,
+      paymentStatus: session.payment_status,
+      status: session.status ?? null,
+    });
   } catch (err) {
     return next(err);
   }
