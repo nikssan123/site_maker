@@ -21,13 +21,22 @@ function detectDevice(ua: string): 'mobile' | 'tablet' | 'desktop' {
   return 'desktop';
 }
 
+const BLOG_RE = /^\/(blog|posts|articles?|news)\/([\w-]+)/i;
+const PRODUCT_RE = /^\/(products?|shop|store|catalog)\/([\w-]+)/i;
+
+function slugToTitle(slug: string): string {
+  return slug
+    .replace(/[-_]/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim();
+}
+
 // Called by app-runner (internal) — no auth required
 router.post('/track', async (req, res, next) => {
   try {
     const data = TrackSchema.parse(req.body);
     const device = detectDevice(data.userAgent ?? '');
 
-    // Anonymous daily visitor hash (IP + projectId + UTC date) — no PII stored
     const today = new Date().toISOString().slice(0, 10);
     const visitorId = data.ip
       ? createHash('sha256').update(`${data.ip}:${data.projectId}:${today}`).digest('hex').slice(0, 16)
@@ -55,7 +64,6 @@ router.get('/:projectId', requireAuth, async (req, res, next) => {
     const { projectId } = req.params;
     const days = Math.min(Number(req.query.days ?? 30), 90);
 
-    // Verify ownership via session
     const project = await prisma.project.findUnique({
       where: { id: projectId },
       include: { session: { select: { userId: true } } },
@@ -75,32 +83,35 @@ router.get('/:projectId', requireAuth, async (req, res, next) => {
       orderBy: { createdAt: 'asc' },
     });
 
-    // Daily page views (YYYY-MM-DD → count)
-    const dailyMap = new Map<string, number>();
+    // Daily views + visitors
+    const dailyViewsMap = new Map<string, number>();
+    const dailyVisitorSets = new Map<string, Set<string>>();
     for (let i = 0; i < days; i++) {
       const d = new Date(since);
       d.setUTCDate(since.getUTCDate() + i);
-      dailyMap.set(d.toISOString().slice(0, 10), 0);
+      const key = d.toISOString().slice(0, 10);
+      dailyViewsMap.set(key, 0);
+      dailyVisitorSets.set(key, new Set());
     }
     for (const e of events) {
       const key = e.createdAt.toISOString().slice(0, 10);
-      dailyMap.set(key, (dailyMap.get(key) ?? 0) + 1);
+      dailyViewsMap.set(key, (dailyViewsMap.get(key) ?? 0) + 1);
+      if (e.visitorId) {
+        const set = dailyVisitorSets.get(key);
+        if (set) set.add(e.visitorId);
+      }
     }
-    const daily = Array.from(dailyMap.entries()).map(([date, views]) => ({ date, views }));
+    const daily = Array.from(dailyViewsMap.entries()).map(([date, views]) => ({
+      date,
+      views,
+      visitors: dailyVisitorSets.get(date)?.size ?? 0,
+    }));
 
-    // Unique visitors (distinct visitorId per day)
-    const uvSet = new Set<string>();
+    // Truly unique visitors across the whole period
+    const allVisitors = new Set<string>();
     for (const e of events) {
-      if (e.visitorId) uvSet.add(`${e.createdAt.toISOString().slice(0, 10)}:${e.visitorId}`);
+      if (e.visitorId) allVisitors.add(e.visitorId);
     }
-
-    // Top pages
-    const pageMap = new Map<string, number>();
-    for (const e of events) pageMap.set(e.path, (pageMap.get(e.path) ?? 0) + 1);
-    const topPages = Array.from(pageMap.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([path, views]) => ({ path, views }));
 
     // Device breakdown
     const deviceMap = new Map<string, number>();
@@ -117,13 +128,44 @@ router.get('/:projectId', requireAuth, async (req, res, next) => {
       .slice(0, 10)
       .map(([referrer, count]) => ({ referrer, count }));
 
+    // Popular blog posts (derived from page-view paths)
+    const blogMap = new Map<string, { slug: string; views: number }>();
+    const productMap = new Map<string, { slug: string; views: number }>();
+    for (const e of events) {
+      const blogMatch = BLOG_RE.exec(e.path);
+      if (blogMatch) {
+        const slug = blogMatch[2];
+        const entry = blogMap.get(slug);
+        if (entry) entry.views++;
+        else blogMap.set(slug, { slug, views: 1 });
+      }
+      const productMatch = PRODUCT_RE.exec(e.path);
+      if (productMatch) {
+        const slug = productMatch[2];
+        const entry = productMap.get(slug);
+        if (entry) entry.views++;
+        else productMap.set(slug, { slug, views: 1 });
+      }
+    }
+
+    const popularBlogPosts = Array.from(blogMap.values())
+      .sort((a, b) => b.views - a.views)
+      .slice(0, 5)
+      .map((p) => ({ title: slugToTitle(p.slug), slug: p.slug, views: p.views }));
+
+    const popularProducts = Array.from(productMap.values())
+      .sort((a, b) => b.views - a.views)
+      .slice(0, 5)
+      .map((p) => ({ title: slugToTitle(p.slug), slug: p.slug, views: p.views }));
+
     res.json({
       totalViews: events.length,
-      uniqueVisitors: uvSet.size,
+      uniqueVisitors: allVisitors.size,
       daily,
-      topPages,
       devices,
       topReferrers,
+      popularBlogPosts,
+      popularProducts,
     });
   } catch (err) {
     next(err);

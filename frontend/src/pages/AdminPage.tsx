@@ -134,8 +134,7 @@ interface SystemInfo {
 
 const ROWS_PER_PAGE_OPTIONS = [10, 20, 50, 100];
 
-const TH_SX = { fontWeight: 700, textAlign: 'center' as const, whiteSpace: 'nowrap' as const } as const;
-const TD_SX = { textAlign: 'center' as const } as const;
+const TH_SX = { fontWeight: 700, whiteSpace: 'nowrap' as const } as const;
 
 function StatCard({ label, value, icon, sub }: { label: string; value: string | number; icon: ReactNode; sub?: string }) {
   return (
@@ -311,21 +310,21 @@ function UsersPanel() {
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell sx={TH_SX}>{t('admin.users.colEmail')}</TableCell>
-                <TableCell sx={TH_SX}>{t('admin.users.colAdmin')}</TableCell>
-                <TableCell sx={TH_SX}>{t('admin.users.colSessions')}</TableCell>
-                <TableCell sx={TH_SX}>{t('admin.users.colFreeUsed')}</TableCell>
-                <TableCell sx={TH_SX}>{t('admin.users.colJoined')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.users.colEmail')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.users.colAdmin')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.users.colSessions')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.users.colFreeUsed')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.users.colJoined')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {users.map((u) => (
                 <TableRow key={u.id} hover>
-                  <TableCell sx={TD_SX}>{u.email}</TableCell>
-                  <TableCell sx={TD_SX}>{u.isAdmin ? <Chip label={t('admin.users.adminChip')} size="small" color="primary" /> : '-'}</TableCell>
-                  <TableCell sx={TD_SX}>{u._count.sessions}</TableCell>
-                  <TableCell sx={TD_SX}>{u.freeProjectUsed ? t('admin.common.yes') : t('admin.common.no')}</TableCell>
-                  <TableCell sx={TD_SX}>{formatDate(u.createdAt)}</TableCell>
+                  <TableCell align="center">{u.email}</TableCell>
+                  <TableCell align="center">{u.isAdmin ? <Chip label={t('admin.users.adminChip')} size="small" color="primary" /> : '-'}</TableCell>
+                  <TableCell align="center">{u._count.sessions}</TableCell>
+                  <TableCell align="center">{u.freeProjectUsed ? t('admin.common.yes') : t('admin.common.no')}</TableCell>
+                  <TableCell align="center">{formatDate(u.createdAt)}</TableCell>
                 </TableRow>
               ))}
               {users.length === 0 && (
@@ -406,36 +405,36 @@ function ProjectsPanel() {
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell sx={{ ...TH_SX, width: 30 }} />
-                <TableCell sx={TH_SX}>{t('admin.projects.colId')}</TableCell>
-                <TableCell sx={TH_SX}>{t('admin.projects.colOwner')}</TableCell>
-                <TableCell sx={TH_SX}>{t('admin.projects.colStatus')}</TableCell>
-                <TableCell sx={TH_SX}>{t('admin.projects.colPaid')}</TableCell>
-                <TableCell sx={TH_SX}>{t('admin.projects.colHosted')}</TableCell>
-                <TableCell sx={TH_SX}>{t('admin.projects.colIterations')}</TableCell>
-                <TableCell sx={TH_SX}>{t('admin.projects.colFixAttempts')}</TableCell>
-                <TableCell sx={TH_SX}>{t('admin.projects.colCreated')}</TableCell>
-                <TableCell sx={TH_SX}>{t('admin.projects.colActions')}</TableCell>
+                <TableCell align="center" sx={{ ...TH_SX, width: 30 }} />
+                <TableCell align="center" sx={TH_SX}>{t('admin.projects.colId')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.projects.colOwner')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.projects.colStatus')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.projects.colPaid')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.projects.colHosted')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.projects.colIterations')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.projects.colFixAttempts')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.projects.colCreated')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.projects.colActions')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {projects.map((p) => (
                 <Box component="tbody" key={p.id}>
                   <TableRow hover sx={{ cursor: 'pointer' }}>
-                    <TableCell sx={{ ...TD_SX, width: 30 }} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>
+                    <TableCell align="center" sx={{ width: 30 }} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>
                       {expanded === p.id ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                     </TableCell>
-                    <TableCell sx={{ ...TD_SX, fontFamily: 'monospace', fontSize: 12 }} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.id.slice(0, 8)}</TableCell>
-                    <TableCell sx={TD_SX} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.session.user.email}</TableCell>
-                    <TableCell sx={TD_SX} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>
+                    <TableCell align="center" sx={{ fontFamily: 'monospace', fontSize: 12 }} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.id.slice(0, 8)}</TableCell>
+                    <TableCell align="center" onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.session.user.email}</TableCell>
+                    <TableCell align="center" onClick={() => setExpanded(expanded === p.id ? null : p.id)}>
                       <Chip label={t(`admin.statusLabels.${p.status}`, { defaultValue: p.status })} size="small" color={STATUS_COLORS[p.status] ?? 'default'} />
                     </TableCell>
-                    <TableCell sx={TD_SX} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.paid ? t('admin.common.yes') : t('admin.common.no')}</TableCell>
-                    <TableCell sx={TD_SX} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.hosted ? t('admin.common.yes') : t('admin.common.no')}{p.customDomain ? ` (${p.customDomain})` : ''}</TableCell>
-                    <TableCell sx={TD_SX} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{t('admin.projects.iterationsCell', { n: p._count.iterationLogs, paid: p.paidIterationCredits })}</TableCell>
-                    <TableCell sx={TD_SX} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.fixAttempts}</TableCell>
-                    <TableCell sx={TD_SX} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{formatDate(p.createdAt)}</TableCell>
-                    <TableCell sx={TD_SX}>
+                    <TableCell align="center" onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.paid ? t('admin.common.yes') : t('admin.common.no')}</TableCell>
+                    <TableCell align="center" onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.hosted ? t('admin.common.yes') : t('admin.common.no')}{p.customDomain ? ` (${p.customDomain})` : ''}</TableCell>
+                    <TableCell align="center" onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{t('admin.projects.iterationsCell', { n: p._count.iterationLogs, paid: p.paidIterationCredits })}</TableCell>
+                    <TableCell align="center" onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.fixAttempts}</TableCell>
+                    <TableCell align="center" onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{formatDate(p.createdAt)}</TableCell>
+                    <TableCell align="center">
                       <Stack direction="row" gap={0.5} justifyContent="center" flexWrap="wrap">
                         {(p.status === 'running' || p.runPort) && (
                           <Tooltip title={t('admin.projects.actionStop')}>
@@ -630,13 +629,13 @@ function PlansPanel() {
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell sx={{ ...TH_SX, width: 30 }} />
-                <TableCell sx={TH_SX}>{t('admin.plans.colOwner')}</TableCell>
-                <TableCell sx={TH_SX}>{t('admin.plans.colAppType')}</TableCell>
-                <TableCell sx={TH_SX}>{t('admin.plans.colLocked')}</TableCell>
-                <TableCell sx={TH_SX}>{t('admin.plans.colSessionStatus')}</TableCell>
-                <TableCell sx={TH_SX}>{t('admin.plans.colProject')}</TableCell>
-                <TableCell sx={TH_SX}>{t('admin.plans.colCreated')}</TableCell>
+                <TableCell align="center" sx={{ ...TH_SX, width: 30 }} />
+                <TableCell align="center" sx={TH_SX}>{t('admin.plans.colOwner')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.plans.colAppType')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.plans.colLocked')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.plans.colSessionStatus')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.plans.colProject')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.plans.colCreated')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -645,21 +644,21 @@ function PlansPanel() {
                 return (
                   <Box component="tbody" key={p.id}>
                     <TableRow hover onClick={() => setExpanded(expanded === p.id ? null : p.id)} sx={{ cursor: 'pointer' }}>
-                      <TableCell sx={{ ...TD_SX, width: 30 }}>
+                      <TableCell align="center" sx={{ width: 30 }}>
                         {expanded === p.id ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                       </TableCell>
-                      <TableCell sx={TD_SX}>{p.session.user.email}</TableCell>
-                      <TableCell sx={TD_SX}>
+                      <TableCell align="center">{p.session.user.email}</TableCell>
+                      <TableCell align="center">
                         {planData.appType ? <Chip label={String(planData.appType)} size="small" color="primary" variant="outlined" /> : '-'}
                       </TableCell>
-                      <TableCell sx={TD_SX}>{p.locked ? <Chip label={t('admin.plans.chipLocked')} size="small" color="success" /> : <Chip label={t('admin.plans.chipDraft')} size="small" variant="outlined" />}</TableCell>
-                      <TableCell sx={TD_SX}><Chip label={t(`admin.statusLabels.${p.session.status}`, { defaultValue: p.session.status })} size="small" color={STATUS_COLORS[p.session.status] ?? 'default'} /></TableCell>
-                      <TableCell sx={TD_SX}>
+                      <TableCell align="center">{p.locked ? <Chip label={t('admin.plans.chipLocked')} size="small" color="success" /> : <Chip label={t('admin.plans.chipDraft')} size="small" variant="outlined" />}</TableCell>
+                      <TableCell align="center"><Chip label={t(`admin.statusLabels.${p.session.status}`, { defaultValue: p.session.status })} size="small" color={STATUS_COLORS[p.session.status] ?? 'default'} /></TableCell>
+                      <TableCell align="center">
                         {p.session.project
                           ? <Chip label={t(`admin.statusLabels.${p.session.project.status}`, { defaultValue: p.session.project.status })} size="small" color={STATUS_COLORS[p.session.project.status] ?? 'default'} />
                           : '-'}
                       </TableCell>
-                      <TableCell sx={TD_SX}>{formatDate(p.createdAt)}</TableCell>
+                      <TableCell align="center">{formatDate(p.createdAt)}</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell colSpan={7} sx={{ p: 0, border: 0 }}>
@@ -776,24 +775,24 @@ function ErrorsPanel() {
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell sx={{ ...TH_SX, width: 30 }} />
-                <TableCell sx={TH_SX}>{t('admin.errorsTab.colId')}</TableCell>
-                <TableCell sx={TH_SX}>{t('admin.errorsTab.colOwner')}</TableCell>
-                <TableCell sx={TH_SX}>{t('admin.errorsTab.colFixAttempts')}</TableCell>
-                <TableCell sx={TH_SX}>{t('admin.errorsTab.colUpdated')}</TableCell>
+                <TableCell align="center" sx={{ ...TH_SX, width: 30 }} />
+                <TableCell align="center" sx={TH_SX}>{t('admin.errorsTab.colId')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.errorsTab.colOwner')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.errorsTab.colFixAttempts')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.errorsTab.colUpdated')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {projects.map((p) => (
                 <Box component="tbody" key={p.id}>
                   <TableRow hover onClick={() => setExpanded(expanded === p.id ? null : p.id)} sx={{ cursor: 'pointer' }}>
-                    <TableCell sx={{ ...TD_SX, width: 30 }}>
+                    <TableCell align="center" sx={{ width: 30 }}>
                       {expanded === p.id ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                     </TableCell>
-                    <TableCell sx={{ ...TD_SX, fontFamily: 'monospace', fontSize: 12 }}>{p.id.slice(0, 8)}</TableCell>
-                    <TableCell sx={TD_SX}>{p.session.user.email}</TableCell>
-                    <TableCell sx={TD_SX}>{p.fixAttempts}</TableCell>
-                    <TableCell sx={TD_SX}>{formatDate(p.updatedAt)}</TableCell>
+                    <TableCell align="center" sx={{ fontFamily: 'monospace', fontSize: 12 }}>{p.id.slice(0, 8)}</TableCell>
+                    <TableCell align="center">{p.session.user.email}</TableCell>
+                    <TableCell align="center">{p.fixAttempts}</TableCell>
+                    <TableCell align="center">{formatDate(p.updatedAt)}</TableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell colSpan={5} sx={{ p: 0, border: 0 }}>
