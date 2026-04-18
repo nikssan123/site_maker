@@ -61,7 +61,18 @@ router.post('/tickets', requireAuth, async (req: Request, res: Response, next: N
 
     // Best-effort email notification — don't fail the request if email send fails.
     const supportInbox = (process.env.SUPPORT_INBOX_EMAIL ?? '').trim();
-    if (supportInbox) {
+    let emailStatus: 'sent' | 'skipped' | 'failed' = 'skipped';
+    let emailError: string | undefined;
+
+    if (!supportInbox) {
+      console.warn('[support] SUPPORT_INBOX_EMAIL not set — skipping email notification');
+    } else if (!(process.env.RESEND_API_KEY ?? '').trim()) {
+      console.warn('[support] RESEND_API_KEY not set — skipping email notification');
+      emailError = 'RESEND_API_KEY not set';
+    } else if (!(process.env.PLATFORM_FROM_EMAIL ?? '').trim()) {
+      console.warn('[support] PLATFORM_FROM_EMAIL not set — skipping email notification');
+      emailError = 'PLATFORM_FROM_EMAIL not set';
+    } else {
       try {
         const email = new EmailService();
         const html = `
@@ -76,18 +87,30 @@ router.post('/tickets', requireAuth, async (req: Request, res: Response, next: N
             <pre style="white-space: pre-wrap; font-family: inherit; margin: 0;">${escapeHtml(description)}</pre>
           </div>
         `.trim();
-        await email.sendEmail({
+        console.info(
+          `[support] sending ticket ${ticket.id} email from=${email.platformFrom} to=${supportInbox}`,
+        );
+        const messageId = await email.sendEmail({
           from: email.platformFrom,
           to: supportInbox,
           subject: `[Support] ${name}`,
           html,
         });
+        emailStatus = 'sent';
+        console.info(`[support] ticket ${ticket.id} email sent — messageId=${messageId}`);
       } catch (err) {
-        console.error('[support] email notification failed:', err);
+        emailStatus = 'failed';
+        emailError = err instanceof Error ? err.message : String(err);
+        console.error(`[support] ticket ${ticket.id} email notification failed:`, err);
       }
     }
 
-    res.status(201).json({ id: ticket.id, createdAt: ticket.createdAt });
+    res.status(201).json({
+      id: ticket.id,
+      createdAt: ticket.createdAt,
+      emailStatus,
+      ...(emailError ? { emailError } : {}),
+    });
   } catch (err) {
     next(err);
   }
