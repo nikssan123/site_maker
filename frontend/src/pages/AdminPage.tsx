@@ -138,15 +138,31 @@ const TH_SX = { fontWeight: 700, whiteSpace: 'nowrap' as const } as const;
 
 function StatCard({ label, value, icon, sub }: { label: string; value: string | number; icon: ReactNode; sub?: string }) {
   return (
-    <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
-      <Stack direction="row" alignItems="center" gap={1.5} mb={1}>
-        <Box sx={{ color: 'primary.main' }}>{icon}</Box>
-        <Typography variant="caption" color="text.secondary" fontWeight={600} textTransform="uppercase" letterSpacing={0.8}>
+    <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2.5 }, borderRadius: 2, height: '100%' }}>
+      <Stack direction="row" alignItems="center" gap={1} mb={{ xs: 0.5, sm: 1 }}>
+        <Box sx={{ color: 'primary.main', display: 'flex', '& svg': { fontSize: { xs: 18, sm: 24 } } }}>{icon}</Box>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          fontWeight={600}
+          textTransform="uppercase"
+          letterSpacing={0.6}
+          sx={{ fontSize: { xs: 10, sm: 11 }, lineHeight: 1.2 }}
+        >
           {label}
         </Typography>
       </Stack>
-      <Typography variant="h4" fontWeight={700}>{typeof value === 'number' ? value.toLocaleString() : value}</Typography>
-      {sub && <Typography variant="caption" color="text.secondary">{sub}</Typography>}
+      <Typography
+        fontWeight={700}
+        sx={{ fontSize: { xs: '1.35rem', sm: '1.8rem', md: '2.125rem' }, lineHeight: 1.15, wordBreak: 'break-word' }}
+      >
+        {typeof value === 'number' ? value.toLocaleString() : value}
+      </Typography>
+      {sub && (
+        <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: 10, sm: 11 } }}>
+          {sub}
+        </Typography>
+      )}
     </Paper>
   );
 }
@@ -215,8 +231,8 @@ function OverviewPanel() {
   const statusData = Object.entries(stats.projectsByStatus).map(([name, value]) => ({ name, value }));
 
   return (
-    <Stack spacing={3}>
-      <Grid container spacing={2}>
+    <Stack spacing={{ xs: 2, sm: 3 }}>
+      <Grid container spacing={{ xs: 1, sm: 2 }}>
         <Grid item xs={6} sm={4} md={3}><StatCard label={t('admin.overview.totalUsers')} value={stats.totalUsers} icon={<PeopleIcon />} sub={t('admin.overview.last7d', { n: stats.usersLast7d })} /></Grid>
         <Grid item xs={6} sm={4} md={3}><StatCard label={t('admin.overview.totalProjects')} value={stats.totalProjects} icon={<FolderIcon />} sub={t('admin.overview.last7d', { n: stats.projectsLast7d })} /></Grid>
         <Grid item xs={6} sm={4} md={3}><StatCard label={t('admin.overview.paidProjects')} value={stats.paidProjects} icon={<AttachMoneyIcon />} /></Grid>
@@ -227,9 +243,9 @@ function OverviewPanel() {
         <Grid item xs={6} sm={4} md={3}><StatCard label={t('admin.overview.totalSessions')} value={stats.totalSessions} icon={<DescriptionIcon />} /></Grid>
       </Grid>
 
-      <Grid container spacing={2}>
+      <Grid container spacing={{ xs: 1, sm: 2 }}>
         <Grid item xs={12} md={8}>
-          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
+          <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2.5 }, borderRadius: 2 }}>
             <Typography variant="subtitle2" fontWeight={700} mb={2}>{t('admin.overview.dailyActivity')}</Typography>
             {chartData.length === 0 ? (
               <Box sx={{ py: 4, textAlign: 'center' }}><Typography color="text.secondary" variant="body2">{t('admin.overview.noDataYet')}</Typography></Box>
@@ -258,7 +274,7 @@ function OverviewPanel() {
           </Paper>
         </Grid>
         <Grid item xs={12} md={4}>
-          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2, height: '100%' }}>
+          <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2.5 }, borderRadius: 2, height: '100%' }}>
             <Typography variant="subtitle2" fontWeight={700} mb={2}>{t('admin.overview.projectsByStatus')}</Typography>
             {statusData.length === 0 ? (
               <Typography color="text.secondary" variant="body2">{t('admin.overview.noProjects')}</Typography>
@@ -1075,20 +1091,28 @@ export default function AdminPage() {
   const [tab, setTab] = useState(0);
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
+    <Box sx={{ height: ['100vh', '100dvh'], display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
       <AppBar position="static" color="transparent" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
-        <Toolbar>
-          <IconButton onClick={() => navigate('/chat')} size="small" sx={{ mr: 1 }}>
+        <Toolbar sx={{ gap: { xs: 0.5, sm: 1 }, minHeight: { xs: 52, sm: 64 }, px: { xs: 1, sm: 2 } }}>
+          <IconButton onClick={() => navigate('/chat')} size="small" sx={{ mr: { xs: 0.5, sm: 1 } }}>
             <ArrowBackIcon />
           </IconButton>
-          <AppLogo size="small" />
-          <Box sx={{ mx: 0.5, width: '1px', height: 20, bgcolor: 'divider' }} />
+          <Box sx={{ display: { xs: 'none', sm: 'flex' }, alignItems: 'center' }}>
+            <AppLogo size="small" />
+            <Box sx={{ mx: 0.5, width: '1px', height: 20, bgcolor: 'divider' }} />
+          </Box>
           <AdminPanelSettingsIcon color="primary" sx={{ mr: 0.5 }} />
-          <Typography variant="h6" fontWeight={700} sx={{ flex: 1 }}>{t('admin.title')}</Typography>
+          <Typography
+            variant="h6"
+            fontWeight={700}
+            sx={{ flex: 1, fontSize: { xs: '1rem', sm: '1.25rem' }, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+          >
+            {t('admin.title')}
+          </Typography>
         </Toolbar>
       </AppBar>
 
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', px: { xs: 0.5, sm: 2 } }}>
         <Tabs
           value={tab}
           onChange={(_, v) => setTab(v)}
@@ -1107,7 +1131,7 @@ export default function AdminPage() {
         </Tabs>
       </Box>
 
-      <Box sx={{ flex: 1, overflow: 'auto', p: 3 }}>
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', p: { xs: 1.5, sm: 3 }, WebkitOverflowScrolling: 'touch' }}>
         {tab === 0 && <OverviewPanel />}
         {tab === 1 && <UsersPanel />}
         {tab === 2 && <ProjectsPanel />}
