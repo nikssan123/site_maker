@@ -16,6 +16,7 @@ import projectPaymentsRouter from './routes/projectPayments';
 import internalRouter from './routes/internal';
 import emailRouter from './routes/email';
 import adminRouter from './routes/admin';
+import supportRouter from './routes/support';
 import { errorHandler } from './middleware/errorHandler';
 import { startEmailQueue, stopEmailQueue } from './services/emailQueue';
 import { stopPersistentHosting } from './services/appRunner';
@@ -72,6 +73,7 @@ app.use('/api/project-payments', projectPaymentsRouter);
 app.use('/api/internal', internalRouter);
 app.use('/api/email', emailRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/support', supportRouter);
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 

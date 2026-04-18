@@ -497,4 +497,50 @@ router.get('/system', async (_req: Request, res: Response, next: NextFunction) =
   }
 });
 
+// ─── Support tickets ────────────────────────────────────────────────────────
+
+router.get('/support-tickets', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
+    const status = req.query.status as string | undefined;
+    const where = status && (status === 'open' || status === 'resolved') ? { status } : {};
+
+    const [tickets, total, openCount] = await Promise.all([
+      prisma.supportTicket.findMany({
+        where,
+        orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.supportTicket.count({ where }),
+      prisma.supportTicket.count({ where: { status: 'open' } }),
+    ]);
+
+    res.json({ tickets, total, page, limit, openCount });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch('/support-tickets/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = String(req.params.id);
+    if (!UUID_RE.test(id)) throw new AppError(400, 'Invalid ticket id');
+
+    const nextStatus = String(req.body?.status ?? '').trim();
+    if (nextStatus !== 'open' && nextStatus !== 'resolved') {
+      throw new AppError(400, 'status must be "open" or "resolved"');
+    }
+
+    const ticket = await prisma.supportTicket.update({
+      where: { id },
+      data: { status: nextStatus },
+    });
+    res.json(ticket);
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

@@ -14,11 +14,13 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import CloudIcon from '@mui/icons-material/Cloud';
 import LockIcon from '@mui/icons-material/Lock';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 import { useProjectStore } from '../store/project';
 import { useAuthStore } from '../store/auth';
 import LanguageSwitcher from './LanguageSwitcher';
+import SupportDialog from './SupportDialog';
 
 interface SessionItem {
   id: string;
@@ -64,6 +66,7 @@ export default function Sidebar({ onNewProject, onClose }: Props) {
 
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [supportOpen, setSupportOpen] = useState(false);
 
   useEffect(() => {
     api.get<SessionItem[]>('/sessions')
@@ -274,6 +277,31 @@ export default function Sidebar({ onNewProject, onClose }: Props) {
           <LanguageSwitcher />
         </Stack>
       </Box>
+
+      {/* Support link */}
+      <Box sx={{ px: 1.5, pb: 0.5 }}>
+        <Box
+          onClick={() => setSupportOpen(true)}
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            px: 1.5,
+            py: 0.75,
+            borderRadius: 2,
+            cursor: 'pointer',
+            color: 'text.disabled',
+            '&:hover': { bgcolor: 'rgba(255,255,255,0.04)', color: 'text.secondary' },
+            transition: 'all 0.15s',
+          }}
+        >
+          <HelpOutlineIcon sx={{ fontSize: 15 }} />
+          <Typography variant="caption" sx={{ fontSize: 11 }}>
+            {t('sidebar.support')}
+          </Typography>
+        </Box>
+      </Box>
+      <SupportDialog open={supportOpen} onClose={() => setSupportOpen(false)} />
 
       {/* Admin link */}
       {user?.isAdmin && (

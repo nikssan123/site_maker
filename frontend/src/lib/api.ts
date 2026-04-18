@@ -247,6 +247,36 @@ export const api = {
       body,
     ),
 
+  createSupportTicket: (body: { name: string; contactEmail: string; contactPhone: string; description: string }) =>
+    request<{ id: string; createdAt: string }>('POST', '/support/tickets', body),
+  adminSupportTicketsList: (opts?: { status?: 'open' | 'resolved' | 'all'; page?: number; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (opts?.status && opts.status !== 'all') qs.set('status', opts.status);
+    if (opts?.page) qs.set('page', String(opts.page));
+    if (opts?.limit) qs.set('limit', String(opts.limit));
+    const q = qs.toString();
+    return request<{
+      tickets: Array<{
+        id: string;
+        userId: string | null;
+        userEmail: string;
+        name: string;
+        contactEmail: string;
+        contactPhone: string;
+        description: string;
+        status: string;
+        createdAt: string;
+        updatedAt: string;
+      }>;
+      total: number;
+      page: number;
+      limit: number;
+      openCount: number;
+    }>('GET', `/admin/support-tickets${q ? `?${q}` : ''}`);
+  },
+  adminSupportTicketUpdate: (id: string, status: 'open' | 'resolved') =>
+    request<{ id: string; status: string }>('PATCH', `/admin/support-tickets/${id}`, { status }),
+
   setHostedSubdomain: (projectId: string, slug: string) =>
     request<{
       customDomain: string | null;

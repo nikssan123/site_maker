@@ -10,12 +10,14 @@ import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import LanguageIcon from '@mui/icons-material/Language';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 import { useAuthStore } from '../store/auth';
 import AppLogo from '../components/AppLogo';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import SupportDialog from '../components/SupportDialog';
 
 function SectionCard({
   icon, title, hint, children,
@@ -166,6 +168,9 @@ export default function SettingsPage() {
       setPortalBusy(false);
     }
   };
+
+  // --- Support ---
+  const [supportOpen, setSupportOpen] = useState(false);
 
   // --- Delete ---
   const [delOpen, setDelOpen] = useState(false);
@@ -422,6 +427,24 @@ export default function SettingsPage() {
         </SectionCard>
 
         <SectionCard
+          icon={<HelpOutlineIcon fontSize="small" />}
+          title={t('settings.sectionSupport')}
+          hint={t('settings.sectionSupportHint')}
+        >
+          <Typography variant="body2" color="text.secondary" mb={1.5}>
+            {t('settings.supportBody')}
+          </Typography>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<HelpOutlineIcon fontSize="small" />}
+            onClick={() => setSupportOpen(true)}
+          >
+            {t('settings.contactSupport')}
+          </Button>
+        </SectionCard>
+
+        <SectionCard
           icon={<WarningAmberIcon fontSize="small" />}
           title={t('settings.sectionDanger')}
           hint={t('settings.sectionDangerHint')}
@@ -480,6 +503,8 @@ export default function SettingsPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <SupportDialog open={supportOpen} onClose={() => setSupportOpen(false)} />
     </Box>
   );
 }

@@ -837,6 +837,198 @@ function ErrorsPanel() {
   );
 }
 
+interface SupportTicketRow {
+  id: string;
+  userId: string | null;
+  userEmail: string;
+  name: string;
+  contactEmail: string;
+  contactPhone: string;
+  description: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function SupportPanel() {
+  const { t } = useTranslation();
+  const [tickets, setTickets] = useState<SupportTicketRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [openCount, setOpenCount] = useState(0);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'resolved'>('open');
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const load = (p: number, rpp: number, status: 'all' | 'open' | 'resolved') => {
+    setLoading(true);
+    api.adminSupportTicketsList({ page: p + 1, limit: rpp, status })
+      .then((d) => { setTickets(d.tickets); setTotal(d.total); setOpenCount(d.openCount); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(page, rowsPerPage, statusFilter); }, [page, rowsPerPage, statusFilter]);
+
+  const toggleStatus = async (row: SupportTicketRow) => {
+    const next: 'open' | 'resolved' = row.status === 'resolved' ? 'open' : 'resolved';
+    setBusyId(row.id);
+    setErrorMsg('');
+    try {
+      await api.adminSupportTicketUpdate(row.id, next);
+      load(page, rowsPerPage, statusFilter);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <Stack spacing={2}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} gap={2} alignItems={{ sm: 'center' }}>
+        <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+          {t('admin.supportTab.countInfo', { n: total, open: openCount })}
+        </Typography>
+        <FormControl size="small" sx={{ minWidth: 160 }}>
+          <InputLabel>{t('admin.supportTab.filterLabel')}</InputLabel>
+          <Select
+            label={t('admin.supportTab.filterLabel')}
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value as 'all' | 'open' | 'resolved'); setPage(0); }}
+          >
+            <MenuItem value="open">{t('admin.supportTab.statusOpen')}</MenuItem>
+            <MenuItem value="resolved">{t('admin.supportTab.statusResolved')}</MenuItem>
+            <MenuItem value="all">{t('admin.supportTab.statusAll')}</MenuItem>
+          </Select>
+        </FormControl>
+      </Stack>
+
+      {errorMsg && <Alert severity="error" onClose={() => setErrorMsg('')}>{errorMsg}</Alert>}
+
+      {loading ? <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress size={28} /></Box> : (
+        <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell align="center" sx={{ ...TH_SX, width: 30 }} />
+                <TableCell align="center" sx={TH_SX}>{t('admin.supportTab.colName')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.supportTab.colEmail')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.supportTab.colStatus')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.supportTab.colCreated')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.supportTab.colActions')}</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {tickets.map((row) => (
+                <Box component="tbody" key={row.id}>
+                  <TableRow hover onClick={() => setExpanded(expanded === row.id ? null : row.id)} sx={{ cursor: 'pointer' }}>
+                    <TableCell align="center" sx={{ width: 30 }}>
+                      {expanded === row.id ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                    </TableCell>
+                    <TableCell align="center">{row.name}</TableCell>
+                    <TableCell align="center" sx={{ fontFamily: 'monospace', fontSize: 12 }}>{row.userEmail}</TableCell>
+                    <TableCell align="center">
+                      <Chip
+                        size="small"
+                        label={row.status === 'resolved' ? t('admin.supportTab.statusResolved') : t('admin.supportTab.statusOpen')}
+                        color={row.status === 'resolved' ? 'success' : 'warning'}
+                        variant="outlined"
+                      />
+                    </TableCell>
+                    <TableCell align="center">{formatDate(row.createdAt)}</TableCell>
+                    <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        disabled={busyId === row.id}
+                        onClick={() => toggleStatus(row)}
+                      >
+                        {busyId === row.id
+                          ? '…'
+                          : row.status === 'resolved'
+                            ? t('admin.supportTab.reopen')
+                            : t('admin.supportTab.markResolved')}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell colSpan={6} sx={{ p: 0, border: 0 }}>
+                      <Collapse in={expanded === row.id}>
+                        <Box sx={{ p: 2, bgcolor: 'background.default' }}>
+                          <Stack direction={{ xs: 'column', sm: 'row' }} gap={2} mb={1.5} flexWrap="wrap">
+                            <Box sx={{ minWidth: 180 }}>
+                              <Typography variant="caption" fontWeight={700} sx={{ display: 'block' }}>
+                                {t('admin.supportTab.contactEmail')}
+                              </Typography>
+                              <Typography
+                                component="a"
+                                href={`mailto:${row.contactEmail}`}
+                                sx={{ fontSize: 12, fontFamily: 'monospace', color: 'primary.light', wordBreak: 'break-all' }}
+                              >
+                                {row.contactEmail}
+                              </Typography>
+                            </Box>
+                            <Box sx={{ minWidth: 160 }}>
+                              <Typography variant="caption" fontWeight={700} sx={{ display: 'block' }}>
+                                {t('admin.supportTab.contactPhone')}
+                              </Typography>
+                              <Typography
+                                component="a"
+                                href={`tel:${row.contactPhone.replace(/[^\d+]/g, '')}`}
+                                sx={{ fontSize: 12, fontFamily: 'monospace', color: 'primary.light' }}
+                              >
+                                {row.contactPhone}
+                              </Typography>
+                            </Box>
+                            <Box sx={{ minWidth: 180 }}>
+                              <Typography variant="caption" fontWeight={700} sx={{ display: 'block' }}>
+                                {t('admin.supportTab.accountEmail')}
+                              </Typography>
+                              <Typography sx={{ fontSize: 12, fontFamily: 'monospace', color: 'text.secondary', wordBreak: 'break-all' }}>
+                                {row.userEmail}
+                              </Typography>
+                            </Box>
+                          </Stack>
+                          <Typography variant="caption" fontWeight={700}>{t('admin.supportTab.description')}</Typography>
+                          <Box
+                            component="pre"
+                            sx={{
+                              mt: 0.5, p: 1.5, borderRadius: 1,
+                              bgcolor: 'rgba(0,0,0,0.3)',
+                              fontSize: 12, fontFamily: 'inherit',
+                              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                              maxHeight: 320, overflow: 'auto',
+                            }}
+                          >
+                            {row.description}
+                          </Box>
+                        </Box>
+                      </Collapse>
+                    </TableCell>
+                  </TableRow>
+                </Box>
+              ))}
+              {tickets.length === 0 && (
+                <TableRow><TableCell colSpan={6} align="center">{t('admin.supportTab.noTickets')}</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+          <TablePagination
+            component="div" count={total} page={page} rowsPerPage={rowsPerPage}
+            onPageChange={(_, p) => setPage(p)}
+            onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
+            rowsPerPageOptions={ROWS_PER_PAGE_OPTIONS}
+          />
+        </TableContainer>
+      )}
+    </Stack>
+  );
+}
+
 function SystemPanel() {
   const { t } = useTranslation();
   const [data, setData] = useState<SystemInfo | null>(null);
@@ -910,6 +1102,7 @@ export default function AdminPage() {
           <Tab label={t('admin.tabs.email')} />
           <Tab label={t('admin.tabs.plans')} />
           <Tab label={t('admin.tabs.errors')} />
+          <Tab label={t('admin.tabs.support')} />
           <Tab label={t('admin.tabs.system')} />
         </Tabs>
       </Box>
@@ -922,7 +1115,8 @@ export default function AdminPage() {
         {tab === 4 && <EmailHealthPanel />}
         {tab === 5 && <PlansPanel />}
         {tab === 6 && <ErrorsPanel />}
-        {tab === 7 && <SystemPanel />}
+        {tab === 7 && <SupportPanel />}
+        {tab === 8 && <SystemPanel />}
       </Box>
     </Box>
   );

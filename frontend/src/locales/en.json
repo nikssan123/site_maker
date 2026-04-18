@@ -149,7 +149,8 @@
     "justNow": "just now",
     "minutesAgo": "{{n}} min ago",
     "hoursAgo": "{{n}} h ago",
-    "daysAgo": "{{n}} d ago"
+    "daysAgo": "{{n}} d ago",
+    "support": "Need help? Contact us"
   },
   "tour": {
     "next": "Next",
@@ -210,7 +211,8 @@
     "iterationPlanNeedUnlock": "The project is locked — use the button below to unlock it and apply the change.",
     "changesApplied": "Changes applied successfully.",
     "historyLabel": "Improvement history ({{n}})",
-    "historyUntitled": "Improvement"
+    "historyUntitled": "Improvement",
+    "support": "Support"
   },
   "billing": {
     "title": "Billing",
@@ -684,7 +686,11 @@
     "typeToConfirm": "Type \"delete\"",
     "confirmDelete": "Delete forever",
     "deleting": "Deleting…",
-    "deleteSuccess": "Account deleted."
+    "deleteSuccess": "Account deleted.",
+    "sectionSupport": "Support",
+    "sectionSupportHint": "Have a question, found a bug, or need help with your site? We are here to help.",
+    "supportBody": "Open a support ticket and our team will get back to you as soon as possible.",
+    "contactSupport": "Contact support"
   },
   "admin": {
     "title": "Admin panel",
@@ -703,6 +709,7 @@
       "email": "Email",
       "plans": "Plans",
       "errors": "Errors",
+      "support": "Support",
       "system": "System"
     },
     "failed": {
@@ -835,6 +842,25 @@
       "memoryRss": "Memory (RSS)",
       "memoryRssSub": "Heap: {{used}}/{{total}} MB",
       "uptime": "Uptime"
+    },
+    "supportTab": {
+      "countInfo": "{{n}} ticket(s) total · {{open}} open",
+      "filterLabel": "Status",
+      "statusAll": "All",
+      "statusOpen": "Open",
+      "statusResolved": "Resolved",
+      "colName": "Name",
+      "colEmail": "Email",
+      "colStatus": "Status",
+      "colCreated": "Created",
+      "colActions": "Actions",
+      "contactEmail": "Contact email",
+      "contactPhone": "Contact phone",
+      "accountEmail": "Account email",
+      "description": "Description",
+      "markResolved": "Mark resolved",
+      "reopen": "Reopen",
+      "noTickets": "No tickets"
     }
   },
   "adminWorkspace": {
@@ -1157,5 +1183,23 @@
   },
   "errors": {
     "generic": "Something went wrong"
+  },
+  "support": {
+    "title": "Contact support",
+    "body": "Describe the issue or question you are running into. Leave a contact email and phone so we can reach you directly.",
+    "nameLabel": "Your name",
+    "emailLabel": "Contact email",
+    "phoneLabel": "Contact phone",
+    "descriptionLabel": "How can we help?",
+    "descriptionPlaceholder": "Describe the problem, what you were trying to do, and anything we should know.",
+    "send": "Send to support",
+    "sending": "Sending…",
+    "close": "Close",
+    "sentTitle": "Message sent",
+    "sentBody": "Thanks — we received your ticket and will contact you using the email or phone you provided.",
+    "errorRequired": "Please fill in every field.",
+    "errorEmailInvalid": "Please enter a valid email address.",
+    "errorPhoneInvalid": "Please enter a valid phone number (at least 6 digits).",
+    "errorGeneric": "Could not send your message. Please try again."
   }
 }

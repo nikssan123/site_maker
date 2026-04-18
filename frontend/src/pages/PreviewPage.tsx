@@ -22,6 +22,7 @@ import HistoryIcon from '@mui/icons-material/History';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import DescriptionIcon from '@mui/icons-material/Description';
+import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import SettingsIcon from '@mui/icons-material/Settings';
 
@@ -32,6 +33,7 @@ import IterationBar from '../components/IterationBar';
 import IterationPlanCard from '../components/IterationPlanCard';
 import ProjectCheckout from '../components/UpgradeGate';
 import PaymentsSetupDialog from '../components/PaymentsSetupDialog';
+import SupportDialog from '../components/SupportDialog';
 import MessageBubble from '../components/MessageBubble';
 import IconPickerDialog, { type IconPickResult } from '../components/IconPickerDialog';
 
@@ -155,6 +157,7 @@ export default function PreviewPage() {
   const [pendingIterationPlan, setPendingIterationPlan] = useState<PendingIterationPlan | null>(null);
   const [iterationHistory, setIterationHistory] = useState<Array<{ id: string; title: string | null; description: string | null; createdAt: string }>>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
   const [paymentsOpen, setPaymentsOpen] = useState(
     searchParams.get('payments') === '1' ||
     searchParams.get('connected') === 'true' ||
@@ -658,7 +661,7 @@ export default function PreviewPage() {
   const { projectPaid, allowUnpaidDownload, projectHosted } = store;
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
+    <Box sx={{ height: ['100vh', '100dvh'], display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
       <Joyride
         steps={tour.steps}
         stepIndex={tour.stepIndex}
@@ -803,6 +806,9 @@ export default function PreviewPage() {
             order: { xs: 3, md: 0 },
             overflowX: { xs: 'auto', md: 'visible' },
             overflowY: { xs: 'hidden', md: 'visible' },
+            position: { xs: 'sticky', md: 'static' },
+            bottom: { xs: 0, md: 'auto' },
+            zIndex: { xs: 10, md: 'auto' },
           }}
         >
           <Tooltip title={drawerOpen && drawerMode === 'improvements' ? t('preview.hideImprovements') : t('preview.showImprovements')} placement="right">
@@ -841,11 +847,11 @@ export default function PreviewPage() {
           </Tooltip>
 
           {planHasContactForm && (
-            <Tooltip title={t('inquiries.tooltip')} placement="right">
+            <Tooltip title={t('adminWorkspace.nav.inquiriesSubtitle')} placement="right">
               <Box data-tour="action-inquiries">
                 <ActionButton
                   icon={<MailOutlineIcon fontSize="inherit" />}
-                  label={t('inquiries.label')}
+                  label={t('adminWorkspace.nav.inquiriesTitle')}
                   onClick={() => {
                     if (workspaceMode === 'inquiries') setDrawerMode('improvements');
                     else { setDrawerMode('inquiries'); setDrawerOpen(false); }
@@ -915,12 +921,25 @@ export default function PreviewPage() {
               />
             </Box>
           </Tooltip>
+
+          <Box sx={{ flex: 1 }} />
+
+          <Tooltip title={t('sidebar.support')} placement="right">
+            <Box>
+              <ActionButton
+                icon={<SupportAgentIcon fontSize="inherit" />}
+                label={t('preview.support')}
+                onClick={() => setSupportOpen(true)}
+                color="#94a3b8"
+              />
+            </Box>
+          </Tooltip>
         </Box>
 
         {/* ── Center: preview frame ── */}
         <Box
           data-tour="preview-frame"
-          sx={{ flex: 1, overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}
+          sx={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}
         >
           {workspaceOpen ? (
             <AdminWorkspace
@@ -1261,6 +1280,8 @@ export default function PreviewPage() {
         oauthResult={paymentsOauthResult}
         oauthError={paymentsOauthError}
       />
+
+      <SupportDialog open={supportOpen} onClose={() => setSupportOpen(false)} />
 
       {/* Dynamic-content edit error — points user to Catalog */}
       <Snackbar

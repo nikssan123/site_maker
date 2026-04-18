@@ -272,3 +272,19 @@ model ProcessedStripeEvent {
   id        String   @id
   createdAt DateTime @default(now())
 }
+
+model SupportTicket {
+  id           String   @id @default(uuid())
+  userId       String?
+  userEmail    String
+  name         String
+  contactEmail String
+  contactPhone String
+  description  String
+  status       String   @default("open") // "open" | "resolved"
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+}
