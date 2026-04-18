@@ -486,7 +486,7 @@ app.post('/ensure-running', async (req, res) => {
 const domainCache = new Map<string, { projectId: string; expires: number }>();
 const DOMAIN_CACHE_TTL_MS = 60_000;
 
-/** Hostnames for the main AppMaker app — never custom-domain projects (nginx should route these to the frontend). */
+/** Hostnames for the main Web Work app — never custom-domain projects (nginx should route these to the frontend). */
 const MAIN_APP_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 
 app.use('/hosted/', async (req, res, next) => {

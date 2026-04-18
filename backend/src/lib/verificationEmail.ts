@@ -1,5 +1,5 @@
 export function buildVerificationEmail(code: string): { subject: string; html: string } {
-  const subject = 'Твоят код за потвърждение на AppMaker';
+  const subject = 'Твоят код за потвърждение на Web Work';
 
   const html = `<!DOCTYPE html>
 <html lang="bg">
@@ -15,7 +15,7 @@ export function buildVerificationEmail(code: string): { subject: string; html: s
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:480px;background-color:#1a1a1a;border:1px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;">
             <tr>
               <td style="padding:32px 32px 8px 32px;">
-                <div style="display:inline-block;font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#818cf8;">AppMaker</div>
+                <div style="display:inline-block;font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#818cf8;">Web Work</div>
               </td>
             </tr>
             <tr>
@@ -37,14 +37,14 @@ export function buildVerificationEmail(code: string): { subject: string; html: s
             <tr>
               <td style="padding:24px 32px 8px 32px;">
                 <p style="margin:0;font-size:13px;line-height:1.6;color:#94a3b8;">
-                  Ако не си създавал акаунт в AppMaker, можеш спокойно да игнорираш този имейл.
+                  Ако не си създавал акаунт в Web Work, можеш спокойно да игнорираш този имейл.
                 </p>
               </td>
             </tr>
             <tr>
               <td style="padding:16px 32px 32px 32px;border-top:1px solid rgba(255,255,255,0.06);margin-top:16px;">
                 <p style="margin:16px 0 0 0;font-size:12px;color:#64748b;">
-                  © AppMaker · Автоматично съобщение, моля не отговаряй.
+                  © Web Work · Автоматично съобщение, моля не отговаряй.
                 </p>
               </td>
             </tr>
