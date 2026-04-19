@@ -45,11 +45,6 @@ const fadeUp = keyframes`
   to   { opacity: 1; transform: translateY(0); }
 `;
 
-const stickySlideUp = keyframes`
-  from { opacity: 0; transform: translateY(100%); }
-  to   { opacity: 1; transform: translateY(0); }
-`;
-
 interface Props {
   scrollTo?: string;
 }
@@ -57,9 +52,12 @@ interface Props {
 export default function LandingPage({ scrollTo }: Props) {
   const { t } = useTranslation();
   const token = useAuthStore((s) => s.token);
+  const pageRef = useRef<HTMLDivElement>(null);
   const [reduceMotion, setReduceMotion] = useState(false);
   const pricingRef = useRef<HTMLDivElement>(null);
   const heroCtaRef = useRef<HTMLDivElement>(null);
+  const footerRef = useRef<HTMLElement>(null);
+  const stickyCtaRef = useRef<HTMLDivElement>(null);
   const [pricingInView, setPricingInView] = useState(false);
   const [showStickyCta, setShowStickyCta] = useState(false);
 
@@ -97,6 +95,50 @@ export default function LandingPage({ scrollTo }: Props) {
     );
     obs.observe(el);
     return () => obs.disconnect();
+  }, []);
+
+  useEffect(() => {
+    let rafId = 0;
+
+    // Position the sticky CTA imperatively so styles apply in the same frame
+    // as the scroll paint. Using React state caused a 1-frame lag where the
+    // fixed CTA briefly painted over the footer before re-docking above it.
+    const apply = () => {
+      rafId = 0;
+      const pageEl = pageRef.current;
+      const footerEl = footerRef.current;
+      const stickyEl = stickyCtaRef.current;
+      if (!pageEl || !footerEl || !stickyEl) return;
+      const footerRect = footerEl.getBoundingClientRect();
+      const pageRect = pageEl.getBoundingClientRect();
+      const stickyGap = 24;
+      const stickyHeight = stickyEl.offsetHeight;
+      const barrierY = window.innerHeight - stickyHeight - stickyGap;
+      if (footerRect.top <= barrierY) {
+        const dockTop = footerRect.top - pageRect.top - stickyHeight - stickyGap;
+        stickyEl.style.position = 'absolute';
+        stickyEl.style.top = `${dockTop}px`;
+        stickyEl.style.bottom = 'auto';
+      } else {
+        stickyEl.style.position = 'fixed';
+        stickyEl.style.top = 'auto';
+        stickyEl.style.bottom = '0';
+      }
+    };
+
+    const schedule = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(apply);
+    };
+
+    apply();
+    window.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule);
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      window.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+    };
   }, []);
 
   const whatYouGetBlocks = [
@@ -185,7 +227,7 @@ export default function LandingPage({ scrollTo }: Props) {
   );
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', position: 'relative', overflowX: 'hidden' }}>
+    <Box ref={pageRef} sx={{ minHeight: '100vh', bgcolor: 'background.default', position: 'relative', overflowX: 'hidden' }}>
       <Seo
         title={t('seo.landingTitle')}
         description={t('seo.landingDesc')}
@@ -843,6 +885,7 @@ export default function LandingPage({ scrollTo }: Props) {
       {/* Footer — dedicated black surface, visually separated from the page content */}
       <Box
         component="footer"
+        ref={footerRef}
         sx={{
           position: 'relative',
           zIndex: 1,
@@ -1046,6 +1089,7 @@ export default function LandingPage({ scrollTo }: Props) {
 
       {/* Sticky CTA — slides in when the hero CTA scrolls out of view */}
       <Box
+        ref={stickyCtaRef}
         sx={{
           position: 'fixed',
           bottom: 0,
@@ -1054,15 +1098,16 @@ export default function LandingPage({ scrollTo }: Props) {
           zIndex: 20,
           p: { xs: 2, md: 2 },
           pb: 'max(16px, env(safe-area-inset-bottom))',
+          opacity: showStickyCta ? 1 : 0,
+          transform: showStickyCta ? 'translateY(0)' : 'translateY(calc(100% + 16px))',
+          visibility: showStickyCta ? 'visible' : 'hidden',
+          transition: 'opacity 0.2s ease, transform 0.2s ease',
           background: {
             xs: 'linear-gradient(to top, rgba(10,10,12,0.96) 55%, transparent)',
             md: 'transparent',
           },
           pointerEvents: 'none',
           '& > *': { pointerEvents: 'auto' },
-          ...(showStickyCta
-            ? { animation: `${stickySlideUp} 0.35s cubic-bezier(0.22,1,0.36,1) forwards` }
-            : { opacity: 0, transform: 'translateY(100%)' }),
         }}
       >
         <Box sx={{ maxWidth: 480, mx: 'auto' }}>
