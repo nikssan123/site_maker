@@ -3,6 +3,7 @@ import { Box, Paper, Typography, TextField, Button, Stack, Alert, Link } from '@
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 import AppLogo from '../components/AppLogo';
+import Seo from '../components/Seo';
 
 export default function ForgotPasswordPage() {
   const { t } = useTranslation();
@@ -26,10 +27,11 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default' }}>
+    <Box component="main" sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default' }}>
+      <Seo title={t('seo.forgotTitle')} description={t('seo.forgotDesc')} path="/forgot-password" noindex />
       <Box sx={{ mb: 3 }}><AppLogo /></Box>
       <Paper variant="outlined" sx={{ p: { xs: 2.5, sm: 4 }, mx: { xs: 2, sm: 0 }, width: '100%', maxWidth: 400 }}>
-        <Typography variant="h5" fontWeight={700} mb={0.5}>{t('auth.forgotTitle')}</Typography>
+        <Typography variant="h5" component="h1" fontWeight={700} mb={0.5}>{t('auth.forgotTitle')}</Typography>
         <Typography variant="body2" color="text.secondary" mb={3}>{t('auth.forgotSubtitle')}</Typography>
 
         {sent && <Alert severity="success" sx={{ mb: 2 }}>{t('auth.forgotSent')}</Alert>}

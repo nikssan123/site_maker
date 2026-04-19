@@ -13,6 +13,7 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import Sidebar from '../components/Sidebar';
 import AppLogo from '../components/AppLogo';
+import Seo from '../components/Seo';
 
 import MessageBubble from '../components/MessageBubble';
 import PlanSummary from '../components/PlanSummary';
@@ -507,6 +508,7 @@ export default function ChatPage() {
 
   return (
     <Box sx={{ height: '100dvh', display: 'flex', bgcolor: 'background.default', overflow: 'hidden' }}>
+      <Seo title={t('seo.chatTitle')} description={t('seo.chatDesc')} path="/chat" noindex />
 
       {/* Sidebar — permanent on desktop, temporary drawer on mobile */}
       {isMobile ? (

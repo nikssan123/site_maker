@@ -20,13 +20,23 @@ export default function AppLogo({ size = 'default' }: Props) {
       direction="row"
       alignItems="center"
       gap={size === 'small' ? 0.75 : 1}
+      role="link"
+      tabIndex={0}
+      aria-label={`${t('common.appName')} — начална страница`}
       onClick={() => navigate(token ? '/chat' : '/')}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          navigate(token ? '/chat' : '/');
+        }
+      }}
       sx={{
         cursor: 'pointer',
         userSelect: 'none',
         '&:hover .app-logo-icon': { transform: 'scale(1.08)' },
         transition: 'opacity 0.15s',
         '&:active': { opacity: 0.8 },
+        '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2, borderRadius: 1 },
       }}
     >
       <Box

@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 import { useAuthStore, type UserProfile } from '../store/auth';
 import AppLogo from '../components/AppLogo';
+import Seo from '../components/Seo';
 
 type Step = 'credentials' | 'verify';
 
@@ -79,12 +80,13 @@ export default function RegisterPage() {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default' }}>
+    <Box component="main" sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default' }}>
+      <Seo title={t('seo.registerTitle')} description={t('seo.registerDesc')} path="/register" />
       <Box sx={{ mb: 3 }}><AppLogo /></Box>
       <Paper variant="outlined" sx={{ p: { xs: 2.5, sm: 4 }, mx: { xs: 2, sm: 0 }, width: '100%', maxWidth: 400 }}>
         {step === 'credentials' ? (
           <>
-            <Typography variant="h5" fontWeight={700} mb={0.5}>{t('auth.registerTitle')}</Typography>
+            <Typography variant="h5" component="h1" fontWeight={700} mb={0.5}>{t('auth.registerTitle')}</Typography>
             <Typography variant="body2" color="text.secondary" mb={3}>{t('auth.registerSubtitle')}</Typography>
 
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -126,7 +128,7 @@ export default function RegisterPage() {
           </>
         ) : (
           <>
-            <Typography variant="h5" fontWeight={700} mb={0.5}>{t('auth.verifyTitle')}</Typography>
+            <Typography variant="h5" component="h1" fontWeight={700} mb={0.5}>{t('auth.verifyTitle')}</Typography>
             <Typography variant="body2" color="text.secondary" mb={3}>
               {t('auth.verifySubtitle', { email })}
             </Typography>

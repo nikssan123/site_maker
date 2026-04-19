@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 import PricingTable from '../components/PricingTable';
 import AppLogo from '../components/AppLogo';
+import Seo from '../components/Seo';
 import { useIterationPlanStore } from '../store/iterationPlan';
 
 function pctColor(pct: number): 'primary' | 'warning' | 'error' {
@@ -118,6 +119,7 @@ export default function BillingPage() {
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
+      <Seo title={t('seo.billingTitle')} description={t('seo.billingDesc')} path="/billing" noindex />
       <AppBar position="static" color="transparent" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
         <Toolbar sx={{ gap: 1 }}>
           <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/chat')} color="inherit" size="small">

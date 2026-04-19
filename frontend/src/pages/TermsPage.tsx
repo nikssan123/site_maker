@@ -2,11 +2,12 @@ import { Box, Container, Typography, Stack, Link as MuiLink } from '@mui/materia
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import AppLogo from '../components/AppLogo';
+import Seo from '../components/Seo';
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <Box>
-      <Typography variant="h6" fontWeight={700} mb={1}>{title}</Typography>
+    <Box component="section">
+      <Typography variant="h6" component="h2" fontWeight={700} mb={1}>{title}</Typography>
       <Typography variant="body2" color="text.secondary" component="div" sx={{ '& p': { mb: 1.5 }, '& ul': { pl: 2.5, mb: 1.5 }, '& li': { mb: 0.5 } }}>
         {children}
       </Typography>
@@ -18,11 +19,12 @@ export default function TermsPage() {
   const { t } = useTranslation();
 
   return (
-    <Box sx={{ minHeight: '100dvh', bgcolor: 'background.default', py: 4 }}>
+    <Box component="main" sx={{ minHeight: '100dvh', bgcolor: 'background.default', py: 4 }}>
+      <Seo title={t('seo.termsTitle')} description={t('seo.termsDesc')} path="/terms" />
       <Container maxWidth="md">
         <Box sx={{ mb: 4, textAlign: 'center' }}><AppLogo /></Box>
 
-        <Typography variant="h4" fontWeight={800} mb={1}>{t('terms.title')}</Typography>
+        <Typography variant="h4" component="h1" fontWeight={800} mb={1}>{t('terms.title')}</Typography>
         <Typography variant="body2" color="text.secondary" mb={4}>{t('terms.lastUpdated')}</Typography>
 
         <Stack spacing={3}>

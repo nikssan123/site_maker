@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Container,
@@ -22,6 +22,11 @@ import RestaurantIcon from '@mui/icons-material/Restaurant';
 import SpaIcon from '@mui/icons-material/Spa';
 import StorefrontIcon from '@mui/icons-material/Storefront';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import StoreMallDirectoryIcon from '@mui/icons-material/StoreMallDirectory';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { Accordion, AccordionDetails, AccordionSummary, Divider } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import PricingTable from '../components/PricingTable';
 import { useAuthStore } from '../store/auth';
@@ -32,6 +37,8 @@ import SpotlightCard from '../components/SpotlightCard';
 import StarBorder from '../components/StarBorder';
 import ShinyText from '../components/ShinyText';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import Seo from '../components/Seo';
+import { SITE_URL } from '../lib/seo';
 
 const fadeUp = keyframes`
   from { opacity: 0; transform: translateY(24px); }
@@ -135,6 +142,36 @@ export default function LandingPage({ scrollTo }: Props) {
     { Icon: StorefrontIcon, title: t('landing.exampleShopTitle'), desc: t('landing.exampleShopDesc') },
   ];
 
+  const audienceCards = [
+    { Icon: StoreMallDirectoryIcon, title: t('landing.audience1Title'), desc: t('landing.audience1Desc') },
+    { Icon: PersonOutlineIcon, title: t('landing.audience2Title'), desc: t('landing.audience2Desc') },
+    { Icon: RocketLaunchIcon, title: t('landing.audience3Title'), desc: t('landing.audience3Desc') },
+  ];
+
+  const faqs = [
+    { q: t('landing.faq1Q'), a: t('landing.faq1A') },
+    { q: t('landing.faq2Q'), a: t('landing.faq2A') },
+    { q: t('landing.faq3Q'), a: t('landing.faq3A') },
+    { q: t('landing.faq4Q'), a: t('landing.faq4A') },
+    { q: t('landing.faq5Q'), a: t('landing.faq5A') },
+    { q: t('landing.faq6Q'), a: t('landing.faq6A') },
+    { q: t('landing.faq7Q'), a: t('landing.faq7A') },
+  ];
+
+  const faqJsonLd = useMemo(
+    () => ({
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      mainEntity: faqs.map((f) => ({
+        '@type': 'Question',
+        name: f.q,
+        acceptedAnswer: { '@type': 'Answer', text: f.a },
+      })),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [t],
+  );
+
   const primaryTo = token ? '/chat' : '/register';
 
   const heroAnim = (delaySec: number) =>
@@ -142,8 +179,19 @@ export default function LandingPage({ scrollTo }: Props) {
       ? {}
       : { opacity: 0, animation: `${fadeUp} 0.7s cubic-bezier(0.22,1,0.36,1) ${delaySec}s forwards` };
 
+  const faqSeoPayload = useMemo(
+    () => ({ id: 'landing-faq', data: faqJsonLd as Record<string, unknown> }),
+    [faqJsonLd],
+  );
+
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', position: 'relative', overflowX: 'hidden', pb: { xs: 11, md: 10 } }}>
+      <Seo
+        title={t('seo.landingTitle')}
+        description={t('seo.landingDesc')}
+        path={scrollTo === 'pricing' ? '/pricing' : '/'}
+        jsonLd={faqSeoPayload}
+      />
       {/* Waves background */}
       {!reduceMotion && (
         <Waves
@@ -157,6 +205,7 @@ export default function LandingPage({ scrollTo }: Props) {
       )}
 
       <AppBar
+        component="header"
         position="sticky"
         elevation={0}
         sx={{
@@ -167,7 +216,7 @@ export default function LandingPage({ scrollTo }: Props) {
           borderColor: 'rgba(255,255,255,0.06)',
         }}
       >
-        <Toolbar sx={{ maxWidth: 1200, width: '100%', mx: 'auto', px: { xs: 2, sm: 3 } }}>
+        <Toolbar component="nav" aria-label="Главна навигация" sx={{ maxWidth: 1200, width: '100%', mx: 'auto', px: { xs: 2, sm: 3 } }}>
           <Stack direction="row" alignItems="center" gap={1.25} sx={{ flex: 1 }}>
             <Box
               sx={{
@@ -221,9 +270,9 @@ export default function LandingPage({ scrollTo }: Props) {
         </Toolbar>
       </AppBar>
 
-      <Box sx={{ position: 'relative', zIndex: 1 }}>
+      <Box component="main" sx={{ position: 'relative', zIndex: 1 }}>
         {/* Hero — uses CSS keyframe animation (not scroll-triggered) since it's above the fold */}
-        <Container maxWidth="lg" sx={{ pt: { xs: 8, md: 12 }, pb: { xs: 8, md: 10 } }}>
+        <Container component="section" aria-labelledby="landing-hero-heading" maxWidth="lg" sx={{ pt: { xs: 8, md: 12 }, pb: { xs: 8, md: 10 } }}>
           <Box sx={{ textAlign: 'center', maxWidth: 860, mx: 'auto' }}>
             <Box sx={{ ...heroAnim(0), mb: 3, display: 'inline-flex' }}>
               <StarBorder color="rgba(16, 185, 129, 0.6)" speed="4s" radius="80px" style={{ borderRadius: 16 }}>
@@ -240,7 +289,9 @@ export default function LandingPage({ scrollTo }: Props) {
               </StarBorder>
             </Box>
             <Typography
+              id="landing-hero-heading"
               variant="h1"
+              component="h1"
               sx={{
                 ...heroAnim(0.1),
                 fontWeight: 800,
@@ -329,10 +380,15 @@ export default function LandingPage({ scrollTo }: Props) {
         </Container>
 
         {/* What you get */}
-        <Box sx={{ py: { xs: 6, md: 8 }, borderTop: '1px solid', borderColor: 'rgba(255,255,255,0.06)' }}>
+        <Box
+          component="section"
+          aria-labelledby="landing-whatget-heading"
+          sx={{ py: { xs: 6, md: 8 }, borderTop: '1px solid', borderColor: 'rgba(255,255,255,0.06)' }}
+        >
           <Container maxWidth="lg">
             <AnimatedContent distance={50}>
               <Typography
+                id="landing-whatget-heading"
                 variant="h4"
                 component="h2"
                 fontWeight={800}
@@ -383,7 +439,7 @@ export default function LandingPage({ scrollTo }: Props) {
                     >
                       <Icon sx={{ fontSize: 26, color: 'primary.light' }} />
                     </Box>
-                    <Typography variant="h6" fontWeight={800} sx={{ mb: 1.5, fontSize: '1.1rem' }}>
+                    <Typography variant="h6" component="h3" fontWeight={800} sx={{ mb: 1.5, fontSize: '1.1rem' }}>
                       {title}
                     </Typography>
                     <Stack component="ul" sx={{ m: 0, pl: 2.25, color: 'text.secondary' }} gap={0.75}>
@@ -483,7 +539,7 @@ export default function LandingPage({ scrollTo }: Props) {
                     >
                       <Icon sx={{ fontSize: 28, color: 'primary.light' }} />
                     </Box>
-                    <Typography variant="h6" fontWeight={800} sx={{ mb: 1 }}>
+                    <Typography variant="h6" component="h3" fontWeight={800} sx={{ mb: 1 }}>
                       {title}
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.65 }}>
@@ -497,11 +553,92 @@ export default function LandingPage({ scrollTo }: Props) {
           </Container>
         </Box>
 
+        {/* For whom */}
+        <Box
+          component="section"
+          aria-labelledby="landing-audience-heading"
+          sx={{ py: { xs: 6, md: 8 }, borderTop: '1px solid', borderColor: 'rgba(255,255,255,0.06)' }}
+        >
+          <Container maxWidth="lg">
+            <AnimatedContent distance={50}>
+              <Typography
+                id="landing-audience-heading"
+                variant="h4"
+                component="h2"
+                fontWeight={800}
+                textAlign="center"
+                sx={{ mb: 1.5, letterSpacing: '-0.02em' }}
+              >
+                {t('landing.audienceTitle')}
+              </Typography>
+            </AnimatedContent>
+            <AnimatedContent distance={40} delay={0.1}>
+              <Typography
+                variant="body1"
+                color="text.secondary"
+                textAlign="center"
+                sx={{ mb: 4, maxWidth: 640, mx: 'auto' }}
+              >
+                {t('landing.audienceSubtitle')}
+              </Typography>
+            </AnimatedContent>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
+                gap: 3,
+              }}
+            >
+              {audienceCards.map(({ Icon, title, desc }, i) => (
+                <AnimatedContent key={title} distance={50} delay={0.12 + i * 0.1}>
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      p: 3,
+                      height: '100%',
+                      borderRadius: 3,
+                      bgcolor: 'rgba(12, 12, 12, 0.55)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: 2,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        mb: 2,
+                        bgcolor: 'rgba(16, 185, 129, 0.12)',
+                        border: '1px solid rgba(16, 185, 129, 0.25)',
+                      }}
+                    >
+                      <Icon sx={{ fontSize: 24, color: 'secondary.light' }} />
+                    </Box>
+                    <Typography variant="h6" component="h3" fontWeight={800} sx={{ mb: 1, fontSize: '1.05rem' }}>
+                      {title}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.65 }}>
+                      {desc}
+                    </Typography>
+                  </Paper>
+                </AnimatedContent>
+              ))}
+            </Box>
+          </Container>
+        </Box>
+
         {/* Trust */}
-        <Box sx={{ py: { xs: 6, md: 8 }, borderTop: '1px solid', borderColor: 'rgba(255,255,255,0.06)' }}>
+        <Box
+          component="section"
+          aria-labelledby="landing-trust-heading"
+          sx={{ py: { xs: 6, md: 8 }, borderTop: '1px solid', borderColor: 'rgba(255,255,255,0.06)' }}
+        >
           <Container maxWidth="md">
             <AnimatedContent distance={50}>
               <Typography
+                id="landing-trust-heading"
                 variant="h4"
                 component="h2"
                 fontWeight={800}
@@ -527,8 +664,15 @@ export default function LandingPage({ scrollTo }: Props) {
         </Box>
 
         {/* How it works */}
-        <Box sx={{ py: { xs: 6, md: 9 }, borderTop: '1px solid', borderColor: 'rgba(255,255,255,0.06)' }}>
+        <Box
+          component="section"
+          aria-labelledby="landing-how-heading"
+          sx={{ py: { xs: 6, md: 9 }, borderTop: '1px solid', borderColor: 'rgba(255,255,255,0.06)' }}
+        >
           <Container maxWidth="lg">
+            <Typography id="landing-how-heading" component="h2" sx={{ position: 'absolute', left: '-9999px' }}>
+              {t('landing.howTitle')}
+            </Typography>
             <Box
               sx={{
                 mb: 5,
@@ -625,24 +769,178 @@ export default function LandingPage({ scrollTo }: Props) {
           </Box>
         </AnimatedContent>
 
-        <Box ref={pricingRef} id="pricing">
+        <Box ref={pricingRef} id="pricing" component="section" aria-labelledby="pricing-heading">
           <PricingTable reveal={{ inView: pricingInView, reduceMotion }} />
         </Box>
 
+        {/* FAQ */}
         <Box
+          id="faq"
+          component="section"
+          aria-labelledby="landing-faq-heading"
+          sx={{ py: { xs: 6, md: 9 }, borderTop: '1px solid', borderColor: 'rgba(255,255,255,0.06)' }}
+        >
+          <Container maxWidth="md">
+            <AnimatedContent distance={50}>
+              <Typography
+                id="landing-faq-heading"
+                variant="h4"
+                component="h2"
+                fontWeight={800}
+                textAlign="center"
+                sx={{ mb: 1.5, letterSpacing: '-0.02em' }}
+              >
+                {t('landing.faqTitle')}
+              </Typography>
+            </AnimatedContent>
+            <AnimatedContent distance={40} delay={0.08}>
+              <Typography
+                variant="body1"
+                color="text.secondary"
+                textAlign="center"
+                sx={{ mb: 4, maxWidth: 640, mx: 'auto' }}
+              >
+                {t('landing.faqSubtitle')}
+              </Typography>
+            </AnimatedContent>
+            <Stack gap={1.5}>
+              {faqs.map((f, i) => (
+                <Accordion
+                  key={f.q}
+                  disableGutters
+                  elevation={0}
+                  sx={{
+                    bgcolor: 'rgba(12, 12, 12, 0.55)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: 2,
+                    '&:before': { display: 'none' },
+                    '&.Mui-expanded': { borderColor: 'rgba(99, 102, 241, 0.35)' },
+                  }}
+                >
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreIcon />}
+                    aria-controls={`faq-${i}-content`}
+                    id={`faq-${i}-header`}
+                    sx={{ px: 2.5, py: 1, minHeight: 56 }}
+                  >
+                    <Typography variant="subtitle1" component="h3" fontWeight={700}>
+                      {f.q}
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails sx={{ px: 2.5, pb: 2 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>
+                      {f.a}
+                    </Typography>
+                  </AccordionDetails>
+                </Accordion>
+              ))}
+            </Stack>
+          </Container>
+        </Box>
+
+        <Box
+          component="footer"
           sx={{
             borderTop: '1px solid rgba(255,255,255,0.06)',
-            py: 4,
-            textAlign: 'center',
+            pt: { xs: 5, md: 6 },
+            pb: 3,
           }}
         >
-          <Typography variant="body2" color="text.disabled">
-            {t('landing.footer', { year: new Date().getFullYear() })}
-          </Typography>
-          <Stack direction="row" justifyContent="center" gap={2} mt={1}>
-            <MuiLink component={RouterLink} to="/terms" variant="body2" color="text.disabled" underline="hover">{t('legal.termsLink')}</MuiLink>
-            <MuiLink component={RouterLink} to="/privacy" variant="body2" color="text.disabled" underline="hover">{t('legal.privacyLink')}</MuiLink>
-          </Stack>
+          <Container maxWidth="lg">
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: '1.4fr 1fr 1fr 1fr' },
+                gap: { xs: 4, md: 5 },
+                mb: 4,
+              }}
+            >
+              <Box>
+                <Stack direction="row" alignItems="center" gap={1.25} sx={{ mb: 1.5 }}>
+                  <Box
+                    sx={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 1.5,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'linear-gradient(135deg, rgba(99,102,241,0.35) 0%, rgba(16,185,129,0.2) 100%)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                    }}
+                  >
+                    <AutoAwesomeIcon sx={{ fontSize: 18, color: 'primary.light' }} />
+                  </Box>
+                  <Typography variant="subtitle1" fontWeight={800}>
+                    {t('common.appName')}
+                  </Typography>
+                </Stack>
+                <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.65, mb: 1.5, maxWidth: 320 }}>
+                  {t('footerNav.tagline')}
+                </Typography>
+                <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mb: 0.25 }}>
+                  {t('footerNav.supportTitle')}
+                </Typography>
+                <MuiLink
+                  href="mailto:support@fornaxelit.com"
+                  variant="body2"
+                  underline="hover"
+                  color="text.primary"
+                  aria-label="Имейл за поддръжка — support@fornaxelit.com"
+                >
+                  support@fornaxelit.com
+                </MuiLink>
+              </Box>
+
+              <Box>
+                <Typography variant="overline" color="text.disabled" sx={{ letterSpacing: '0.08em', fontWeight: 700 }}>
+                  {t('footerNav.product')}
+                </Typography>
+                <Stack gap={1} sx={{ mt: 1.25 }}>
+                  <MuiLink href="#examples" variant="body2" color="text.secondary" underline="hover">{t('footerNav.examples')}</MuiLink>
+                  <MuiLink component={RouterLink} to="/pricing" variant="body2" color="text.secondary" underline="hover">{t('footerNav.pricing')}</MuiLink>
+                  <MuiLink href="#faq" variant="body2" color="text.secondary" underline="hover">{t('footerNav.faq')}</MuiLink>
+                  <MuiLink component={RouterLink} to={primaryTo} variant="body2" color="text.secondary" underline="hover">{t('footerNav.createSite')}</MuiLink>
+                </Stack>
+              </Box>
+
+              <Box>
+                <Typography variant="overline" color="text.disabled" sx={{ letterSpacing: '0.08em', fontWeight: 700 }}>
+                  {t('footerNav.resources')}
+                </Typography>
+                <Stack gap={1} sx={{ mt: 1.25 }}>
+                  <MuiLink component={RouterLink} to="/docs/connect-domain" variant="body2" color="text.secondary" underline="hover">{t('footerNav.connectDomain')}</MuiLink>
+                  <MuiLink component={RouterLink} to="/login" variant="body2" color="text.secondary" underline="hover">{t('footerNav.login')}</MuiLink>
+                </Stack>
+              </Box>
+
+              <Box>
+                <Typography variant="overline" color="text.disabled" sx={{ letterSpacing: '0.08em', fontWeight: 700 }}>
+                  {t('footerNav.legalCol')}
+                </Typography>
+                <Stack gap={1} sx={{ mt: 1.25 }}>
+                  <MuiLink component={RouterLink} to="/terms" variant="body2" color="text.secondary" underline="hover">{t('legal.termsLink')}</MuiLink>
+                  <MuiLink component={RouterLink} to="/privacy" variant="body2" color="text.secondary" underline="hover">{t('legal.privacyLink')}</MuiLink>
+                </Stack>
+              </Box>
+            </Box>
+
+            <Divider sx={{ borderColor: 'rgba(255,255,255,0.06)', mb: 2 }} />
+
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              justifyContent="space-between"
+              alignItems={{ xs: 'flex-start', sm: 'center' }}
+              gap={1}
+            >
+              <Typography variant="caption" color="text.disabled">
+                {t('landing.footer', { year: new Date().getFullYear() })}
+              </Typography>
+              <Typography variant="caption" color="text.disabled">
+                <MuiLink href={SITE_URL} underline="hover" color="inherit">fornaxelit.com</MuiLink>
+              </Typography>
+            </Stack>
+          </Container>
         </Box>
       </Box>
 
