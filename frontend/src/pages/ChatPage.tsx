@@ -10,9 +10,9 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import SettingsIcon from '@mui/icons-material/Settings';
 import MenuIcon from '@mui/icons-material/Menu';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import Sidebar from '../components/Sidebar';
 import AppLogo from '../components/AppLogo';
+import BrandMark from '../components/BrandMark';
 import Seo from '../components/Seo';
 
 import MessageBubble from '../components/MessageBubble';
@@ -608,7 +608,7 @@ export default function ChatPage() {
                 boxShadow: '0 0 40px rgba(99,102,241,0.3)',
               }}
             >
-              <AutoAwesomeIcon sx={{ fontSize: 26, color: '#fff' }} />
+              <BrandMark size={26} color="#fff" strokeWidth={5} />
             </Box>
             <Typography
               variant="h5"

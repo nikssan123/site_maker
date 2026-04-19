@@ -1,6 +1,6 @@
 import { Box, Typography } from '@mui/material';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ReactMarkdown from 'react-markdown';
+import BrandMark from './BrandMark';
 
 interface Props {
   role: 'user' | 'assistant';
@@ -49,7 +49,7 @@ export default function MessageBubble({ role, content }: Props) {
           flexShrink: 0,
         }}
       >
-        <AutoAwesomeIcon sx={{ fontSize: 14, color: '#fff' }} />
+        <BrandMark size={14} color="#fff" strokeWidth={6} />
       </Box>
       <Box
         sx={{

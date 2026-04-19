@@ -13,7 +13,6 @@ import {
 } from '@mui/material';
 import { keyframes } from '@mui/material/styles';
 import { Link as RouterLink } from 'react-router-dom';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import PublicIcon from '@mui/icons-material/Public';
 import PaymentIcon from '@mui/icons-material/Payment';
 import GroupsIcon from '@mui/icons-material/Groups';
@@ -38,6 +37,7 @@ import StarBorder from '../components/StarBorder';
 import ShinyText from '../components/ShinyText';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import Seo from '../components/Seo';
+import BrandMark from '../components/BrandMark';
 import { SITE_URL } from '../lib/seo';
 
 const fadeUp = keyframes`
@@ -230,7 +230,7 @@ export default function LandingPage({ scrollTo }: Props) {
                 border: '1px solid rgba(255,255,255,0.08)',
               }}
             >
-              <AutoAwesomeIcon sx={{ fontSize: 20, color: 'primary.light' }} />
+              <BrandMark size={20} color="#fff" strokeWidth={5} />
             </Box>
             <Typography variant="h6" fontWeight={800} letterSpacing="-0.02em">
               {t('common.appName')}
@@ -902,7 +902,7 @@ export default function LandingPage({ scrollTo }: Props) {
                     boxShadow: '0 0 24px rgba(99,102,241,0.22)',
                   }}
                 >
-                  <AutoAwesomeIcon sx={{ fontSize: 20, color: 'primary.light' }} />
+                  <BrandMark size={20} color="#fff" strokeWidth={5} />
                 </Box>
                 <Typography variant="h6" fontWeight={800} sx={{ color: '#fff', letterSpacing: '-0.01em' }}>
                   {t('common.appName')}
