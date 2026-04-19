@@ -48,7 +48,7 @@ class ClaudeProvider implements AIProvider {
     timeout: ANTHROPIC_TIMEOUT_MS,
   });
   /** Override with `CLAUDE_CODE_MODEL` if your account uses a different id. Default: Opus (see Anthropic models docs). */
-  private model = process.env.CLAUDE_CODE_MODEL ?? 'claude-opus-4-6';
+  private model = process.env.CLAUDE_CODE_MODEL ?? 'claude-opus-4-7';
 
   async complete(messages: ChatMessage[], system: string, options?: CompleteOptions): Promise<string> {
     return (await this.completeWithUsage(messages, system, options)).text;
