@@ -9,6 +9,12 @@ import {
   SITE_PURCHASE_BONUS_ITERATIONS,
   SITE_PURCHASE_FREE_HOSTING_DAYS,
 } from '../lib/hostingActive';
+import { grantTokens } from './tokenAccountingService';
+
+function tokenTopupPackTokens(): number {
+  const raw = parseInt(process.env.TOKEN_TOPUP_PACK_TOKENS ?? '', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 250_000;
+}
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-02-24.acacia',
@@ -150,9 +156,98 @@ export async function createHostingCheckout(userId: string, email: string, proje
 }
 
 /**
+ * Monthly "Improvement Plan" subscription — €20/mo, grants MONTHLY_TOKEN_LIMIT tokens per period.
+ * Uses inline price_data so no Stripe dashboard setup is required.
+ */
+export async function createIterationPlanCheckout(userId: string, email: string) {
+  const customerId = await getOrCreateCustomer(userId, email);
+  const baseUrl = appBaseUrl();
+
+  const session = await stripe.checkout.sessions.create({
+    customer: customerId,
+    mode: 'subscription',
+    line_items: [
+      {
+        price_data: {
+          currency: 'eur',
+          product_data: {
+            name: 'Web Work Improvement Plan',
+            description: 'Monthly quota for AI-powered improvements to your site',
+          },
+          unit_amount: priceInCents('PRICE_ITERATION_PLAN_CENTS', 2000),
+          recurring: { interval: 'month' },
+        },
+        quantity: 1,
+      },
+    ],
+    success_url: `${baseUrl}/billing?plan_active=true`,
+    cancel_url: `${baseUrl}/billing`,
+    metadata: { userId, type: 'iteration_plan' },
+    subscription_data: { metadata: { userId, type: 'iteration_plan' } },
+  });
+
+  return { url: session.url };
+}
+
+/**
+ * Cancel the user's improvement-plan subscription at period end. Stripe keeps it active through
+ * the end of the paid period; the webhook flips status to 'canceled' when it actually ends.
+ */
+export async function cancelIterationPlan(userId: string): Promise<{ cancelAt: Date | null }> {
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  if (!user.iterationSubStripeId) {
+    throw new AppError(400, 'No active improvement plan to cancel');
+  }
+  const sub = await stripe.subscriptions.update(user.iterationSubStripeId, {
+    cancel_at_period_end: true,
+  });
+  await prisma.user.update({
+    where: { id: userId },
+    data: { iterationSubCancelAtPeriodEnd: true },
+  });
+  return { cancelAt: sub.current_period_end ? new Date(sub.current_period_end * 1000) : null };
+}
+
+/**
+ * One-off Token Top-Up — €5 buys TOKEN_TOPUP_PACK_TOKENS (default 250k) tokens. The UI never
+ * surfaces the raw token count, only the price. Uses inline price_data so no Stripe dashboard
+ * setup is required.
+ */
+export async function createTokenTopupCheckout(userId: string, email: string) {
+  const customerId = await getOrCreateCustomer(userId, email);
+  const baseUrl = appBaseUrl();
+  const tokens = tokenTopupPackTokens();
+
+  const session = await stripe.checkout.sessions.create({
+    customer: customerId,
+    mode: 'payment',
+    line_items: [
+      {
+        price_data: {
+          currency: 'eur',
+          product_data: {
+            name: 'Improvement Top-Up',
+            description: 'One-off extension to your improvement quota',
+          },
+          unit_amount: priceInCents('TOKEN_TOPUP_PACK_CENTS', 500),
+        },
+        quantity: 1,
+      },
+    ],
+    success_url: `${baseUrl}/billing?topup=true`,
+    cancel_url: `${baseUrl}/billing`,
+    metadata: { userId, type: 'token_topup', tokens: String(tokens) },
+  });
+
+  return { url: session.url };
+}
+
+/**
  * Unified iteration credits checkout.
  * Pricing: €1.50 per credit, capped at €20 for 20 (best value).
  * quantity must be 1–20.
+ *
+ * @deprecated Retired in favour of the €20/mo iteration-plan subscription.
  */
 export async function createIterationCheckout(userId: string, email: string, projectId: string, quantity: number) {
   if (quantity < 1 || quantity > 20) throw new AppError(400, 'Quantity must be between 1 and 20');
@@ -283,6 +378,18 @@ export async function handleWebhook(rawBody: Buffer, signature: string) {
         });
       }
 
+      if (type === 'token_topup' && session.metadata?.userId) {
+        const tokens = parseInt(session.metadata.tokens ?? '', 10);
+        const amount = Number.isFinite(tokens) && tokens > 0 ? tokens : tokenTopupPackTokens();
+        await grantTokens({
+          userId: session.metadata.userId,
+          tokens: amount,
+          reason: 'topup_purchase',
+          stripeSessionId: session.id,
+          note: `Stripe top-up (${amount.toLocaleString('en-US')} tokens)`,
+        });
+      }
+
       if (type === 'hosting' && projectId && session.subscription) {
         const updated = await prisma.project.update({
           where: { id: projectId },
@@ -303,8 +410,31 @@ export async function handleWebhook(rawBody: Buffer, signature: string) {
       break;
     }
 
+    case 'customer.subscription.created':
+    case 'customer.subscription.updated': {
+      const sub = event.data.object as Stripe.Subscription;
+      if (isIterationPlanSubscription(sub)) {
+        await upsertIterationSubscription(sub);
+      }
+      break;
+    }
+
     case 'customer.subscription.deleted': {
       const sub = event.data.object as Stripe.Subscription;
+
+      if (isIterationPlanSubscription(sub)) {
+        await prisma.user.updateMany({
+          where: { iterationSubStripeId: sub.id },
+          data: {
+            iterationSubStatus: 'canceled',
+            iterationSubCancelAtPeriodEnd: false,
+            iterationSubCurrentPeriodStart: null,
+            iterationSubCurrentPeriodEnd: null,
+          },
+        });
+        break;
+      }
+
       const cancelled = await prisma.project.findMany({
         where: { hostingSubscriptionId: sub.id },
         select: { id: true },
@@ -318,6 +448,49 @@ export async function handleWebhook(rawBody: Buffer, signature: string) {
       });
       break;
     }
+
+    case 'invoice.paid': {
+      // On renewal, Stripe emits `customer.subscription.updated` as well, so this is mostly
+      // belt-and-braces for subs whose period window moved.
+      const invoice = event.data.object as Stripe.Invoice;
+      const subId = typeof invoice.subscription === 'string' ? invoice.subscription : null;
+      if (!subId) break;
+      const sub = await stripe.subscriptions.retrieve(subId);
+      if (isIterationPlanSubscription(sub)) {
+        await upsertIterationSubscription(sub);
+      }
+      break;
+    }
   }
+}
+
+/**
+ * A subscription is the improvement plan when its metadata says so. We tag `type: 'iteration_plan'`
+ * on both the Checkout session and `subscription_data.metadata` at creation time.
+ */
+function isIterationPlanSubscription(sub: Stripe.Subscription): boolean {
+  return sub.metadata?.type === 'iteration_plan';
+}
+
+async function upsertIterationSubscription(sub: Stripe.Subscription): Promise<void> {
+  const userId = sub.metadata?.userId;
+  if (!userId) {
+    console.warn('[billing] iteration sub without userId metadata', { subId: sub.id });
+    return;
+  }
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      iterationSubStripeId: sub.id,
+      iterationSubStatus: sub.status,
+      iterationSubCancelAtPeriodEnd: !!sub.cancel_at_period_end,
+      iterationSubCurrentPeriodStart: sub.current_period_start
+        ? new Date(sub.current_period_start * 1000)
+        : null,
+      iterationSubCurrentPeriodEnd: sub.current_period_end
+        ? new Date(sub.current_period_end * 1000)
+        : null,
+    },
+  });
 }
 

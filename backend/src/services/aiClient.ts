@@ -11,8 +11,28 @@ export interface CompleteOptions {
   maxTokens?: number;
 }
 
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export interface CompletionWithUsage {
+  text: string;
+  usage: TokenUsage;
+  /** Provider label for accounting: "anthropic" | "openai". */
+  provider: 'anthropic' | 'openai';
+  /** Concrete model id that handled the request. */
+  model: string;
+}
+
 interface AIProvider {
   complete(messages: ChatMessage[], system: string, options?: CompleteOptions): Promise<string>;
+  /** Same as complete() but also returns token usage + provider/model for accounting. */
+  completeWithUsage(
+    messages: ChatMessage[],
+    system: string,
+    options?: CompleteOptions,
+  ): Promise<CompletionWithUsage>;
   stream(
     messages: ChatMessage[],
     system: string,
@@ -31,6 +51,14 @@ class ClaudeProvider implements AIProvider {
   private model = process.env.CLAUDE_CODE_MODEL ?? 'claude-opus-4-6';
 
   async complete(messages: ChatMessage[], system: string, options?: CompleteOptions): Promise<string> {
+    return (await this.completeWithUsage(messages, system, options)).text;
+  }
+
+  async completeWithUsage(
+    messages: ChatMessage[],
+    system: string,
+    options?: CompleteOptions,
+  ): Promise<CompletionWithUsage> {
     const maxTokens = options?.maxTokens ?? parseInt(process.env.CLAUDE_MAX_OUTPUT_TOKENS ?? '8192', 10);
     const response = await this.client.messages.create({
       model: this.model,
@@ -39,7 +67,16 @@ class ClaudeProvider implements AIProvider {
       messages,
     });
     const block = response.content[0];
-    return block.type === 'text' ? block.text : '';
+    const text = block.type === 'text' ? block.text : '';
+    return {
+      text,
+      usage: {
+        inputTokens: response.usage?.input_tokens ?? 0,
+        outputTokens: response.usage?.output_tokens ?? 0,
+      },
+      provider: 'anthropic',
+      model: this.model,
+    };
   }
 
   async stream(
@@ -79,13 +116,30 @@ class OpenAIProvider implements AIProvider {
   }
 
   async complete(messages: ChatMessage[], system: string, options?: CompleteOptions): Promise<string> {
+    return (await this.completeWithUsage(messages, system, options)).text;
+  }
+
+  async completeWithUsage(
+    messages: ChatMessage[],
+    system: string,
+    options?: CompleteOptions,
+  ): Promise<CompletionWithUsage> {
     const maxTokens = options?.maxTokens ?? parseInt(process.env.OPENAI_MAX_OUTPUT_TOKENS ?? '8192', 10);
     const response = await this.client.chat.completions.create({
       model: this.model,
       max_tokens: maxTokens,
       messages: [{ role: 'system', content: system }, ...messages],
     });
-    return response.choices[0]?.message?.content ?? '';
+    const text = response.choices[0]?.message?.content ?? '';
+    return {
+      text,
+      usage: {
+        inputTokens: response.usage?.prompt_tokens ?? 0,
+        outputTokens: response.usage?.completion_tokens ?? 0,
+      },
+      provider: 'openai',
+      model: this.model,
+    };
   }
 
   async stream(

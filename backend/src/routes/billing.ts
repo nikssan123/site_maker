@@ -1,14 +1,19 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth';
+import { prisma } from '../index';
 import {
   createGenerationCheckout,
   createProjectCheckout,
   createHostingCheckout,
-  createIterationCheckout,
+  createIterationPlanCheckout,
+  cancelIterationPlan,
+  createTokenTopupCheckout,
   createPortalSession,
   handleWebhook,
 } from '../services/billingService';
+import { getAllowanceSummary } from '../services/tokenAccountingService';
+import { AppError } from '../middleware/errorHandler';
 
 const router = Router();
 
@@ -45,15 +50,85 @@ router.post('/hosting-checkout', requireAuth, async (req, res, next) => {
   }
 });
 
-// Iteration credits — quantity 1–20; pricing: €1.50 each, capped at €20 for 20
-router.post('/iteration-checkout', requireAuth, async (req, res, next) => {
+// Retired — replaced by the €20/mo improvement-plan subscription below.
+router.post('/iteration-checkout', (_req, res) => {
+  res.status(410).json({
+    error: {
+      code: 'gone',
+      message:
+        'Iteration credits have been replaced by the monthly improvement plan. Please subscribe instead.',
+    },
+  });
+});
+
+// €20/mo improvement-plan subscription — grants MONTHLY_TOKEN_LIMIT tokens per period.
+router.post('/iteration-plan-checkout', requireAuth, async (req, res, next) => {
   try {
-    const { projectId, quantity } = z.object({
-      projectId: z.string(),
-      quantity: z.number().int().min(1).max(20).default(1),
-    }).parse(req.body);
-    const result = await createIterationCheckout(req.user.userId, req.user.email, projectId, quantity);
+    const result = await createIterationPlanCheckout(req.user.userId, req.user.email);
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Cancel the improvement plan at period end.
+router.post('/iteration-plan-cancel', requireAuth, async (req, res, next) => {
+  try {
+    const result = await cancelIterationPlan(req.user.userId);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// One-off €5 top-up to extend the current period's quota.
+router.post('/token-topup-checkout', requireAuth, async (req, res, next) => {
+  try {
+    const result = await createTokenTopupCheckout(req.user.userId, req.user.email);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Improvement plan status — returns percent-only usage, plus a grants summary for the UI.
+router.get('/iteration-plan', requireAuth, async (req, res, next) => {
+  try {
+    const userId = req.user.userId;
+    const [user, summary, grants] = await Promise.all([
+      prisma.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: {
+          iterationSubStatus: true,
+          iterationSubCancelAtPeriodEnd: true,
+          iterationSubCurrentPeriodStart: true,
+          iterationSubCurrentPeriodEnd: true,
+        },
+      }),
+      getAllowanceSummary(userId),
+      prisma.tokenGrant.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: {
+          id: true,
+          reason: true,
+          note: true,
+          createdAt: true,
+          expiresAt: true,
+        },
+      }),
+    ]);
+
+    res.json({
+      status: user.iterationSubStatus ?? 'none',
+      cancelAtPeriodEnd: user.iterationSubCancelAtPeriodEnd,
+      periodStart: summary.periodStart,
+      periodEnd: summary.periodEnd,
+      hasActiveSub: summary.hasActiveSub,
+      pct: summary.pct,
+      grants,
+    });
   } catch (err) {
     next(err);
   }

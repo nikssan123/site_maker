@@ -1,5 +1,6 @@
 import { extractFilesFromCodegenResponse } from '../lib/extractCodegenJson';
 import { getChatClient, getCodeClient, ChatMessage } from './aiClient';
+import { logTokens } from './tokenAccountingService';
 import {
   ITERATOR_SYSTEM,
   buildIteratorPrompt,
@@ -132,11 +133,20 @@ Rules:
 - English only
 - No preamble, no sign-off — just the spec`;
       const refinementUserMsg = `App plan: ${JSON.stringify(planData)}\n\nFiles: ${Object.keys(currentFiles).join(', ')}\n\nUser request: ${changeRequest}`;
-      refinedSpec = await chatAi.complete(
+      const refineResult = await chatAi.completeWithUsage(
         [{ role: 'user', content: refinementUserMsg }],
         refinementSystem,
         { maxTokens: 350 },
       );
+      refinedSpec = refineResult.text;
+      await logTokens({
+        userId,
+        projectId: session.project.id,
+        provider: refineResult.provider,
+        model: refineResult.model,
+        endpoint: 'iterate.refine',
+        usage: refineResult.usage,
+      });
     } catch {
       refinedSpec = changeRequest;
     }
@@ -170,6 +180,8 @@ Rules:
         filePaths: allFilePaths,
         refinedSpec,
         maxFiles: 12,
+        userId,
+        projectId: project.id,
       });
       scopedFiles = scoped.targetFiles;
     } catch {
@@ -208,7 +220,20 @@ Rules:
   let raw: string;
   let rawRetry = '';
   try {
-    raw = await ai.complete([{ role: 'user', content: prompt }], ITERATOR_SYSTEM, { maxTokens: iterMaxTokens });
+    const codegenResult = await ai.completeWithUsage(
+      [{ role: 'user', content: prompt }],
+      ITERATOR_SYSTEM,
+      { maxTokens: iterMaxTokens },
+    );
+    raw = codegenResult.text;
+    await logTokens({
+      userId,
+      projectId: project.id,
+      provider: codegenResult.provider,
+      model: codegenResult.model,
+      endpoint: 'iterate.codegen',
+      usage: codegenResult.usage,
+    });
   } finally {
     clearInterval(hintTimer);
   }
@@ -223,7 +248,16 @@ Rules:
         { role: 'assistant', content: raw },
         { role: 'user', content: BG_CODEGEN_RETRY },
       ];
-      rawRetry = await ai.complete(retryMessages, ITERATOR_SYSTEM, { maxTokens: iterMaxTokens });
+      const retryResult = await ai.completeWithUsage(retryMessages, ITERATOR_SYSTEM, { maxTokens: iterMaxTokens });
+      rawRetry = retryResult.text;
+      await logTokens({
+        userId,
+        projectId: project.id,
+        provider: retryResult.provider,
+        model: retryResult.model,
+        endpoint: 'iterate.codegen',
+        usage: retryResult.usage,
+      });
       changedFiles = extractFilesFromCodegenResponse(rawRetry);
       if (!changedFiles) raw = rawRetry;
     } catch {
@@ -242,12 +276,20 @@ Rules:
     );
     try {
       await publishEvent(sessionId, { type: 'user_progress', message: GEN_JSON_REPAIR_INITIAL });
-      const rawRepair = await ai.complete(
+      const repairResult = await ai.completeWithUsage(
         [{ role: 'user', content: repairUser }],
         CODE_GEN_JSON_REPAIR_SYSTEM,
         { maxTokens: repairMaxTokens },
       );
-      changedFiles = extractFilesFromCodegenResponse(rawRepair);
+      await logTokens({
+        userId,
+        projectId: project.id,
+        provider: repairResult.provider,
+        model: repairResult.model,
+        endpoint: 'iterate.repair',
+        usage: repairResult.usage,
+      });
+      changedFiles = extractFilesFromCodegenResponse(repairResult.text);
     } catch {
       /* ignore */
     }

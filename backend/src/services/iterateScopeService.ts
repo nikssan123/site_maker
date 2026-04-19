@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { getIterateAssistClient } from './aiClient';
+import { logTokens } from './tokenAccountingService';
 
 export type IterateScopeResult = {
   summaryBg: string;
@@ -31,6 +32,9 @@ export async function scopeIteration(params: {
   filePaths: string[];
   refinedSpec: string;
   maxFiles?: number;
+  /** Accounting context — tokens are billed to this user/project when provided. */
+  userId?: string;
+  projectId?: string;
 }): Promise<IterateScopeResult> {
   const maxFiles = params.maxFiles ?? 8;
   const system = `
@@ -68,7 +72,18 @@ Rules:
   });
 
   const ai = getIterateAssistClient();
-  const raw = await ai.complete([{ role: 'user', content: user }], system, { maxTokens: 900 });
+  const scopeResult = await ai.completeWithUsage([{ role: 'user', content: user }], system, { maxTokens: 900 });
+  if (params.userId) {
+    await logTokens({
+      userId: params.userId,
+      projectId: params.projectId ?? null,
+      provider: scopeResult.provider,
+      model: scopeResult.model,
+      endpoint: 'iterate.clarify.explore',
+      usage: scopeResult.usage,
+    });
+  }
+  const raw = scopeResult.text;
   const parsed = safeParseJson(raw);
   const res = parsed ? SCOPE_SCHEMA.safeParse(parsed) : null;
   if (!res?.success) {

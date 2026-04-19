@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth';
 import { runIteration } from '../services/iteratorService';
 import { clarifyIteration } from '../services/iterateClarifyService';
+import { assertCanIterate } from '../services/tokenAccountingService';
 import { prisma } from '../index';
 import { AppError } from '../middleware/errorHandler';
 
@@ -51,19 +52,14 @@ router.post('/', requireAuth, async (req, res, next) => {
 
     const project = session.project;
 
-    // Count all iterations ever run on this project
-    const totalUsed = await prisma.iterationLog.count({
+    // Free tier: first FREE_ITERATION_LIMIT iterations on a given project are always allowed.
+    // Past that, access is gated by the per-user iteration-subscription token quota.
+    const freeUsed = await prisma.iterationLog.count({
       where: { projectId: project.id },
     });
 
-    const allowedTotal = FREE_ITERATION_LIMIT + project.paidIterationCredits;
-
-    if (totalUsed >= allowedTotal) {
-      throw new AppError(
-        402,
-        'Безплатните подобрения са изчерпани — закупете още, за да продължите',
-        'iteration_payment_required',
-      );
+    if (freeUsed >= FREE_ITERATION_LIMIT) {
+      await assertCanIterate(userId);
     }
 
     // Title = first line of user-facing message (not the internal English spec)

@@ -1,69 +1,88 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  Box, TextField, Button, Stack, Typography, LinearProgress, Paper,
-  Dialog, DialogTitle, DialogContent, DialogActions, Slider, Chip, CircularProgress,
+  Box, TextField, Button, Stack, Typography, LinearProgress, Paper, Chip, CircularProgress,
 } from '@mui/material';
 import DiamondIcon from '@mui/icons-material/Diamond';
 import SendIcon from '@mui/icons-material/Send';
+import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../store/project';
-
-const MAX_QTY = 20;
-const SINGLE_PRICE = 1.5;  // € per credit
-const PACK_PRICE = 20;     // € for MAX_QTY credits
-
-function calcPrice(qty: number): number {
-  return qty === MAX_QTY ? PACK_PRICE : qty * SINGLE_PRICE;
-}
-
-function formatPrice(price: number): string {
-  return price % 1 === 0 ? `€${price}` : `€${price.toFixed(2)}`;
-}
+import { useIterationPlanStore } from '../store/iterationPlan';
+import { api } from '../lib/api';
+import SupportDialog from './SupportDialog';
 
 interface Props {
   onSubmit: (message: string) => void;
   loading: boolean;
   loadingLabel?: string;
-  onBuyIteration: (quantity: number) => void;
 }
 
-export default function IterationBar({ onSubmit, loading, loadingLabel, onBuyIteration }: Props) {
-  const { t } = useTranslation();
+function pctColor(pct: number): 'primary' | 'warning' | 'error' {
+  if (pct >= 90) return 'error';
+  if (pct >= 70) return 'warning';
+  return 'primary';
+}
+
+export default function IterationBar({ onSubmit, loading, loadingLabel }: Props) {
+  const { t, i18n } = useTranslation();
   const [value, setValue] = useState('');
-  const [buyDialogOpen, setBuyDialogOpen] = useState(false);
-  const [qty, setQty] = useState(1);
-  const { iterationsTotal, paidIterationCredits, freeIterationLimit } = useProjectStore();
+  const [supportOpen, setSupportOpen] = useState(false);
+  const [subscribing, setSubscribing] = useState(false);
+  const [buyingTopup, setBuyingTopup] = useState(false);
+  const { iterationsTotal, freeIterationLimit } = useProjectStore();
+  const plan = useIterationPlanStore();
+
+  useEffect(() => {
+    if (!plan.loaded && !plan.loading) {
+      void plan.refresh();
+    }
+  }, [plan]);
 
   const freeUsed = Math.min(iterationsTotal, freeIterationLimit);
-  const paidUsed = Math.max(0, iterationsTotal - freeIterationLimit);
-  const paidRemaining = paidIterationCredits - paidUsed;
-  const hasCredits = freeUsed < freeIterationLimit || paidRemaining > 0;
+  const freeRemaining = Math.max(0, freeIterationLimit - freeUsed);
+  const stillOnFreeTier = freeRemaining > 0;
+
+  const hasQuota = stillOnFreeTier || (plan.pct < 100 && (plan.hasActiveSub || plan.grants.length > 0));
+  const outOfQuota = !stillOnFreeTier && plan.loaded && plan.pct >= 100 && plan.hasActiveSub;
+  const needsSubscribe = !stillOnFreeTier && plan.loaded && !plan.hasActiveSub && plan.grants.length === 0;
+
+  const resetLabel = useMemo(() => {
+    if (!plan.periodEnd) return '';
+    try {
+      return new Date(plan.periodEnd).toLocaleDateString(i18n.language || undefined, {
+        day: 'numeric',
+        month: 'short',
+      });
+    } catch {
+      return '';
+    }
+  }, [plan.periodEnd, i18n.language]);
 
   const handleSubmit = () => {
-    if (!value.trim() || !hasCredits) return;
+    if (!value.trim() || !hasQuota) return;
     onSubmit(value.trim());
     setValue('');
   };
 
-  const handleBuyConfirm = () => {
-    setBuyDialogOpen(false);
-    onBuyIteration(qty);
+  const handleSubscribe = async () => {
+    setSubscribing(true);
+    try {
+      const { url } = await api.iterationPlanCheckout();
+      if (url) window.location.href = url;
+    } catch {
+      setSubscribing(false);
+    }
   };
 
-  const freeLeft = freeIterationLimit - freeUsed;
-  const statusLabel = freeUsed < freeIterationLimit
-    ? t('iteration.freeRemaining', { n: freeLeft, total: freeIterationLimit })
-    : paidRemaining > 0
-    ? paidRemaining === 1
-      ? t('iteration.paidRemainingOne')
-      : t('iteration.paidRemaining', { n: paidRemaining })
-    : t('iteration.noneLeft');
-
-  const pct = freeUsed < freeIterationLimit ? (freeUsed / freeIterationLimit) * 100 : 100;
-  const barColor = freeUsed < freeIterationLimit ? 'primary' : 'warning';
-
-  const price = calcPrice(qty);
-  const isBestValue = qty === MAX_QTY;
+  const handleTopup = async () => {
+    setBuyingTopup(true);
+    try {
+      const { url } = await api.tokenTopupCheckout();
+      if (url) window.location.href = url;
+    } catch {
+      setBuyingTopup(false);
+    }
+  };
 
   return (
     <>
@@ -77,157 +96,149 @@ export default function IterationBar({ onSubmit, loading, loadingLabel, onBuyIte
           background: 'rgba(99,102,241,0.03)',
         }}
       >
-        {/* Label + usage */}
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
           <Typography variant="caption" fontWeight={600} color="primary.main" sx={{ fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase' }}>
             {t('iteration.barLabel')}
           </Typography>
-          <Typography variant="caption" sx={{ color: hasCredits ? 'text.secondary' : 'error.light', fontSize: 11 }}>
-            {statusLabel}
-          </Typography>
+          {stillOnFreeTier ? (
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 11 }}>
+              {t('iteration.freeRemaining', { n: freeRemaining, total: freeIterationLimit })}
+            </Typography>
+          ) : plan.loaded && (plan.hasActiveSub || plan.grants.length > 0) ? (
+            <Typography variant="caption" sx={{ color: outOfQuota ? 'error.light' : 'text.secondary', fontSize: 11 }}>
+              {t('iteration.usagePct', { pct: plan.pct })}
+              {resetLabel ? ` · ${t('iteration.resetOn', { date: resetLabel })}` : ''}
+            </Typography>
+          ) : null}
         </Stack>
 
-        {freeUsed < freeIterationLimit && (
+        {!stillOnFreeTier && plan.loaded && (plan.hasActiveSub || plan.grants.length > 0) && (
           <LinearProgress
             variant="determinate"
-            value={pct}
-            color={barColor}
+            value={plan.pct}
+            color={pctColor(plan.pct)}
             sx={{ borderRadius: 1, height: 3, mb: 1.25, bgcolor: 'rgba(255,255,255,0.07)' }}
           />
         )}
 
-        {/* Textarea + submit */}
-        <TextField
-          fullWidth
-          multiline
-          minRows={2}
-          maxRows={5}
-          placeholder={
-            hasCredits
-              ? t('iteration.placeholderLong')
-              : t('iteration.noCreditsPlaceholder')
-          }
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          disabled={!hasCredits || loading}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSubmit();
-            }
-          }}
-          sx={{ mb: 1.25 }}
-        />
+        {stillOnFreeTier && (
+          <LinearProgress
+            variant="determinate"
+            value={(freeUsed / freeIterationLimit) * 100}
+            color="primary"
+            sx={{ borderRadius: 1, height: 3, mb: 1.25, bgcolor: 'rgba(255,255,255,0.07)' }}
+          />
+        )}
 
-        {hasCredits ? (
-          <Button
-            variant="contained"
-            fullWidth
-            disabled={loading || !value.trim()}
-            onClick={handleSubmit}
-            startIcon={loading ? <CircularProgress size={14} sx={{ color: 'inherit' }} /> : <SendIcon fontSize="small" />}
-            sx={{ background: 'linear-gradient(135deg, #6366f1, #a855f7)', fontWeight: 700 }}
-          >
-            {loading ? (loadingLabel ?? t('preview.applyingChanges')) : t('iteration.apply')}
-          </Button>
+        {outOfQuota ? (
+          <Stack spacing={1.25}>
+            <Typography variant="body2" fontWeight={700}>
+              {t('iteration.outOfQuotaTitle')}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {t('iteration.outOfQuotaHint', { date: resetLabel })}
+            </Typography>
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant="contained"
+                fullWidth
+                disabled={buyingTopup}
+                onClick={handleTopup}
+                startIcon={buyingTopup ? <CircularProgress size={14} sx={{ color: 'inherit' }} /> : <DiamondIcon sx={{ fontSize: '14px !important' }} />}
+                sx={{ background: 'linear-gradient(135deg, #6366f1, #a855f7)', fontWeight: 700 }}
+              >
+                {t('iteration.buyTopup')}
+              </Button>
+              <Button
+                variant="outlined"
+                fullWidth
+                onClick={() => setSupportOpen(true)}
+                startIcon={<SupportAgentIcon fontSize="small" />}
+                sx={{ fontWeight: 700 }}
+              >
+                {t('iteration.requestExtension')}
+              </Button>
+            </Stack>
+          </Stack>
+        ) : needsSubscribe ? (
+          <Stack spacing={1.25}>
+            <Typography variant="body2" fontWeight={700}>
+              {t('iteration.subscribeTitle')}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {t('iteration.subscribeHint')}
+            </Typography>
+            <Button
+              variant="contained"
+              fullWidth
+              disabled={subscribing}
+              onClick={handleSubscribe}
+              startIcon={subscribing ? <CircularProgress size={14} sx={{ color: 'inherit' }} /> : <DiamondIcon sx={{ fontSize: '14px !important' }} />}
+              sx={{ background: 'linear-gradient(135deg, #6366f1, #a855f7)', fontWeight: 700 }}
+            >
+              {t('iteration.subscribeCta')}
+            </Button>
+          </Stack>
         ) : (
-          <Button
-            variant="contained"
-            fullWidth
-            startIcon={<DiamondIcon sx={{ fontSize: '14px !important' }} />}
-            onClick={() => { setQty(1); setBuyDialogOpen(true); }}
-            sx={{ background: 'linear-gradient(135deg, #6366f1, #a855f7)', fontWeight: 700 }}
-          >
-            {t('iteration.buyCredits')}
-          </Button>
+          <>
+            <TextField
+              fullWidth
+              multiline
+              minRows={2}
+              maxRows={5}
+              placeholder={
+                hasQuota
+                  ? t('iteration.placeholderLong')
+                  : t('iteration.noCreditsPlaceholder')
+              }
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              disabled={!hasQuota || loading}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit();
+                }
+              }}
+              sx={{ mb: 1.25 }}
+            />
+
+            <Button
+              variant="contained"
+              fullWidth
+              disabled={loading || !value.trim() || !hasQuota}
+              onClick={handleSubmit}
+              startIcon={loading ? <CircularProgress size={14} sx={{ color: 'inherit' }} /> : <SendIcon fontSize="small" />}
+              sx={{ background: 'linear-gradient(135deg, #6366f1, #a855f7)', fontWeight: 700 }}
+            >
+              {loading ? (loadingLabel ?? t('preview.applyingChanges')) : t('iteration.apply')}
+            </Button>
+
+            {!stillOnFreeTier && plan.pct >= 70 && plan.pct < 100 && (
+              <Box sx={{ mt: 1 }}>
+                <Chip
+                  size="small"
+                  label={t('iteration.lowQuotaHint')}
+                  onClick={handleTopup}
+                  sx={{
+                    cursor: 'pointer',
+                    bgcolor: plan.pct >= 90 ? 'error.dark' : 'warning.dark',
+                    color: '#fff',
+                    fontWeight: 600,
+                    fontSize: 10,
+                  }}
+                />
+              </Box>
+            )}
+          </>
         )}
       </Paper>
 
-      {/* Buy dialog */}
-      <Dialog
-        open={buyDialogOpen}
-        onClose={() => setBuyDialogOpen(false)}
-        maxWidth="xs"
-        fullWidth
-        PaperProps={{ sx: { borderRadius: 2 } }}
-      >
-        <DialogTitle fontWeight={700} sx={{ fontSize: 16, pb: 1 }}>
-          {t('iteration.buyDialogTitle')}
-        </DialogTitle>
-        <DialogContent sx={{ pt: '4px !important' }}>
-          {/* Quantity slider */}
-          <Box sx={{ px: 1, pt: 1 }}>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.5}>
-              <Typography variant="body2" color="text.secondary">
-                {t('iteration.buyDialogQty')}
-              </Typography>
-              <Typography variant="body2" fontWeight={700}>
-                {qty}
-              </Typography>
-            </Stack>
-            <Slider
-              value={qty}
-              min={1}
-              max={MAX_QTY}
-              step={1}
-              onChange={(_, v) => setQty(v as number)}
-              marks={[
-                { value: 1 },
-                { value: 5 },
-                { value: 10 },
-                { value: 15 },
-                { value: 20 },
-              ]}
-              sx={{ color: 'primary.main' }}
-            />
-          </Box>
-
-          {/* Price summary */}
-          <Box
-            sx={{
-              mt: 1.5, p: 2, borderRadius: 1.5,
-              background: isBestValue ? 'rgba(99,102,241,0.08)' : 'action.hover',
-              border: isBestValue ? '1px solid rgba(99,102,241,0.3)' : '1px solid transparent',
-              display: 'flex', alignItems: 'center', gap: 1.5,
-            }}
-          >
-            <Box sx={{ flex: 1 }}>
-              <Typography variant="h6" fontWeight={800} sx={{ lineHeight: 1 }}>
-                {formatPrice(price)}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {qty === 1
-                  ? t('iteration.buyDialogOne')
-                  : t('iteration.buyDialogMany', { n: qty })}
-              </Typography>
-            </Box>
-            {isBestValue && (
-              <Chip
-                label={t('iteration.buyPackBadge')}
-                size="small"
-                sx={{ bgcolor: 'success.main', color: '#fff', fontWeight: 700, fontSize: 10 }}
-              />
-            )}
-          </Box>
-
-          {!isBestValue && (
-            <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 1, textAlign: 'center' }}>
-              {t('iteration.buyDialogPackHint', { price: formatPrice(PACK_PRICE), n: MAX_QTY })}
-            </Typography>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5, pt: 0 }}>
-          <Button onClick={() => setBuyDialogOpen(false)} size="small">{t('common.cancel')}</Button>
-          <Button
-            variant="contained"
-            size="small"
-            onClick={handleBuyConfirm}
-            sx={{ background: 'linear-gradient(135deg, #6366f1, #a855f7)', fontWeight: 700, minWidth: 120 }}
-          >
-            {t('iteration.buyDialogConfirm', { price: formatPrice(price) })}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <SupportDialog
+        open={supportOpen}
+        onClose={() => setSupportOpen(false)}
+        presetSubject={t('iteration.requestExtensionSubject')}
+      />
     </>
   );
 }

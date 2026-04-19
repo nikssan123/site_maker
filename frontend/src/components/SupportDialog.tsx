@@ -13,11 +13,13 @@ import { useAuthStore } from '../store/auth';
 interface Props {
   open: boolean;
   onClose: () => void;
+  /** Seeds the description field on open — used to pre-fill context like "Token extension request". */
+  presetSubject?: string;
 }
 
 const MAX_DESCRIPTION = 4000;
 
-export default function SupportDialog({ open, onClose }: Props) {
+export default function SupportDialog({ open, onClose, presetSubject }: Props) {
   const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
 
@@ -33,9 +35,12 @@ export default function SupportDialog({ open, onClose }: Props) {
     if (!open) return;
     setName((prev) => prev || user?.email?.split('@')[0] || '');
     setContactEmail((prev) => prev || user?.email || '');
+    if (presetSubject) {
+      setDescription((prev) => (prev ? prev : `${presetSubject}\n\n`));
+    }
     setErrorMsg('');
     setDone(false);
-  }, [open, user?.email]);
+  }, [open, user?.email, presetSubject]);
 
   const handleClose = () => {
     if (submitting) return;

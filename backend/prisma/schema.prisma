@@ -9,16 +9,26 @@ datasource db {
 }
 
 model User {
-  id               String    @id @default(uuid())
-  email            String    @unique
+  id               String                 @id @default(uuid())
+  email            String                 @unique
   passwordHash     String
-  isAdmin          Boolean   @default(false)
-  stripeCustomerId String?   @unique
-  freeProjectUsed  Boolean   @default(false)
-  createdAt        DateTime  @default(now())
+  isAdmin          Boolean                @default(false)
+  stripeCustomerId String?                @unique
+  freeProjectUsed  Boolean                @default(false)
+  createdAt        DateTime               @default(now())
   sessions         Session[]
   emailChange      PendingEmailChange?
   passwordChange   PendingPasswordChange?
+
+  // Iteration improvement plan (€20/mo subscription)
+  iterationSubStripeId           String?   @unique
+  iterationSubStatus             String? // "active" | "past_due" | "canceled" | null
+  iterationSubCancelAtPeriodEnd  Boolean   @default(false)
+  iterationSubCurrentPeriodStart DateTime?
+  iterationSubCurrentPeriodEnd   DateTime?
+
+  tokenUsage  TokenUsageLog[]
+  tokenGrants TokenGrant[]
 }
 
 model PendingEmailChange {
@@ -61,38 +71,38 @@ model PendingRegistration {
 }
 
 model PasswordReset {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
-  tokenHash String   @unique
+  tokenHash String    @unique
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([userId, createdAt])
   @@index([expiresAt])
 }
 
 model Session {
-  id                   String              @id @default(uuid())
-  userId               String
-  user                 User                @relation(fields: [userId], references: [id])
-  status               String              @default("planning") // "planning" | "generating" | "running" | "error"
-  generationPurchased  Boolean             @default(false)
+  id                        String            @id @default(uuid())
+  userId                    String
+  user                      User              @relation(fields: [userId], references: [id])
+  status                    String            @default("planning") // "planning" | "generating" | "running" | "error"
+  generationPurchased       Boolean           @default(false)
   /// Set when €150 pre-generation checkout completes; consumed when first Project row is created for this session.
-  sitePurchaseExtrasPending Boolean        @default(false)
-  createdAt            DateTime            @default(now())
-  plan                 Plan?
-  project              Project?
-  messages             Message[]
-  generationEvents     GenerationEvent[]
-  planExecutions       PlanExecution[]
+  sitePurchaseExtrasPending Boolean           @default(false)
+  createdAt                 DateTime          @default(now())
+  plan                      Plan?
+  project                   Project?
+  messages                  Message[]
+  generationEvents          GenerationEvent[]
+  planExecutions            PlanExecution[]
 }
 
 model Message {
   id        String   @id @default(uuid())
   sessionId String
   session   Session  @relation(fields: [sessionId], references: [id])
-  role      String   // "user" | "assistant"
+  role      String // "user" | "assistant"
   content   String
   createdAt DateTime @default(now())
 }
@@ -109,12 +119,12 @@ model Plan {
 }
 
 model PlanExecution {
-  id        String   @id @default(uuid())
+  id        String  @id @default(uuid())
   sessionId String
-  session   Session  @relation(fields: [sessionId], references: [id])
+  session   Session @relation(fields: [sessionId], references: [id])
 
   planId   String?
-  plan     Plan?     @relation(fields: [planId], references: [id], onDelete: SetNull)
+  plan     Plan?   @relation(fields: [planId], references: [id], onDelete: SetNull)
   planData Json
 
   /// Mirrors the generate request decision (free/paid/retry)
@@ -128,38 +138,38 @@ model PlanExecution {
 }
 
 model Project {
-  id                    String         @id @default(uuid())
-  sessionId             String         @unique
-  session               Session        @relation(fields: [sessionId], references: [id])
-  files                 Json           // { [path: string]: string }
-  buildLog              String?
-  errorLog              String?
-  fixAttempts           Int            @default(0)
-  runPort               Int?
-  status                String         @default("generating") // "generating" | "building" | "running" | "error"
-  paid                  Boolean        @default(false)
-  hosted                Boolean        @default(false)
+  id                         String              @id @default(uuid())
+  sessionId                  String              @unique
+  session                    Session             @relation(fields: [sessionId], references: [id])
+  files                      Json // { [path: string]: string }
+  buildLog                   String?
+  errorLog                   String?
+  fixAttempts                Int                 @default(0)
+  runPort                    Int?
+  status                     String              @default("generating") // "generating" | "building" | "running" | "error"
+  paid                       Boolean             @default(false)
+  hosted                     Boolean             @default(false)
   /// Free hosting window (e.g. 1 month after €150 site purchase) when there is no Stripe subscription yet.
-  hostingFreeUntil      DateTime?
-  hostingSubscriptionId String?        @unique
+  hostingFreeUntil           DateTime?
+  hostingSubscriptionId      String?             @unique
   /// Idempotency: generation pre-pay bundle (credits + free hosting) applied only once per project row.
-  includesSitePurchaseBundle Boolean @default(false)
-  customDomain              String?   @unique // BYO hostname e.g. www.brand.com
-  customDomainVerifiedAt    DateTime?
-  domainVerificationToken   String?
-  paidIterationCredits  Int            @default(0)
-  stripeAccountId       String?        // connected Stripe account via Standard Connect OAuth
-  paymentsEnabled       Boolean        @default(false)
-  buildEnv              Json?          // { VITE_STRIPE_PUBLISHABLE_KEY: "pk_..." } — baked into build at compile time
-  runtimeEnv            String?        // AES-256-GCM encrypted JSON: { STRIPE_SECRET_KEY: "sk_..." } — injected into process env only
-  analyticsEvents       AnalyticsPageView[]
-  emailSettings         EmailSettings?
-  emailDomains          EmailDomain[]
-  emailTemplates        EmailTemplate[]
-  emailLogs             EmailLog[]
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
-  iterationLogs         IterationLog[]
+  includesSitePurchaseBundle Boolean             @default(false)
+  customDomain               String?             @unique // BYO hostname e.g. www.brand.com
+  customDomainVerifiedAt     DateTime?
+  domainVerificationToken    String?
+  paidIterationCredits       Int                 @default(0)
+  stripeAccountId            String? // connected Stripe account via Standard Connect OAuth
+  paymentsEnabled            Boolean             @default(false)
+  buildEnv                   Json? // { VITE_STRIPE_PUBLISHABLE_KEY: "pk_..." } — baked into build at compile time
+  runtimeEnv                 String? // AES-256-GCM encrypted JSON: { STRIPE_SECRET_KEY: "sk_..." } — injected into process env only
+  analyticsEvents            AnalyticsPageView[]
+  emailSettings              EmailSettings?
+  emailDomains               EmailDomain[]
+  emailTemplates             EmailTemplate[]
+  emailLogs                  EmailLog[]
+  createdAt                  DateTime            @default(now())
+  updatedAt                  DateTime            @updatedAt
+  iterationLogs              IterationLog[]
 }
 
 model IterationLog {
@@ -196,17 +206,17 @@ model AnalyticsPageView {
 }
 
 model EmailDomain {
-  id             String   @id @default(uuid())
+  id             String          @id @default(uuid())
   projectId      String
-  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  provider       String   @default("resend")
-  resendDomainId String   @unique
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  provider       String          @default("resend")
+  resendDomainId String          @unique
   domain         String
   dnsRecords     Json?
-  verified       Boolean  @default(false)
+  verified       Boolean         @default(false)
   verifiedAt     DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
   settings       EmailSettings[]
 
   @@unique([projectId, domain])
@@ -214,10 +224,10 @@ model EmailDomain {
 }
 
 model EmailSettings {
-  id        String   @id @default(uuid())
-  projectId String   @unique
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  provider  String   @default("resend")
+  id        String  @id @default(uuid())
+  projectId String  @unique
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  provider  String  @default("resend")
 
   fromName  String?
   fromEmail String
@@ -248,21 +258,21 @@ model EmailTemplate {
 }
 
 model EmailLog {
-  id              String   @id @default(uuid())
-  projectId       String
-  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  provider        String   @default("resend")
+  provider        String  @default("resend")
   resendMessageId String?
 
-  to              String
-  from            String
-  subject         String
-  status          String   @default("queued") // queued | sent | failed | delivered | bounced | complained | opened
-  error           String?
+  to      String
+  from    String
+  subject String
+  status  String  @default("queued") // queued | sent | failed | delivered | bounced | complained | opened
+  error   String?
 
-  createdAt       DateTime @default(now())
-  sentAt          DateTime?
+  createdAt DateTime  @default(now())
+  sentAt    DateTime?
 
   @@index([projectId, createdAt])
   @@index([resendMessageId])
@@ -271,6 +281,43 @@ model EmailLog {
 model ProcessedStripeEvent {
   id        String   @id
   createdAt DateTime @default(now())
+}
+
+model TokenUsageLog {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId    String?
+  provider     String // "anthropic" | "openai"
+  model        String
+  endpoint     String // "iterate.codegen" | "iterate.refine" | "iterate.repair" | "iterate.clarify" | "iterate.clarify.explore"
+  inputTokens  Int
+  outputTokens Int
+  /// USD cost × 10_000 at log time for margin analytics (0.01¢ precision). Kept internal — users see % only.
+  costMicros   Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}
+
+model TokenGrant {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokens          Int
+  /// "migration" | "admin_grant" | "topup_purchase"
+  reason          String
+  /// adminUserId when reason = admin_grant
+  grantedBy       String?
+  stripeSessionId String?   @unique
+  note            String?
+  createdAt       DateTime  @default(now())
+  /// null = never expires
+  expiresAt       DateTime?
+
+  @@index([userId, expiresAt])
+  @@index([userId, createdAt])
 }
 
 model SupportTicket {

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { getIterateAssistClient } from './aiClient';
+import { logTokens } from './tokenAccountingService';
 
 export type IterateExploreResult = {
   targetFiles: string[];
@@ -68,6 +69,9 @@ export async function exploreIterationFiles(params: {
   fileContents: Record<string, string>;
   maxOpens?: number;
   maxTurns?: number;
+  /** Accounting context — tokens are billed to this user/project when provided. */
+  userId?: string;
+  projectId?: string;
 }): Promise<IterateExploreResult> {
   const maxTurns = params.maxTurns ?? 4;
   const maxOpens = params.maxOpens ?? 6;
@@ -121,7 +125,18 @@ Rules:
       state.opened.length ? `\nOpened file contents:\n${openedBodies}` : '',
     ].filter(Boolean).join('\n');
 
-    const raw = await ai.complete([{ role: 'user', content: user }], system, { maxTokens: 800 });
+    const exploreResult = await ai.completeWithUsage([{ role: 'user', content: user }], system, { maxTokens: 800 });
+    if (params.userId) {
+      await logTokens({
+        userId: params.userId,
+        projectId: params.projectId ?? null,
+        provider: exploreResult.provider,
+        model: exploreResult.model,
+        endpoint: 'iterate.clarify.explore',
+        usage: exploreResult.usage,
+      });
+    }
+    const raw = exploreResult.text;
     const parsed = safeParseJson(raw);
     const data = parsed ? ACTION_SCHEMA.safeParse(parsed) : null;
     if (!data?.success) break;

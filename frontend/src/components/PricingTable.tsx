@@ -9,7 +9,7 @@ import {
 } from '@mui/material';
 import { alpha, keyframes } from '@mui/material/styles';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
-import CloudIcon from '@mui/icons-material/Cloud';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import type { FC, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -42,7 +42,7 @@ export type PricingTableProps = {
   reveal?: PricingRevealOptions;
 };
 
-type PlanTone = 'generate' | 'host';
+type PlanTone = 'generate' | 'improve';
 
 const PricingTable: FC<PricingTableProps> = ({ reveal }) => {
   const { t } = useTranslation();
@@ -67,26 +67,26 @@ const PricingTable: FC<PricingTableProps> = ({ reveal }) => {
         features: [t('pricing.featGenerate1'), t('pricing.featGenerate2'), t('pricing.featGenerate3'), t('pricing.featGenerate4'), t('pricing.featGenerate5'), t('pricing.featGenerate6'), t('pricing.featGenerate7')],
       },
       {
-        tone: 'host',
+        tone: 'improve',
         featured: true,
-        icon: <CloudIcon sx={{ fontSize: 26, color: 'secondary.light' }} />,
-        title: t('pricing.hostTitle'),
-        price: t('pricing.hostPrice'),
-        period: t('pricing.hostPeriod'),
-        description: t('pricing.hostDesc'),
+        icon: <AutoFixHighIcon sx={{ fontSize: 26, color: 'secondary.light' }} />,
+        title: t('pricing.improveTitle'),
+        price: t('pricing.improvePrice'),
+        period: t('pricing.improvePeriod'),
+        description: t('pricing.improveDesc'),
         features: [
-          t('pricing.featHost1'),
-          t('pricing.featHost2'),
-          t('pricing.featHost3'),
-          t('pricing.featHost4'),
-          t('pricing.featHost5'),
-          t('pricing.featHost6'),
+          t('pricing.featImprove1'),
+          t('pricing.featImprove2'),
+          t('pricing.featImprove3'),
+          t('pricing.featImprove4'),
+          t('pricing.featImprove5'),
+          t('pricing.featImprove6'),
         ],
       },
     ];
 
   const accentForTone = (tone: PlanTone, featured: boolean) => {
-    if (tone === 'host' && featured) {
+    if (tone === 'improve' && featured) {
       return {
         border: '2px solid',
         borderColor: 'secondary.main',
@@ -106,7 +106,7 @@ const PricingTable: FC<PricingTableProps> = ({ reveal }) => {
   };
 
   const checkColor = (tone: PlanTone) => {
-    if (tone === 'host') return 'secondary.light' as const;
+    if (tone === 'improve') return 'secondary.light' as const;
     return 'primary.light' as const;
   };
 
@@ -130,17 +130,8 @@ const PricingTable: FC<PricingTableProps> = ({ reveal }) => {
       >
         {t('pricing.subtitle')}
       </Typography>
-      <Stack
-        direction="row"
-        justifyContent="center"
-        gap={1}
-        flexWrap="wrap"
-        mb={5}
-        sx={pricingRevealSx(reveal, 0.12)}
-      >
-        <Chip label={t('pricing.chipFree')} size="small" color="primary" variant="outlined" sx={{ fontWeight: 600 }} />
-        <Chip label={t('pricing.chipPlan')} size="small" color="secondary" variant="outlined" sx={{ fontWeight: 600 }} />
-      </Stack>
+      <Box sx={{ mb: 5 }} />
+
 
       <Grid
         container
@@ -175,7 +166,7 @@ const PricingTable: FC<PricingTableProps> = ({ reveal }) => {
             >
               {item.featured ? (
                 <Chip
-                  label={t('pricing.hostBadge')}
+                  label={t('pricing.improveBadge')}
                   size="small"
                   color="secondary"
                   sx={{
@@ -197,12 +188,12 @@ const PricingTable: FC<PricingTableProps> = ({ reveal }) => {
                   justifyContent: 'center',
                   mb: 2,
                   bgcolor:
-                    item.tone === 'host'
+                    item.tone === 'improve'
                       ? alpha('#10b981', 0.12)
                       : alpha('#6366f1', 0.12),
                   border: '1px solid',
                   borderColor:
-                    item.tone === 'host'
+                    item.tone === 'improve'
                       ? alpha('#10b981', 0.35)
                       : alpha('#6366f1', 0.3),
                 }}

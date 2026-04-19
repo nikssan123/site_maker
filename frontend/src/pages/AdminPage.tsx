@@ -65,6 +65,11 @@ interface UserRow {
   isAdmin: boolean;
   freeProjectUsed: boolean;
   createdAt: string;
+  iterationSubStatus: string | null;
+  iterationSubCurrentPeriodStart: string | null;
+  iterationSubCurrentPeriodEnd: string | null;
+  tokensLast30d: number;
+  costCentsLast30d: number;
   _count: { sessions: number };
 }
 
@@ -89,6 +94,10 @@ interface Revenue {
   paidGenerationCount: number;
   estimatedGenerationRevenue: number;
   estimatedMonthlyHostingRevenue: number;
+  activeImprovementSubs: number;
+  estimatedMonthlyImprovementRevenue: number;
+  topupPurchasesLast30d: number;
+  estimatedTopupRevenueLast30d: number;
 }
 
 interface EmailHealth {
@@ -303,6 +312,11 @@ function UsersPanel() {
   const [rowsPerPage, setRowsPerPage] = useState(20);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [grantFor, setGrantFor] = useState<UserRow | null>(null);
+  const [grantTokens, setGrantTokens] = useState('50000');
+  const [grantNote, setGrantNote] = useState('');
+  const [grantSaving, setGrantSaving] = useState(false);
+  const [toast, setToast] = useState<{ open: boolean; severity: 'success' | 'error'; message: string }>({ open: false, severity: 'success', message: '' });
 
   const load = (p: number, rpp: number, s: string) => {
     setLoading(true);
@@ -313,6 +327,31 @@ function UsersPanel() {
   };
 
   useEffect(() => { load(page, rowsPerPage, search); }, [page, rowsPerPage, search]);
+
+  const submitGrant = async () => {
+    if (!grantFor) return;
+    const n = parseInt(grantTokens, 10);
+    if (!Number.isFinite(n) || n <= 0) {
+      setToast({ open: true, severity: 'error', message: t('admin.tokens.grantInvalid') });
+      return;
+    }
+    setGrantSaving(true);
+    try {
+      await api.adminGrantTokens(grantFor.id, {
+        tokens: n,
+        reason: 'admin_grant',
+        note: grantNote.trim() || undefined,
+      });
+      setToast({ open: true, severity: 'success', message: t('admin.tokens.grantSaved') });
+      setGrantFor(null);
+      setGrantTokens('50000');
+      setGrantNote('');
+    } catch (err) {
+      setToast({ open: true, severity: 'error', message: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setGrantSaving(false);
+    }
+  };
 
   return (
     <Stack spacing={2}>
@@ -330,7 +369,11 @@ function UsersPanel() {
                 <TableCell align="center" sx={TH_SX}>{t('admin.users.colAdmin')}</TableCell>
                 <TableCell align="center" sx={TH_SX}>{t('admin.users.colSessions')}</TableCell>
                 <TableCell align="center" sx={TH_SX}>{t('admin.users.colFreeUsed')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.users.colSubStatus')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.users.colTokens30d')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.users.colCost30d')}</TableCell>
                 <TableCell align="center" sx={TH_SX}>{t('admin.users.colJoined')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.users.colActions')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -340,11 +383,27 @@ function UsersPanel() {
                   <TableCell align="center">{u.isAdmin ? <Chip label={t('admin.users.adminChip')} size="small" color="primary" /> : '-'}</TableCell>
                   <TableCell align="center">{u._count.sessions}</TableCell>
                   <TableCell align="center">{u.freeProjectUsed ? t('admin.common.yes') : t('admin.common.no')}</TableCell>
+                  <TableCell align="center">
+                    {u.iterationSubStatus ? (
+                      <Chip
+                        size="small"
+                        label={u.iterationSubStatus}
+                        color={u.iterationSubStatus === 'active' ? 'success' : 'default'}
+                      />
+                    ) : '-'}
+                  </TableCell>
+                  <TableCell align="center">{u.tokensLast30d.toLocaleString()}</TableCell>
+                  <TableCell align="center">{(u.costCentsLast30d / 100).toFixed(2)} €</TableCell>
                   <TableCell align="center">{formatDate(u.createdAt)}</TableCell>
+                  <TableCell align="center">
+                    <Button size="small" variant="outlined" onClick={() => setGrantFor(u)}>
+                      {t('admin.tokens.grantCta')}
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
               {users.length === 0 && (
-                <TableRow><TableCell colSpan={5} align="center">{t('admin.users.noUsers')}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} align="center">{t('admin.users.noUsers')}</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -356,6 +415,49 @@ function UsersPanel() {
           />
         </TableContainer>
       )}
+
+      {grantFor && (
+        <Paper variant="outlined" sx={{ p: 2, borderColor: 'primary.main' }}>
+          <Typography variant="subtitle2" fontWeight={700} mb={1}>
+            {t('admin.tokens.grantTitle', { email: grantFor.email })}
+          </Typography>
+          <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5} alignItems={{ sm: 'flex-end' }}>
+            <TextField
+              label={t('admin.tokens.grantTokensLabel')}
+              value={grantTokens}
+              onChange={(e) => setGrantTokens(e.target.value)}
+              size="small"
+              type="number"
+              inputProps={{ min: 1 }}
+              sx={{ minWidth: 160 }}
+            />
+            <TextField
+              label={t('admin.tokens.grantNoteLabel')}
+              value={grantNote}
+              onChange={(e) => setGrantNote(e.target.value)}
+              size="small"
+              fullWidth
+            />
+            <Button variant="contained" onClick={submitGrant} disabled={grantSaving}>
+              {grantSaving ? '…' : t('admin.tokens.grantConfirm')}
+            </Button>
+            <Button onClick={() => setGrantFor(null)} disabled={grantSaving}>
+              {t('admin.common.cancel')}
+            </Button>
+          </Stack>
+        </Paper>
+      )}
+
+      <Snackbar
+        open={toast.open}
+        autoHideDuration={4000}
+        onClose={() => setToast((s) => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity={toast.severity} variant="filled" onClose={() => setToast((s) => ({ ...s, open: false }))}>
+          {toast.message}
+        </Alert>
+      </Snackbar>
     </Stack>
   );
 }
@@ -546,20 +648,35 @@ function RevenuePanel() {
           sub={t('admin.revenue.hostedSub', { n: data.hostedProjectCount })}
         />
       </Grid>
+      <Grid item xs={12} sm={6}>
+        <StatCard
+          label={t('admin.revenue.improvementMrr')}
+          value={`€${data.estimatedMonthlyImprovementRevenue.toLocaleString()}`}
+          icon={<TrendingUpIcon />}
+          sub={t('admin.revenue.improvementSubsSub', { n: data.activeImprovementSubs })}
+        />
+      </Grid>
+      <Grid item xs={12} sm={6}>
+        <StatCard
+          label={t('admin.revenue.topupRevenue30d')}
+          value={`€${data.estimatedTopupRevenueLast30d.toLocaleString()}`}
+          icon={<AttachMoneyIcon />}
+          sub={t('admin.revenue.topupSub', { n: data.topupPurchasesLast30d })}
+        />
+      </Grid>
       <Grid item xs={12}>
         <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
           <Typography variant="subtitle2" fontWeight={700} mb={1}>{t('admin.revenue.summary')}</Typography>
           <Typography variant="body2" color="text.secondary">
             {t('admin.revenue.summaryBody', {
               oneTime: data.estimatedGenerationRevenue.toLocaleString(),
-              recurring: data.estimatedMonthlyHostingRevenue.toLocaleString(),
+              recurring: (
+                data.estimatedMonthlyHostingRevenue + data.estimatedMonthlyImprovementRevenue
+              ).toLocaleString(),
             })}
           </Typography>
           <Typography variant="body2" color="text.secondary" mt={0.5}>
             {t('admin.revenue.paidGenerations', { n: data.paidGenerationCount })}
-          </Typography>
-          <Typography variant="caption" color="text.disabled" mt={0.5} display="block">
-            {t('admin.revenue.iterationNote')}
           </Typography>
         </Paper>
       </Grid>

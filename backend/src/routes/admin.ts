@@ -8,6 +8,7 @@ import path from 'path';
 import os from 'os';
 import { stopProject, buildProject, runProject, stopPersistentHosting } from '../services/appRunner';
 import { AppError } from '../middleware/errorHandler';
+import { grantTokens } from '../services/tokenAccountingService';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -131,6 +132,9 @@ router.get('/users', async (req: Request, res: Response, next: NextFunction) => 
           isAdmin: true,
           freeProjectUsed: true,
           createdAt: true,
+          iterationSubStatus: true,
+          iterationSubCurrentPeriodStart: true,
+          iterationSubCurrentPeriodEnd: true,
           _count: { select: { sessions: true } },
         },
         orderBy: { createdAt: 'desc' },
@@ -140,7 +144,121 @@ router.get('/users', async (req: Request, res: Response, next: NextFunction) => 
       prisma.user.count({ where }),
     ]);
 
-    res.json({ users, total, page, limit });
+    // Raw token counts are admin-only context — on the user-facing UI we always show percentages.
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const usage = users.length
+      ? await prisma.tokenUsageLog.groupBy({
+          by: ['userId'],
+          where: {
+            userId: { in: users.map((u) => u.id) },
+            endpoint: { startsWith: 'iterate.' },
+            createdAt: { gte: thirtyDaysAgo },
+          },
+          _sum: { inputTokens: true, outputTokens: true, costMicros: true },
+        })
+      : [];
+    const usageByUser = new Map(
+      usage.map((u) => [
+        u.userId,
+        {
+          tokens: (u._sum.inputTokens ?? 0) + (u._sum.outputTokens ?? 0),
+          costCents: Math.round((u._sum.costMicros ?? 0) / 100),
+        },
+      ]),
+    );
+
+    const usersWithUsage = users.map((u) => ({
+      ...u,
+      tokensLast30d: usageByUser.get(u.id)?.tokens ?? 0,
+      costCentsLast30d: usageByUser.get(u.id)?.costCents ?? 0,
+    }));
+
+    res.json({ users: usersWithUsage, total, page, limit });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── Token grants & usage (admin) ───────────────────────────────────────────
+
+router.post('/users/:id/token-grants', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = String(req.params.id);
+    if (!UUID_RE.test(userId)) throw new AppError(400, 'Invalid user id');
+
+    const tokens = Number(req.body?.tokens);
+    const reasonInput = String(req.body?.reason ?? 'admin_grant').trim();
+    const reason: 'admin_grant' | 'topup_purchase' | 'migration' =
+      reasonInput === 'topup_purchase' || reasonInput === 'migration' ? reasonInput : 'admin_grant';
+    const note = typeof req.body?.note === 'string' ? String(req.body.note).slice(0, 500) : undefined;
+    const expiresAtRaw = req.body?.expiresAt;
+    const expiresAt =
+      expiresAtRaw && !isNaN(Date.parse(String(expiresAtRaw))) ? new Date(String(expiresAtRaw)) : null;
+
+    if (!Number.isFinite(tokens) || tokens <= 0) {
+      throw new AppError(400, 'tokens must be a positive integer');
+    }
+
+    await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { id: true } });
+    const grant = await grantTokens({
+      userId,
+      tokens: Math.floor(tokens),
+      reason,
+      grantedBy: req.user.userId,
+      note,
+      expiresAt,
+    });
+    res.json({ ok: true, grantId: grant.id });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/users/:id/token-usage', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = String(req.params.id);
+    if (!UUID_RE.test(userId)) throw new AppError(400, 'Invalid user id');
+
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const [user, byEndpoint, grants, recentLogs] = await Promise.all([
+      prisma.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: {
+          id: true,
+          email: true,
+          iterationSubStatus: true,
+          iterationSubCurrentPeriodStart: true,
+          iterationSubCurrentPeriodEnd: true,
+        },
+      }),
+      prisma.tokenUsageLog.groupBy({
+        by: ['endpoint'],
+        where: { userId, createdAt: { gte: thirtyDaysAgo } },
+        _sum: { inputTokens: true, outputTokens: true, costMicros: true },
+      }),
+      prisma.tokenGrant.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+      prisma.tokenUsageLog.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+    ]);
+
+    res.json({
+      user,
+      byEndpoint: byEndpoint.map((b) => ({
+        endpoint: b.endpoint,
+        inputTokens: b._sum.inputTokens ?? 0,
+        outputTokens: b._sum.outputTokens ?? 0,
+        costCents: Math.round((b._sum.costMicros ?? 0) / 100),
+      })),
+      grants,
+      recentLogs,
+    });
   } catch (err) {
     next(err);
   }
@@ -273,10 +391,24 @@ router.delete('/projects/:id', async (req, res, next) => {
 
 router.get('/revenue', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const [paidProjectCount, hostedProjectCount, paidGenerationCount] = await Promise.all([
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const planCents = parseInt(process.env.PRICE_ITERATION_PLAN_CENTS ?? '2000', 10);
+    const topupCents = parseInt(process.env.TOKEN_TOPUP_PACK_CENTS ?? '500', 10);
+
+    const [
+      paidProjectCount,
+      hostedProjectCount,
+      paidGenerationCount,
+      activeImprovementSubs,
+      topupGrantsLast30d,
+    ] = await Promise.all([
       prisma.project.count({ where: { paid: true } }),
       prisma.project.count({ where: { hosted: true } }),
       prisma.planExecution.count({ where: { projectPaid: true } }),
+      prisma.user.count({ where: { iterationSubStatus: 'active' } }),
+      prisma.tokenGrant.count({
+        where: { reason: 'topup_purchase', createdAt: { gte: thirtyDaysAgo } },
+      }),
     ]);
 
     res.json({
@@ -285,6 +417,10 @@ router.get('/revenue', async (_req: Request, res: Response, next: NextFunction) 
       paidGenerationCount,
       estimatedGenerationRevenue: paidProjectCount * 150,
       estimatedMonthlyHostingRevenue: hostedProjectCount * 20,
+      activeImprovementSubs,
+      estimatedMonthlyImprovementRevenue: (activeImprovementSubs * planCents) / 100,
+      topupPurchasesLast30d: topupGrantsLast30d,
+      estimatedTopupRevenueLast30d: (topupGrantsLast30d * topupCents) / 100,
     });
   } catch (err) {
     next(err);

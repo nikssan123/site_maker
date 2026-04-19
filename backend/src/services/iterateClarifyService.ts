@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { prisma } from '../index';
 import { AppError } from '../middleware/errorHandler';
 import { getChatClient, getIterateAssistClient, ChatMessage } from './aiClient';
+import { logTokens } from './tokenAccountingService';
 import { scopeIteration } from './iterateScopeService';
 import { exploreIterationFiles } from './iterateExploreService';
 
@@ -190,6 +191,7 @@ export async function clarifyIteration(
   if (!session?.project) throw new AppError(400, 'Проектът не е намерен');
   if (!session.plan) throw new AppError(400, 'Няма план за този проект');
 
+  const projectId = session.project.id;
   const planData = session.plan.data as Record<string, unknown>;
   const projectFiles = Object.keys((session.project.files as Record<string, string>) ?? {});
   const fileRecord = (session.project.files as Record<string, string>) ?? {};
@@ -216,8 +218,16 @@ Rules:
 - Mention if a new file or reusable component is likely needed, but do not include exact file paths.
 - Focus on the user's latest request and any clarifications already given.`;
     const draftUser = `Recent conversation:\n${conversationContext || '(empty)'}\n\nLatest user request (may be Bulgarian):\n${draftFromUser || '(empty)'}\n\nApp plan JSON:\n${JSON.stringify(planData)}`;
-    const drafted = await chatAi.complete([{ role: 'user', content: draftUser }], draftSystem, { maxTokens: 250 });
-    const cleaned = drafted.trim();
+    const draftResult = await chatAi.completeWithUsage([{ role: 'user', content: draftUser }], draftSystem, { maxTokens: 250 });
+    await logTokens({
+      userId,
+      projectId,
+      provider: draftResult.provider,
+      model: draftResult.model,
+      endpoint: 'iterate.clarify',
+      usage: draftResult.usage,
+    });
+    const cleaned = draftResult.text.trim();
     if (cleaned.length >= 20) draftSpecEn = cleaned;
   } catch {
     /* ignore */
@@ -240,6 +250,8 @@ Rules:
       fileContents: fileRecord,
       maxOpens: 6,
       maxTurns: 4,
+      userId,
+      projectId,
     });
   } catch {
     explored = null;
@@ -312,7 +324,16 @@ ${mandatoryNoMoreQuestions}
 `;
 
   const ai = getIterateAssistClient();
-  const raw = await ai.complete(conversation, system, { maxTokens: alreadyAskedAQuestion ? 1800 : 1500 });
+  const mainResult = await ai.completeWithUsage(conversation, system, { maxTokens: alreadyAskedAQuestion ? 1800 : 1500 });
+  await logTokens({
+    userId,
+    projectId,
+    provider: mainResult.provider,
+    model: mainResult.model,
+    endpoint: 'iterate.clarify',
+    usage: mainResult.usage,
+  });
+  const raw = mainResult.text;
   const parsed = safeParseJson(raw);
   const data = parsed ? RESULT_SCHEMA.safeParse(parsed) : null;
   const lastUser = lastUserContent(conversation);
@@ -332,6 +353,8 @@ ${mandatoryNoMoreQuestions}
       filePaths: projectFiles,
       refinedSpec,
       maxFiles: 8,
+      userId,
+      projectId,
     });
     const spec =
       `${specPrefix}\n${refinedSpec}\n\nTarget files (edit only as needed):\n${scoped.targetFiles.map((f) => `- ${f}`).join('\n')}`;
@@ -422,7 +445,16 @@ ${mandatoryNoMoreQuestions}
 
     const forceSystem = `${system}\n\nIMPORTANT: You MUST return ready:true with summary, planBulletsBg (3–6 concrete Bulgarian bullets for the end user), and spec. No questions.`;
     try {
-      const forcedRaw = await ai.complete(conversation, forceSystem, { maxTokens: 2000 });
+      const forcedResult = await ai.completeWithUsage(conversation, forceSystem, { maxTokens: 2000 });
+      await logTokens({
+        userId,
+        projectId,
+        provider: forcedResult.provider,
+        model: forcedResult.model,
+        endpoint: 'iterate.clarify',
+        usage: forcedResult.usage,
+      });
+      const forcedRaw = forcedResult.text;
       const forcedParsed = safeParseJson(forcedRaw);
       const forcedData = forcedParsed ? RESULT_SCHEMA.safeParse(forcedParsed) : null;
       if (forcedData?.success && forcedData.data.ready && (forcedData.data.spec ?? '').trim()) {
@@ -433,6 +465,8 @@ ${mandatoryNoMoreQuestions}
           filePaths: projectFiles,
           refinedSpec: spec,
           maxFiles: 8,
+          userId,
+          projectId,
         });
         const sum = summary || scoped.summaryBg || 'Ок — имам яснота какво да направя.';
         let planBulletsBg = normalizePlanBulletsBg(forcedData.data.planBulletsBg, sum, scoped.summaryBg);
@@ -504,6 +538,8 @@ ${mandatoryNoMoreQuestions}
     filePaths: projectFiles,
     refinedSpec: spec,
     maxFiles: 8,
+    userId,
+    projectId,
   });
 
   const sum = summary || scoped.summaryBg || 'Ок — имам яснота какво да направя.';

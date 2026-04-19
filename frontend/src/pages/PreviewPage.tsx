@@ -40,6 +40,7 @@ import IconPickerDialog, { type IconPickResult } from '../components/IconPickerD
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 import { useProjectStore } from '../store/project';
+import { useIterationPlanStore } from '../store/iterationPlan';
 import { Joyride } from 'react-joyride';
 import { usePreviewTour } from '../hooks/usePreviewTour';
 
@@ -510,15 +511,15 @@ export default function PreviewPage() {
     }
   };
 
-  const handleBuyIteration = async (quantity: number) => {
-    if (!projectId) return;
-    try {
-      const { url } = await api.post<{ url: string }>('/billing/iteration-checkout', { projectId, quantity });
-      window.location.href = url;
-    } catch (err: any) {
-      setEditError({ message: err.message ?? t('errors.generic'), severity: 'error' });
+  // After a Stripe redirect back with plan_active or topup flags, refresh the iteration plan
+  // so the IterationBar percent meter reflects the new quota without a full reload.
+  useEffect(() => {
+    const planActive = searchParams.get('plan_active');
+    const topup = searchParams.get('topup');
+    if (planActive || topup) {
+      void useIterationPlanStore.getState().refresh();
     }
-  };
+  }, [searchParams]);
 
   const fetchHistory = useCallback(() => {
     if (!projectId) return;
@@ -1172,7 +1173,6 @@ export default function PreviewPage() {
                       })
                       : t('preview.applyingChanges')
                   }
-                  onBuyIteration={handleBuyIteration}
                 />
               </Box>
             </>
@@ -1236,7 +1236,6 @@ export default function PreviewPage() {
                       })
                       : t('preview.applyingChanges')
                   }
-                  onBuyIteration={handleBuyIteration}
                 />
               </Box>
             </Box>

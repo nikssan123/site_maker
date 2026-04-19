@@ -247,6 +247,65 @@ export const api = {
       body,
     ),
 
+  // Improvement-plan subscription (€20/mo) + token top-ups. Raw token counts are NOT exposed
+  // in responses to the improvement-plan UI — only a `pct` meter and a grants summary.
+  iterationPlanCheckout: () =>
+    request<{ url: string }>('POST', '/billing/iteration-plan-checkout'),
+  iterationPlanCancel: () =>
+    request<{ cancelAt: string | null }>('POST', '/billing/iteration-plan-cancel'),
+  tokenTopupCheckout: () =>
+    request<{ url: string }>('POST', '/billing/token-topup-checkout'),
+  iterationPlanStatus: () =>
+    request<{
+      status: 'active' | 'past_due' | 'canceled' | 'none' | string;
+      cancelAtPeriodEnd: boolean;
+      periodStart: string;
+      periodEnd: string;
+      hasActiveSub: boolean;
+      pct: number;
+      grants: Array<{
+        id: string;
+        reason: 'migration' | 'admin_grant' | 'topup_purchase' | string;
+        note: string | null;
+        createdAt: string;
+        expiresAt: string | null;
+      }>;
+    }>('GET', '/billing/iteration-plan'),
+
+  adminGrantTokens: (
+    userId: string,
+    body: { tokens: number; reason?: 'admin_grant' | 'topup_purchase' | 'migration'; note?: string; expiresAt?: string | null },
+  ) => request<{ ok: true; grantId: string }>('POST', `/admin/users/${userId}/token-grants`, body),
+  adminUserTokenUsage: (userId: string) =>
+    request<{
+      user: {
+        id: string;
+        email: string;
+        iterationSubStatus: string | null;
+        iterationSubCurrentPeriodStart: string | null;
+        iterationSubCurrentPeriodEnd: string | null;
+      };
+      byEndpoint: Array<{ endpoint: string; inputTokens: number; outputTokens: number; costCents: number }>;
+      grants: Array<{
+        id: string;
+        reason: string;
+        tokens: number;
+        note: string | null;
+        createdAt: string;
+        expiresAt: string | null;
+      }>;
+      recentLogs: Array<{
+        id: string;
+        endpoint: string;
+        provider: string;
+        model: string;
+        inputTokens: number;
+        outputTokens: number;
+        costMicros: number;
+        createdAt: string;
+      }>;
+    }>('GET', `/admin/users/${userId}/token-usage`),
+
   createSupportTicket: (body: { name: string; contactEmail: string; contactPhone: string; description: string }) =>
     request<{ id: string; createdAt: string }>('POST', '/support/tickets', body),
   adminSupportTicketsList: (opts?: { status?: 'open' | 'resolved' | 'all'; page?: number; limit?: number }) => {
