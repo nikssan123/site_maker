@@ -185,7 +185,7 @@ export default function LandingPage({ scrollTo }: Props) {
   );
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', position: 'relative', overflowX: 'hidden', pb: { xs: 11, md: 10 } }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', position: 'relative', overflowX: 'hidden' }}>
       <Seo
         title={t('seo.landingTitle')}
         description={t('seo.landingDesc')}
@@ -838,110 +838,210 @@ export default function LandingPage({ scrollTo }: Props) {
           </Container>
         </Box>
 
-        <Box
-          component="footer"
-          sx={{
-            borderTop: '1px solid rgba(255,255,255,0.06)',
-            pt: { xs: 5, md: 6 },
-            pb: 3,
-          }}
-        >
-          <Container maxWidth="lg">
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: '1.4fr 1fr 1fr 1fr' },
-                gap: { xs: 4, md: 5 },
-                mb: 4,
-              }}
-            >
-              <Box>
-                <Stack direction="row" alignItems="center" gap={1.25} sx={{ mb: 1.5 }}>
-                  <Box
-                    sx={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 1.5,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: 'linear-gradient(135deg, rgba(99,102,241,0.35) 0%, rgba(16,185,129,0.2) 100%)',
-                      border: '1px solid rgba(255,255,255,0.08)',
-                    }}
-                  >
-                    <AutoAwesomeIcon sx={{ fontSize: 18, color: 'primary.light' }} />
-                  </Box>
-                  <Typography variant="subtitle1" fontWeight={800}>
-                    {t('common.appName')}
-                  </Typography>
-                </Stack>
-                <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.65, mb: 1.5, maxWidth: 320 }}>
-                  {t('footerNav.tagline')}
-                </Typography>
-                <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mb: 0.25 }}>
-                  {t('footerNav.supportTitle')}
-                </Typography>
-                <MuiLink
-                  href="mailto:support@fornaxelit.com"
-                  variant="body2"
-                  underline="hover"
-                  color="text.primary"
-                  aria-label="Имейл за поддръжка — support@fornaxelit.com"
+      </Box>
+
+      {/* Footer — dedicated black surface, visually separated from the page content */}
+      <Box
+        component="footer"
+        sx={{
+          position: 'relative',
+          zIndex: 1,
+          bgcolor: '#000',
+          color: 'rgba(255,255,255,0.72)',
+          pt: { xs: 7, md: 9 },
+          pb: { xs: 15, md: 5 },
+          mt: { xs: 4, md: 6 },
+          overflow: 'hidden',
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: '1px',
+            background:
+              'linear-gradient(90deg, transparent 0%, rgba(99,102,241,0.45) 30%, rgba(16,185,129,0.45) 70%, transparent 100%)',
+          },
+          '&::after': {
+            content: '""',
+            position: 'absolute',
+            top: 1,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: 'min(760px, 90%)',
+            height: '140px',
+            pointerEvents: 'none',
+            background:
+              'radial-gradient(ellipse at top, rgba(99,102,241,0.12) 0%, rgba(16,185,129,0.06) 40%, transparent 70%)',
+            filter: 'blur(8px)',
+          },
+        }}
+      >
+        <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 1 }}>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: '1.6fr 1fr 1fr 1fr' },
+              gap: { xs: 4.5, md: 6 },
+              mb: { xs: 5, md: 6 },
+            }}
+          >
+            <Box>
+              <Stack direction="row" alignItems="center" gap={1.25} sx={{ mb: 1.75 }}>
+                <Box
+                  sx={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background:
+                      'linear-gradient(135deg, rgba(99,102,241,0.4) 0%, rgba(16,185,129,0.28) 100%)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    boxShadow: '0 0 24px rgba(99,102,241,0.22)',
+                  }}
                 >
-                  support@fornaxelit.com
-                </MuiLink>
-              </Box>
-
-              <Box>
-                <Typography variant="overline" color="text.disabled" sx={{ letterSpacing: '0.08em', fontWeight: 700 }}>
-                  {t('footerNav.product')}
+                  <AutoAwesomeIcon sx={{ fontSize: 20, color: 'primary.light' }} />
+                </Box>
+                <Typography variant="h6" fontWeight={800} sx={{ color: '#fff', letterSpacing: '-0.01em' }}>
+                  {t('common.appName')}
                 </Typography>
-                <Stack gap={1} sx={{ mt: 1.25 }}>
-                  <MuiLink href="#examples" variant="body2" color="text.secondary" underline="hover">{t('footerNav.examples')}</MuiLink>
-                  <MuiLink component={RouterLink} to="/pricing" variant="body2" color="text.secondary" underline="hover">{t('footerNav.pricing')}</MuiLink>
-                  <MuiLink href="#faq" variant="body2" color="text.secondary" underline="hover">{t('footerNav.faq')}</MuiLink>
-                  <MuiLink component={RouterLink} to={primaryTo} variant="body2" color="text.secondary" underline="hover">{t('footerNav.createSite')}</MuiLink>
-                </Stack>
-              </Box>
-
-              <Box>
-                <Typography variant="overline" color="text.disabled" sx={{ letterSpacing: '0.08em', fontWeight: 700 }}>
-                  {t('footerNav.resources')}
-                </Typography>
-                <Stack gap={1} sx={{ mt: 1.25 }}>
-                  <MuiLink component={RouterLink} to="/docs/connect-domain" variant="body2" color="text.secondary" underline="hover">{t('footerNav.connectDomain')}</MuiLink>
-                  <MuiLink component={RouterLink} to="/login" variant="body2" color="text.secondary" underline="hover">{t('footerNav.login')}</MuiLink>
-                </Stack>
-              </Box>
-
-              <Box>
-                <Typography variant="overline" color="text.disabled" sx={{ letterSpacing: '0.08em', fontWeight: 700 }}>
-                  {t('footerNav.legalCol')}
-                </Typography>
-                <Stack gap={1} sx={{ mt: 1.25 }}>
-                  <MuiLink component={RouterLink} to="/terms" variant="body2" color="text.secondary" underline="hover">{t('legal.termsLink')}</MuiLink>
-                  <MuiLink component={RouterLink} to="/privacy" variant="body2" color="text.secondary" underline="hover">{t('legal.privacyLink')}</MuiLink>
-                </Stack>
-              </Box>
+              </Stack>
+              <Typography
+                variant="body2"
+                sx={{ lineHeight: 1.7, mb: 2.5, maxWidth: 340, color: 'rgba(255,255,255,0.6)' }}
+              >
+                {t('footerNav.tagline')}
+              </Typography>
+              <Typography
+                variant="overline"
+                sx={{
+                  display: 'block',
+                  letterSpacing: '0.1em',
+                  fontWeight: 700,
+                  color: 'rgba(255,255,255,0.4)',
+                  mb: 0.5,
+                }}
+              >
+                {t('footerNav.supportTitle')}
+              </Typography>
+              <MuiLink
+                href="mailto:support@webwork.bg"
+                variant="body1"
+                underline="none"
+                aria-label="Имейл за поддръжка — support@webwork.bg"
+                sx={{
+                  color: '#fff',
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  borderBottom: '1px solid rgba(255,255,255,0.15)',
+                  pb: 0.25,
+                  transition: 'color 0.2s ease, border-color 0.2s ease',
+                  '&:hover': { color: 'primary.light', borderColor: 'primary.light' },
+                }}
+              >
+                support@webwork.bg
+              </MuiLink>
             </Box>
 
-            <Divider sx={{ borderColor: 'rgba(255,255,255,0.06)', mb: 2 }} />
+            {[
+              {
+                title: t('footerNav.product'),
+                links: [
+                  { label: t('footerNav.examples'), href: '#examples' },
+                  { label: t('footerNav.pricing'), to: '/pricing' },
+                  { label: t('footerNav.faq'), href: '#faq' },
+                  { label: t('footerNav.createSite'), to: primaryTo },
+                ] as Array<{ label: string; to?: string; href?: string }>,
+              },
+              {
+                title: t('footerNav.resources'),
+                links: [
+                  { label: t('footerNav.connectDomain'), to: '/docs/connect-domain' },
+                  { label: t('footerNav.login'), to: '/login' },
+                ] as Array<{ label: string; to?: string; href?: string }>,
+              },
+              {
+                title: t('footerNav.legalCol'),
+                links: [
+                  { label: t('legal.termsLink'), to: '/terms' },
+                  { label: t('legal.privacyLink'), to: '/privacy' },
+                ] as Array<{ label: string; to?: string; href?: string }>,
+              },
+            ].map((col) => (
+              <Box key={col.title}>
+                <Typography
+                  variant="overline"
+                  sx={{
+                    letterSpacing: '0.12em',
+                    fontWeight: 700,
+                    color: 'rgba(255,255,255,0.45)',
+                  }}
+                >
+                  {col.title}
+                </Typography>
+                <Stack gap={1.25} sx={{ mt: 1.5 }}>
+                  {col.links.map((l) =>
+                    l.to ? (
+                      <MuiLink
+                        key={l.label}
+                        component={RouterLink}
+                        to={l.to}
+                        variant="body2"
+                        underline="none"
+                        sx={{
+                          color: 'rgba(255,255,255,0.65)',
+                          transition: 'color 0.2s ease',
+                          '&:hover': { color: '#fff' },
+                        }}
+                      >
+                        {l.label}
+                      </MuiLink>
+                    ) : (
+                      <MuiLink
+                        key={l.label}
+                        href={l.href!}
+                        variant="body2"
+                        underline="none"
+                        sx={{
+                          color: 'rgba(255,255,255,0.65)',
+                          transition: 'color 0.2s ease',
+                          '&:hover': { color: '#fff' },
+                        }}
+                      >
+                        {l.label}
+                      </MuiLink>
+                    ),
+                  )}
+                </Stack>
+              </Box>
+            ))}
+          </Box>
 
-            <Stack
-              direction={{ xs: 'column', sm: 'row' }}
-              justifyContent="space-between"
-              alignItems={{ xs: 'flex-start', sm: 'center' }}
-              gap={1}
-            >
-              <Typography variant="caption" color="text.disabled">
-                {t('landing.footer', { year: new Date().getFullYear() })}
-              </Typography>
-              <Typography variant="caption" color="text.disabled">
-                <MuiLink href={SITE_URL} underline="hover" color="inherit">fornaxelit.com</MuiLink>
-              </Typography>
-            </Stack>
-          </Container>
-        </Box>
+          <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)', mb: 2.5 }} />
+
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            justifyContent="space-between"
+            alignItems={{ xs: 'flex-start', sm: 'center' }}
+            gap={1}
+          >
+            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.45)' }}>
+              {t('landing.footer', { year: new Date().getFullYear() })}
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.45)' }}>
+              <MuiLink
+                href={SITE_URL}
+                underline="hover"
+                sx={{ color: 'inherit', '&:hover': { color: '#fff' } }}
+              >
+                webwork.bg
+              </MuiLink>
+            </Typography>
+          </Stack>
+        </Container>
       </Box>
 
       {/* Sticky CTA — slides in when the hero CTA scrolls out of view */}
