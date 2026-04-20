@@ -1607,6 +1607,81 @@ router.patch('/:projectId/delete-element', requireAuth, async (req, res, next) =
   }
 });
 
+// Apply a batch of edits in a single rebuild. Mirrors the three single-op
+// endpoints above but coalesces them into one triggerRebuildAsync call.
+const BatchOpSchema = z.discriminatedUnion('op', [
+  z.object({
+    op: z.literal('content'),
+    original: z.string().min(1),
+    replacement: z.string(),
+  }),
+  z.object({
+    op: z.literal('icon'),
+    sourcePathD: z.string().min(1),
+    newIconName: z.string().regex(/^[A-Z][A-Za-z0-9]*$/).optional(),
+    uploadedUrl: z.string().optional(),
+    width: z.number().positive().optional(),
+    height: z.number().positive().optional(),
+  }),
+  z.object({
+    op: z.literal('delete'),
+    kind: z.enum(['text', 'image', 'icon']),
+    anchor: z.string().min(1),
+  }),
+]);
+
+router.patch('/:projectId/content-batch', requireAuth, async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId);
+    const { token, ops } = z.object({
+      token: z.string(),
+      ops: z.array(BatchOpSchema).min(1).max(200),
+    }).parse(req.body);
+
+    verifyEditToken(token, projectId);
+
+    const project = await prisma.project.findFirstOrThrow({
+      where: { id: projectId, session: { userId: req.user.userId } },
+    });
+    if (project.status === 'building' || project.status === 'generating') {
+      throw new AppError(409, 'A rebuild is already in progress. Please wait and try again.');
+    }
+
+    for (let i = 0; i < ops.length; i++) {
+      const op = ops[i];
+      try {
+        if (op.op === 'content') {
+          applyContentPatch(projectId, op.original, op.replacement);
+        } else if (op.op === 'icon') {
+          if (Boolean(op.newIconName) === Boolean(op.uploadedUrl)) {
+            throw new AppError(422, 'Provide exactly one of newIconName or uploadedUrl');
+          }
+          let replacementJsx: string | null = null;
+          if (op.uploadedUrl) {
+            const w = op.width ?? 24;
+            const h = op.height ?? 24;
+            const esc = op.uploadedUrl.replace(/"/g, '&quot;');
+            replacementJsx = `<img src="${esc}" alt="" width={${w}} height={${h}} style={{ verticalAlign: 'middle' }} />`;
+          }
+          applyIconPatch(projectId, op.sourcePathD, op.newIconName ?? null, replacementJsx);
+        } else {
+          applyElementDelete(projectId, op.kind, op.anchor);
+        }
+      } catch (e) {
+        if (e instanceof AppError) throw e;
+        // Surface which op failed so the client can roll back its optimistic UI precisely.
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new AppError(422, `Op ${i} (${op.op}) failed: ${msg}`);
+      }
+    }
+
+    await triggerRebuildAsync(project.id, 'batch-patch');
+    return res.json({ ok: true, applied: ops.length });
+  } catch (err) {
+    return next(err);
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Unlocked project filesystem API (paid projects only)
 

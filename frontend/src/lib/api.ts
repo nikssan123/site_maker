@@ -178,6 +178,25 @@ export const api = {
     body: { token: string; kind: 'text' | 'image' | 'icon'; anchor: string },
   ) => request<{ ok: boolean }>('PATCH', `/preview/${projectId}/delete-element`, body),
 
+  patchContentBatch: (
+    projectId: string,
+    body: {
+      token: string;
+      ops: Array<
+        | { op: 'content'; original: string; replacement: string }
+        | {
+            op: 'icon';
+            sourcePathD: string;
+            newIconName?: string;
+            uploadedUrl?: string;
+            width?: number;
+            height?: number;
+          }
+        | { op: 'delete'; kind: 'text' | 'image' | 'icon'; anchor: string }
+      >;
+    },
+  ) => request<{ ok: boolean; applied: number }>('PATCH', `/preview/${projectId}/content-batch`, body),
+
   // Filesystem editor (paid projects)
   fsTree: (projectId: string, dir?: string) =>
     request<{ dir: string; children: unknown[] }>('GET', `/preview/${projectId}/fs/tree${dir ? `?dir=${encodeURIComponent(dir)}` : ''}`),

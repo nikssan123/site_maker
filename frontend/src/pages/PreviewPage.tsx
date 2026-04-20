@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box, AppBar, Toolbar, Typography, Button, Tooltip,
@@ -27,7 +27,7 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import SettingsIcon from '@mui/icons-material/Settings';
 
 import AppLogo from '../components/AppLogo';
-import PreviewFrame from '../components/PreviewFrame';
+import PreviewFrame, { type PreviewFrameHandle } from '../components/PreviewFrame';
 import AdminWorkspace, { type AdminWorkspaceMode } from '../components/AdminWorkspace';
 import IterationBar from '../components/IterationBar';
 import IterationPlanCard from '../components/IterationPlanCard';
@@ -35,7 +35,7 @@ import ProjectCheckout from '../components/UpgradeGate';
 import PaymentsSetupDialog from '../components/PaymentsSetupDialog';
 import SupportDialog from '../components/SupportDialog';
 import MessageBubble from '../components/MessageBubble';
-import IconPickerDialog, { type IconPickResult } from '../components/IconPickerDialog';
+import EditDialog, { type EditTarget, type EditEvent } from '../components/EditDialog';
 
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
@@ -183,7 +183,15 @@ export default function PreviewPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [editDynamicError, setEditDynamicError] = useState(false);
   const [editError, setEditError] = useState<{ message: string; severity: 'error' | 'warning' } | null>(null);
-  const [iconPicker, setIconPicker] = useState<{ sourcePathD: string; width: number; height: number } | null>(null);
+  const [editDialogTarget, setEditDialogTarget] = useState<EditTarget | null>(null);
+  const [editDialogBusy, setEditDialogBusy] = useState(false);
+  const [pendingEdits, setPendingEdits] = useState<Array<
+    | { op: 'content'; original: string; replacement: string }
+    | { op: 'icon'; sourcePathD: string; width: number; height: number; newIconName?: string; uploadedUrl?: string }
+    | { op: 'delete'; kind: 'text' | 'image' | 'icon'; anchor: string }
+  >>([]);
+  const [unsavedPromptOpen, setUnsavedPromptOpen] = useState(false);
+  const previewFrameRef = useRef<PreviewFrameHandle>(null);
   const [logoDialogOpen, setLogoDialogOpen] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -261,7 +269,13 @@ export default function PreviewPage() {
     }
   };
 
-  const exitEditMode = () => setEditToken(null);
+  const exitEditMode = () => {
+    if (pendingEdits.length > 0) {
+      setUnsavedPromptOpen(true);
+      return;
+    }
+    setEditToken(null);
+  };
 
   const pollUntilRunning = async (id: string) => {
     for (let i = 0; i < 60; i++) {
@@ -347,121 +361,159 @@ export default function PreviewPage() {
     }
   };
 
+  // Listen for click-selects from the in-iframe overlay and route them to the EditDialog.
   useEffect(() => {
     if (!editToken) return;
-
-    // Shared: apply a patch call with rebuild-busy retry, then poll for ready and refresh.
-    const applyWithRetryAndReload = async (call: () => Promise<unknown>) => {
-      const MAX_RETRIES = 3;
-      for (let attempt = 0; ; attempt++) {
-        try {
-          await call();
-          break;
-        } catch (retryErr: any) {
-          const busy = retryErr.status === 409 && /rebuild|in progress/i.test(retryErr.message ?? '');
-          if (busy && attempt < MAX_RETRIES) {
-            await new Promise((r) => setTimeout(r, 3000));
-            continue;
-          }
-          throw retryErr;
-        }
-      }
-      await pollUntilRunning(projectId!);
-      setRefreshKey((k) => k + 1);
-      await loadProject();
-    };
-
-    const reportError = (err: any) => {
-      const msg: string = err.message ?? '';
-      const status: number | undefined = err.status;
-      if (status === 409) {
-        setEditDynamicError(true);
-      } else {
-        const userFacing = status === 404 || status === 422;
-        setEditError({
-          message: userFacing && msg ? msg : t('editMode.patchFailed'),
-          severity: status === 422 ? 'warning' : 'error',
-        });
-      }
-    };
-
-    const handler = async (e: MessageEvent) => {
+    const handler = (e: MessageEvent) => {
       if (!e.data) return;
-
-      if (e.data.type === 'EDIT_ICON_CLICK') {
-        const { patch } = e.data as { patch: { sourcePathD: string; width: number; height: number } };
-        setIconPicker(patch);
+      if (e.data.type === 'EDIT_SELECT' && e.data.target) {
+        setEditDialogTarget(e.data.target as EditTarget);
         return;
       }
-
-      if (e.data.type === 'EDIT_DELETE') {
-        const { patch } = e.data as { patch: { kind: 'text' | 'image' | 'icon'; anchor: string } };
-        setEditSaving(true);
-        try {
-          await applyWithRetryAndReload(() =>
-            api.deleteElement(projectId!, { token: editToken, kind: patch.kind, anchor: patch.anchor }),
-          );
-        } catch (err: any) {
-          reportError(err);
-        } finally {
-          setEditSaving(false);
-        }
-        return;
-      }
-
-      if (e.data.type !== 'EDIT_SAVED') return;
-      const { patch } = e.data as {
-        patch: {
-          original: string;
-          replacement: string | null;
-          isImg: boolean;
-          imageDataUrl?: string;
-          imageFilename?: string;
-        };
-      };
-      setEditSaving(true);
-      try {
-        let replacement = patch.replacement ?? '';
-        if (patch.imageDataUrl) {
-          const { url } = await api.uploadImage(projectId!, patch.imageDataUrl, patch.imageFilename ?? 'image.jpg');
-          replacement = url;
-        }
-        await applyWithRetryAndReload(() =>
-          api.patchContent(projectId!, { token: editToken, original: patch.original, replacement }),
-        );
-      } catch (err: any) {
-        reportError(err);
-      } finally {
-        setEditSaving(false);
+      if (e.data.type === 'EDIT_ESCAPE') {
+        setEditDialogTarget(null);
       }
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [editToken, projectId]);
+  }, [editToken]);
 
-  // Apply an icon pick (library swap or uploaded SVG) — called by the picker dialog.
-  const handleIconPicked = async (result: IconPickResult) => {
-    if (!iconPicker || !editToken || !projectId) return;
-    const { sourcePathD, width, height } = iconPicker;
-    setIconPicker(null);
-    setEditSaving(true);
+  const reportEditError = (err: any) => {
+    const msg: string = err?.message ?? '';
+    const status: number | undefined = err?.status;
+    if (status === 409) {
+      setEditDynamicError(true);
+    } else {
+      const userFacing = status === 404 || status === 422;
+      setEditError({
+        message: userFacing && msg ? msg : t('editMode.patchFailed'),
+        severity: status === 422 ? 'warning' : 'error',
+      });
+    }
+  };
+
+  // Handle a save from the EditDialog: translate into a batch op, upload any file
+  // first, apply an optimistic DOM change in the iframe, and queue the op.
+  const handleEditEvent = async (event: EditEvent) => {
+    if (!projectId || !editToken) return;
+    const post = (msg: unknown) => previewFrameRef.current?.postToIframe(msg);
+
     try {
-      let uploadedUrl: string | undefined;
-      if (result.kind === 'upload' && result.dataUrl) {
-        const { url } = await api.uploadImage(projectId, result.dataUrl, result.filename ?? 'icon.svg');
-        uploadedUrl = url;
+      setEditDialogBusy(true);
+
+      if (event.kind === 'text') {
+        setPendingEdits((prev) => [
+          ...prev,
+          { op: 'content', original: event.anchor, replacement: event.replacement },
+        ]);
+        post({ op: 'replace-text', anchor: event.anchor, replacement: event.replacement });
+        setEditDialogTarget(null);
+        return;
       }
+
+      if (event.kind === 'image-url') {
+        setPendingEdits((prev) => [
+          ...prev,
+          { op: 'content', original: event.anchor, replacement: event.replacement },
+        ]);
+        post({ op: 'replace-image', anchor: event.anchor, replacement: event.replacement });
+        setEditDialogTarget(null);
+        return;
+      }
+
+      if (event.kind === 'image-file') {
+        const { url } = await api.uploadImage(projectId, event.dataUrl, event.filename);
+        setPendingEdits((prev) => [
+          ...prev,
+          { op: 'content', original: event.anchor, replacement: url },
+        ]);
+        post({ op: 'replace-image', anchor: event.anchor, replacement: url });
+        setEditDialogTarget(null);
+        return;
+      }
+
+      if (event.kind === 'icon-library') {
+        setPendingEdits((prev) => [
+          ...prev,
+          {
+            op: 'icon',
+            sourcePathD: event.sourcePathD,
+            width: event.width,
+            height: event.height,
+            newIconName: event.name,
+          },
+        ]);
+        post({ op: 'replace-icon-preview', sourcePathD: event.sourcePathD });
+        setEditDialogTarget(null);
+        return;
+      }
+
+      if (event.kind === 'icon-file') {
+        const { url } = await api.uploadImage(projectId, event.dataUrl, event.filename);
+        setPendingEdits((prev) => [
+          ...prev,
+          {
+            op: 'icon',
+            sourcePathD: event.sourcePathD,
+            width: event.width,
+            height: event.height,
+            uploadedUrl: url,
+          },
+        ]);
+        post({
+          op: 'replace-icon-image',
+          sourcePathD: event.sourcePathD,
+          url,
+          width: event.width,
+          height: event.height,
+        });
+        setEditDialogTarget(null);
+        return;
+      }
+
+      if (event.kind === 'delete') {
+        const { target } = event;
+        if (target.kind === 'icon') {
+          setPendingEdits((prev) => [
+            ...prev,
+            { op: 'delete', kind: 'icon', anchor: target.sourcePathD },
+          ]);
+          post({ op: 'delete-icon', sourcePathD: target.sourcePathD });
+        } else if (target.kind === 'image') {
+          setPendingEdits((prev) => [
+            ...prev,
+            { op: 'delete', kind: 'image', anchor: target.anchor },
+          ]);
+          post({ op: 'delete-image', anchor: target.anchor });
+        } else {
+          setPendingEdits((prev) => [
+            ...prev,
+            { op: 'delete', kind: 'text', anchor: target.anchor },
+          ]);
+          post({ op: 'delete-text', anchor: target.anchor });
+        }
+        setEditDialogTarget(null);
+        return;
+      }
+    } catch (err) {
+      reportEditError(err);
+    } finally {
+      setEditDialogBusy(false);
+    }
+  };
+
+  const applyPendingEdits = async (thenExit: boolean) => {
+    if (!projectId || !editToken || pendingEdits.length === 0) {
+      if (thenExit) setEditToken(null);
+      return;
+    }
+    setEditSaving(true);
+    const ops = pendingEdits;
+    try {
       const MAX_RETRIES = 3;
       for (let attempt = 0; ; attempt++) {
         try {
-          await api.patchIcon(projectId, {
-            token: editToken,
-            sourcePathD,
-            newIconName: result.kind === 'library' ? result.name : undefined,
-            uploadedUrl,
-            width: uploadedUrl ? width : undefined,
-            height: uploadedUrl ? height : undefined,
-          });
+          await api.patchContentBatch(projectId, { token: editToken, ops });
           break;
         } catch (retryErr: any) {
           const busy = retryErr.status === 409 && /rebuild|in progress/i.test(retryErr.message ?? '');
@@ -475,20 +527,22 @@ export default function PreviewPage() {
       await pollUntilRunning(projectId);
       setRefreshKey((k) => k + 1);
       await loadProject();
-    } catch (err: any) {
-      const msg: string = err.message ?? '';
-      const status: number | undefined = err.status;
-      if (status === 409) setEditDynamicError(true);
-      else {
-        const userFacing = status === 404 || status === 422;
-        setEditError({
-          message: userFacing && msg ? msg : t('editMode.patchFailed'),
-          severity: status === 422 ? 'warning' : 'error',
-        });
-      }
+      setPendingEdits([]);
+      if (thenExit) setEditToken(null);
+    } catch (err) {
+      reportEditError(err);
+      // On failure the iframe will reload with the unchanged source; roll back optimistic state.
+      setRefreshKey((k) => k + 1);
+      setPendingEdits([]);
     } finally {
       setEditSaving(false);
     }
+  };
+
+  const discardPendingEdits = (thenExit: boolean) => {
+    if (pendingEdits.length > 0) setRefreshKey((k) => k + 1);
+    setPendingEdits([]);
+    if (thenExit) setEditToken(null);
   };
 
   const workspaceMode = drawerMode === 'improvements' ? null : drawerMode;
@@ -982,9 +1036,37 @@ export default function PreviewPage() {
                 }}>
                   <EditIcon sx={{ fontSize: 14, color: '#f5a97f' }} />
                   <Typography variant="caption" sx={{ color: '#f5a97f', fontWeight: 600, flex: 1 }}>
-                    {editSaving ? t('editMode.saving') : t('editMode.active')}
+                    {editSaving
+                      ? t('editMode.saving')
+                      : pendingEdits.length > 0
+                        ? t('editMode.pendingCount', { count: pendingEdits.length })
+                        : t('editMode.active')}
                   </Typography>
                   {editSaving && <CircularProgress size={12} sx={{ color: '#f5a97f' }} />}
+                  {pendingEdits.length > 0 && !editSaving && (
+                    <>
+                      <Button
+                        size="small"
+                        onClick={() => discardPendingEdits(false)}
+                        sx={{ fontSize: 11, color: '#f5a97f', py: 0.25, textTransform: 'none' }}
+                      >
+                        {t('editMode.discard')}
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        onClick={() => applyPendingEdits(false)}
+                        sx={{
+                          fontSize: 11, py: 0.25, textTransform: 'none',
+                          background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                          color: '#fff', fontWeight: 700,
+                          '&:hover': { background: 'linear-gradient(135deg, #5458e5, #7c3aed)' },
+                        }}
+                      >
+                        {t('editMode.applyAll')}
+                      </Button>
+                    </>
+                  )}
                   <Button size="small" sx={{ fontSize: 11, color: '#f5a97f', py: 0.25 }} onClick={exitEditMode}>
                     {t('editMode.exit')}
                   </Button>
@@ -992,7 +1074,7 @@ export default function PreviewPage() {
               )}
               <Box sx={{ flex: 1, overflow: 'hidden' }}>
                 {store.runPort != null ? (
-                  <PreviewFrame key={refreshKey} projectId={projectId} port={store.runPort ?? 0} editToken={editToken} />
+                  <PreviewFrame ref={previewFrameRef} key={refreshKey} projectId={projectId} port={store.runPort ?? 0} editToken={editToken} />
                 ) : (
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                     <CircularProgress />
@@ -1323,11 +1405,55 @@ export default function PreviewPage() {
         </Alert>
       </Snackbar>
 
-      <IconPickerDialog
-        open={iconPicker !== null}
-        onClose={() => setIconPicker(null)}
-        onPick={handleIconPicked}
+      <EditDialog
+        target={editDialogTarget}
+        busy={editDialogBusy}
+        onClose={() => setEditDialogTarget(null)}
+        onSave={handleEditEvent}
       />
+
+      <Dialog
+        open={unsavedPromptOpen}
+        onClose={() => setUnsavedPromptOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 2, bgcolor: '#18181b', color: '#f4f4f5', border: '1px solid #27272a' } }}
+      >
+        <DialogTitle sx={{ fontWeight: 700 }}>{t('editMode.unsavedTitle')}</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ fontSize: 14, color: '#a1a1aa' }}>
+            {t('editMode.unsavedBody', { count: pendingEdits.length })}
+          </Typography>
+          <Stack direction="row" gap={1} sx={{ mt: 3, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+            <Button
+              onClick={() => setUnsavedPromptOpen(false)}
+              sx={{ color: '#a1a1aa', textTransform: 'none', fontWeight: 600 }}
+            >
+              {t('editMode.unsavedKeep')}
+            </Button>
+            <Button
+              onClick={() => { setUnsavedPromptOpen(false); discardPendingEdits(true); }}
+              sx={{
+                textTransform: 'none', fontWeight: 600, color: '#f87171',
+                border: '1px solid rgba(239,68,68,0.35)', borderRadius: 2, px: 2,
+                '&:hover': { bgcolor: 'rgba(239,68,68,0.08)' },
+              }}
+            >
+              {t('editMode.unsavedDiscard')}
+            </Button>
+            <Button
+              onClick={() => { setUnsavedPromptOpen(false); applyPendingEdits(true); }}
+              sx={{
+                textTransform: 'none', fontWeight: 700, color: '#fff', px: 3, borderRadius: 2,
+                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                '&:hover': { background: 'linear-gradient(135deg, #5458e5, #7c3aed)' },
+              }}
+            >
+              {t('editMode.unsavedApply')}
+            </Button>
+          </Stack>
+        </DialogContent>
+      </Dialog>
 
       {/* Generic edit / preview error — replaces browser alert() */}
       <Snackbar

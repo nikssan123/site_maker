@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
 import {
   Box,
   Typography,
@@ -17,6 +17,11 @@ interface Props {
   projectId: string;
   port: number;
   editToken?: string | null;
+}
+
+export interface PreviewFrameHandle {
+  /** Post a message to the embedded iframe (e.g. EDIT_APPLY). No-op if the iframe isn't mounted. */
+  postToIframe: (msg: unknown) => void;
 }
 
 const WARN_AFTER_MS = 35_000;
@@ -49,7 +54,7 @@ function directPreviewOrigin(port: number): string {
  * Embedded preview: either same-origin `/preview-app/:id/` or direct `http(s)://host:runPort/` when
  * `VITE_PREVIEW_USE_HOST_PORT` is set (Docker publishes 4100–4199 so `/assets/…` resolves on the preview origin).
  */
-export default function PreviewFrame({ projectId, port, editToken }: Props) {
+const PreviewFrame = forwardRef<PreviewFrameHandle, Props>(function PreviewFrame({ projectId, port, editToken }, ref) {
   const { t } = useTranslation();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const useHostPortPreview = shouldUseHostPortPreview();
@@ -69,6 +74,19 @@ export default function PreviewFrame({ projectId, port, editToken }: Props) {
   const warnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
   const escapeAttemptsRef = useRef(0);
+
+  useImperativeHandle(ref, () => ({
+    postToIframe: (msg: unknown) => {
+      try {
+        const win = iframeRef.current?.contentWindow;
+        if (!win) return;
+        const origin = win.location?.origin || '*';
+        win.postMessage(msg, origin);
+      } catch {
+        /* ignore cross-origin or detached iframe */
+      }
+    },
+  }), []);
 
   /** Inject the overlay script once into the iframe (idempotent). */
   const injectOverlay = useCallback(() => {
@@ -348,4 +366,6 @@ export default function PreviewFrame({ projectId, port, editToken }: Props) {
       )}
     </Box>
   );
-}
+});
+
+export default PreviewFrame;
