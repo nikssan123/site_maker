@@ -137,7 +137,11 @@ Visual hierarchy & spacing:
 - Generous whitespace — don't cram elements. Sections need room to breathe
 - Consistent type scale: variant="h3" or "h4" for page titles, "h6" for card titles, "body2" for meta/secondary text
 - Real content in seed data: realistic names, sensible prices, actual dates, proper descriptions — never placeholder text
-- Currency rule: whenever the app shows money, prices, totals, plans, product costs, booking fees, or checkout amounts, it MUST use euro only. Use the euro symbol (€) for display and "eur" for any payment/checkout payloads. Never use USD, BGN, GBP, or any other currency.
+- Currency rule (PRIORITY): whenever the app shows money, prices, totals, plans, product costs, booking fees, or checkout amounts, it MUST use euro only.
+  - Display prices with the euro symbol: "25 €" or "€25".
+  - Payment/checkout payloads MUST use lowercase "eur".
+  - Seed data currency fields MUST be "eur" or "EUR", never "bgn".
+  - FORBIDDEN anywhere in generated source, UI text, translations, seed data, server responses, or checkout payloads: "BGN", "bgn", "лв", "лева", "лев", "USD", "$", "GBP".
 
 Premium app shell (MUST follow):
 - Build a cohesive "app shell" reused on ALL routes:
@@ -444,6 +448,7 @@ PAYMENTS (only when paymentsEnabled is true):
 - Do NOT use Stripe.js or any Stripe npm package in the generated app. Payments go through our backend proxy.
 - Read env vars: const PAYMENTS_ENABLED = import.meta.env.VITE_PAYMENTS_ENABLED === 'true'; const PAYMENTS_URL = import.meta.env.VITE_PAYMENTS_URL ?? '';
 - Checkout flow: POST to PAYMENTS_URL with { amount (cents), currency ('eur'), productName, successUrl, cancelUrl } → get back { url } → window.location.href = url
+- Currency is always euro. Use "eur" in every checkout request and webhook/payment verification payload. Never use BGN, bgn, лв, leva, USD, $, or GBP in generated code, seed data, UI copy, or translations.
 - successUrl MUST include the Stripe session placeholder so the generated app can verify payment server-side after redirect:
   successUrl = window.location.origin + import.meta.env.BASE_URL + 'checkout?payment=success&session_id={CHECKOUT_SESSION_ID}'
 - cancelUrl = window.location.origin + import.meta.env.BASE_URL + 'checkout?payment=cancel'
@@ -846,7 +851,7 @@ server.js requirements (MUST follow the exact skeleton from the system prompt):
 - Seed data ONLY when table is empty (check COUNT(*) first)
 - path.join(__dirname, 'dist') for static serving — never relative './dist'
 - CREATE TABLE IF NOT EXISTS for every model above
-- Seed 5-8 rows per table with REALISTIC data (proper Bulgarian names, sensible prices, real-looking dates)
+- Seed 5-8 rows per table with REALISTIC data (proper Bulgarian names, sensible prices in EUR, real-looking dates). If a table has price/amount/total/currency fields, use euro values only: display strings use "€" or " €"; stored currency codes use "eur" or "EUR". Do not seed BGN, лв, leva, USD, or dollar values.
 - Full REST: GET /api/:model, POST /api/:model, GET/PUT/DELETE /api/:model/:id
 - PUT must update all fields; DELETE must remove the row
 - Serve dist/ as static + SPA fallback
