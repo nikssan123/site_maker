@@ -236,6 +236,17 @@
     "changesApplied": "Changes applied successfully.",
     "historyLabel": "Improvement history ({{n}})",
     "historyUntitled": "Improvement",
+    "savedVersionsLabel": "Saved versions ({{n}})",
+    "snapshotRestore": "Restore",
+    "snapshotRestoring": "Restoring",
+    "snapshotRestoringMessage": "Restoring saved version…",
+    "snapshotRestored": "Restored the project to the selected saved version.",
+    "snapshotRestoreFailed": "Could not restore that saved version.",
+    "snapshotSourceIteration": "Before improvement",
+    "snapshotSourceAdminImport": "Before admin upload",
+    "snapshotSourceManualRestore": "Before restore",
+    "snapshotSourceRepair": "Before repair",
+    "snapshotSourceDefault": "Saved version",
     "support": "Support"
   },
   "billing": {

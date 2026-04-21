@@ -19,6 +19,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import EditIcon from '@mui/icons-material/Edit';
 import StorefrontIcon from '@mui/icons-material/Storefront';
 import HistoryIcon from '@mui/icons-material/History';
+import RestoreIcon from '@mui/icons-material/Restore';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import DescriptionIcon from '@mui/icons-material/Description';
@@ -47,11 +48,20 @@ import { usePreviewTour } from '../hooks/usePreviewTour';
 const DRAWER_WIDTH = 400;
 
 interface PendingIterationPlan {
+  planId: string;
   summary: string;
   planBulletsBg: string[];
   spec: string;
   targetFiles: string[];
   explorerContextNotes?: string;
+}
+
+interface ProjectSnapshotEntry {
+  id: string;
+  source: string;
+  reason: string | null;
+  status: string;
+  createdAt: string;
 }
 
 /** What we store in iteration history / session — not the English codegen spec. */
@@ -80,6 +90,14 @@ function looksLikeInternalIterationSpec(text: string): boolean {
     /prefer minimal edits/i.test(t) ||
     /ensure build passes and ui remains consistent/i.test(t)
   );
+}
+
+function snapshotSourceKey(source: string): string {
+  if (source === 'iteration') return 'preview.snapshotSourceIteration';
+  if (source === 'admin_import') return 'preview.snapshotSourceAdminImport';
+  if (source === 'manual_restore') return 'preview.snapshotSourceManualRestore';
+  if (source === 'repair') return 'preview.snapshotSourceRepair';
+  return 'preview.snapshotSourceDefault';
 }
 
 interface ActionButtonProps {
@@ -157,7 +175,10 @@ export default function PreviewPage() {
   const [iterateChat, setIterateChat] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
   const [pendingIterationPlan, setPendingIterationPlan] = useState<PendingIterationPlan | null>(null);
   const [iterationHistory, setIterationHistory] = useState<Array<{ id: string; title: string | null; description: string | null; createdAt: string }>>([]);
+  const [snapshotHistory, setSnapshotHistory] = useState<ProjectSnapshotEntry[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [snapshotsOpen, setSnapshotsOpen] = useState(false);
+  const [restoringSnapshotId, setRestoringSnapshotId] = useState<string | null>(null);
   const [supportOpen, setSupportOpen] = useState(false);
   const [paymentsOpen, setPaymentsOpen] = useState(
     searchParams.get('payments') === '1' ||
@@ -585,13 +606,45 @@ export default function PreviewPage() {
       .catch(() => { });
   }, [projectId]);
 
+  const fetchSnapshots = useCallback(() => {
+    if (!projectId) return;
+    api
+      .get<ProjectSnapshotEntry[]>(`/preview/${projectId}/snapshots`)
+      .then(setSnapshotHistory)
+      .catch(() => { });
+  }, [projectId]);
+
   // Load iteration history when the improvements drawer is visible (initial mount + switching back from other panels).
   useEffect(() => {
     if (!projectId || !drawerOpen || drawerMode !== 'improvements') return;
     fetchHistory();
-  }, [projectId, drawerOpen, drawerMode, fetchHistory]);
+    fetchSnapshots();
+  }, [projectId, drawerOpen, drawerMode, fetchHistory, fetchSnapshots]);
+
+  const restoreSnapshot = async (snapshotId: string) => {
+    if (!projectId || restoringSnapshotId) return;
+    setRestoringSnapshotId(snapshotId);
+    store.setGenerationFriendlyMessage(t('preview.snapshotRestoringMessage'));
+    try {
+      const result = await api.post<{ ok: true; port: number | null }>(
+        `/preview/${projectId}/snapshots/${snapshotId}/restore`,
+      );
+      if (typeof result.port === 'number') store.setRunPort(result.port);
+      setRefreshKey((k) => k + 1);
+      await loadProject();
+      fetchSnapshots();
+      fetchHistory();
+      setIterateChat((prev) => [...prev, { role: 'assistant', content: t('preview.snapshotRestored') }]);
+    } catch (err: any) {
+      setEditError({ message: err?.message ?? t('preview.snapshotRestoreFailed'), severity: 'error' });
+    } finally {
+      store.setGenerationFriendlyMessage('');
+      setRestoringSnapshotId(null);
+    }
+  };
 
   const executeIteration = (snapshot: {
+    planId?: string;
     summary: string;
     planBulletsBg: string[];
     spec: string;
@@ -619,6 +672,7 @@ export default function PreviewPage() {
       {
         sessionId: store.sessionId,
         message: userFacingMessage,
+        planId: snapshot.planId,
         spec: snapshot.spec,
         targetFiles: snapshot.targetFiles,
         explorerContextNotes: snapshot.explorerContextNotes,
@@ -662,6 +716,7 @@ export default function PreviewPage() {
         | { kind: 'question'; message: string }
         | {
           kind: 'ready';
+          planId: string;
           summary: string;
           planBulletsBg: string[];
           spec: string;
@@ -689,6 +744,7 @@ export default function PreviewPage() {
       }
 
       setPendingIterationPlan({
+        planId: res.planId,
         summary: summaryText,
         planBulletsBg,
         spec: res.spec,
@@ -1241,6 +1297,95 @@ export default function PreviewPage() {
                     </Collapse>
                   </Box>
                 )}
+
+                {snapshotHistory.length > 0 && (
+                  <Box sx={{ mt: 0.5 }}>
+                    <Box
+                      component="button"
+                      onClick={() => {
+                        if (!snapshotsOpen) fetchSnapshots();
+                        setSnapshotsOpen((v) => !v);
+                      }}
+                      sx={{
+                        all: 'unset', display: 'flex', alignItems: 'center', gap: 0.75,
+                        width: '100%', cursor: 'pointer', py: 0.5, px: 0.5, borderRadius: 1,
+                        color: 'text.secondary', '&:hover': { color: 'text.primary' },
+                      }}
+                    >
+                      <RestoreIcon sx={{ fontSize: 14 }} />
+                      <Typography variant="caption" fontWeight={600} sx={{ flex: 1, fontSize: 11 }}>
+                        {t('preview.savedVersionsLabel', { n: snapshotHistory.length })}
+                      </Typography>
+                      <ExpandMoreIcon sx={{ fontSize: 14, transform: snapshotsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                    </Box>
+                    <Collapse in={snapshotsOpen}>
+                      <List dense disablePadding sx={{ mt: 0.5 }}>
+                        {snapshotHistory.map((snapshot, i) => {
+                          const restoring = restoringSnapshotId === snapshot.id;
+                          const reason = snapshot.reason?.trim();
+                          return (
+                            <Box key={snapshot.id}>
+                              <ListItem
+                                sx={{ px: 0.5, py: 0.75, alignItems: 'flex-start', gap: 1 }}
+                                secondaryAction={(
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    startIcon={restoring ? <CircularProgress size={12} /> : <RestoreIcon sx={{ fontSize: 14 }} />}
+                                    disabled={Boolean(restoringSnapshotId) || iterating || clarifyingIteration}
+                                    onClick={() => restoreSnapshot(snapshot.id)}
+                                    sx={{ minWidth: 88, fontSize: 11, py: 0.35 }}
+                                  >
+                                    {restoring ? t('preview.snapshotRestoring') : t('preview.snapshotRestore')}
+                                  </Button>
+                                )}
+                              >
+                                <ListItemText
+                                  primary={t(snapshotSourceKey(snapshot.source))}
+                                  secondary={(
+                                    <Box component="span" sx={{ display: 'block', pr: 11 }}>
+                                      <Typography
+                                        component="span"
+                                        variant="caption"
+                                        sx={{ fontSize: 10, color: 'text.disabled', display: 'block' }}
+                                      >
+                                        {new Date(snapshot.createdAt).toLocaleDateString('bg-BG', {
+                                          day: '2-digit',
+                                          month: 'short',
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                        })}
+                                      </Typography>
+                                      {reason ? (
+                                        <Typography
+                                          component="span"
+                                          variant="caption"
+                                          sx={{
+                                            display: 'block',
+                                            mt: 0.35,
+                                            fontSize: 11,
+                                            color: 'text.secondary',
+                                            whiteSpace: 'pre-wrap',
+                                            lineHeight: 1.35,
+                                          }}
+                                        >
+                                          {reason.length > 140 ? `${reason.slice(0, 140)}...` : reason}
+                                        </Typography>
+                                      ) : null}
+                                    </Box>
+                                  )}
+                                  primaryTypographyProps={{ variant: 'caption', fontWeight: 600, sx: { lineHeight: 1.3 } }}
+                                  slotProps={{ secondary: { component: 'div' } }}
+                                />
+                              </ListItem>
+                              {i < snapshotHistory.length - 1 && <Divider sx={{ opacity: 0.4 }} />}
+                            </Box>
+                          );
+                        })}
+                      </List>
+                    </Collapse>
+                  </Box>
+                )}
               </Box>
 
               {/* Pinned iteration input */}
@@ -1305,6 +1450,61 @@ export default function PreviewPage() {
                     role="assistant"
                     content={store.generationFriendlyMessage || t('preview.applyingChanges')}
                   />
+                )}
+                {snapshotHistory.length > 0 && (
+                  <Box sx={{ borderTop: '1px solid', borderColor: 'divider', pt: 1 }}>
+                    <Box
+                      component="button"
+                      onClick={() => {
+                        if (!snapshotsOpen) fetchSnapshots();
+                        setSnapshotsOpen((v) => !v);
+                      }}
+                      sx={{
+                        all: 'unset', display: 'flex', alignItems: 'center', gap: 0.75,
+                        width: '100%', cursor: 'pointer', py: 0.5, px: 0.5, borderRadius: 1,
+                        color: 'text.secondary', '&:hover': { color: 'text.primary' },
+                      }}
+                    >
+                      <RestoreIcon sx={{ fontSize: 14 }} />
+                      <Typography variant="caption" fontWeight={600} sx={{ flex: 1, fontSize: 11 }}>
+                        {t('preview.savedVersionsLabel', { n: snapshotHistory.length })}
+                      </Typography>
+                      <ExpandMoreIcon sx={{ fontSize: 14, transform: snapshotsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                    </Box>
+                    <Collapse in={snapshotsOpen}>
+                      <Stack gap={0.75} sx={{ mt: 1 }}>
+                        {snapshotHistory.slice(0, 10).map((snapshot) => {
+                          const restoring = restoringSnapshotId === snapshot.id;
+                          return (
+                            <Box key={snapshot.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Box sx={{ minWidth: 0, flex: 1 }}>
+                                <Typography variant="caption" fontWeight={600} noWrap>
+                                  {t(snapshotSourceKey(snapshot.source))}
+                                </Typography>
+                                <Typography variant="caption" color="text.disabled" display="block" noWrap>
+                                  {new Date(snapshot.createdAt).toLocaleDateString('bg-BG', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </Typography>
+                              </Box>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                disabled={Boolean(restoringSnapshotId) || iterating || clarifyingIteration}
+                                onClick={() => restoreSnapshot(snapshot.id)}
+                                sx={{ fontSize: 11, py: 0.35 }}
+                              >
+                                {restoring ? t('preview.snapshotRestoring') : t('preview.snapshotRestore')}
+                              </Button>
+                            </Box>
+                          );
+                        })}
+                      </Stack>
+                    </Collapse>
+                  </Box>
                 )}
               </Box>
               <Box sx={{ p: 1.5, borderTop: '1px solid', borderColor: 'divider', flexShrink: 0 }}>

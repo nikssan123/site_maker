@@ -15,6 +15,7 @@ import { autoFix } from './fixerService';
 import { prisma } from '../index';
 import { AppError } from '../middleware/errorHandler';
 import { publishEvent, clearSessionEvents } from './eventBus';
+import { restoreProjectSnapshot } from './projectSnapshotService';
 import {
   GEN_FIXING_FRIENDLY,
   GEN_STEP_LABELS,
@@ -89,7 +90,14 @@ export async function runIteration(
   sessionId: string,
   userId: string,
   changeRequest: string,
-  opts?: { spec?: string; targetFiles?: string[]; explorerContextNotes?: string; logId?: string },
+  opts?: {
+    spec?: string;
+    targetFiles?: string[];
+    explorerContextNotes?: string;
+    logId?: string;
+    planId?: string;
+    snapshotBeforeId?: string;
+  },
 ): Promise<void> {
   await clearSessionEvents(sessionId);
 
@@ -105,6 +113,39 @@ export async function runIteration(
   const planData = session.plan.data as Record<string, unknown>;
   const currentFiles = project.files as Record<string, string>;
   const allFilePaths = Object.keys(currentFiles);
+
+  const failIteration = async (message: string, errorLog?: string) => {
+    if (opts?.snapshotBeforeId) {
+      try {
+        const restored = await restoreProjectSnapshot(opts.snapshotBeforeId);
+        if (restored.status === 'running') {
+          const rollbackBuild = await buildProject(restored.projectId);
+          if (rollbackBuild.success) {
+            const rollbackRun = await runProject(restored.projectId);
+            if (rollbackRun.success) {
+              await prisma.project.update({
+                where: { id: restored.projectId },
+                data: { status: 'running', runPort: rollbackRun.port, errorLog: null },
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error('[iterate] snapshot rollback failed:', e);
+      }
+    }
+    if (opts?.planId) {
+      await prisma.iterationPlan.update({
+        where: { id: opts.planId },
+        data: {
+          status: 'failed',
+          failedAt: new Date(),
+          errorLog: (errorLog || message).slice(0, 50_000),
+        },
+      }).catch(() => {});
+    }
+    await publishEvent(sessionId, { type: 'fatal', message });
+  };
 
   await stopProject(project.id);
 
@@ -296,10 +337,7 @@ Rules:
   }
 
   if (!changedFiles || Object.keys(changedFiles).length === 0) {
-    await publishEvent(sessionId, {
-      type: 'fatal',
-      message: 'ИИ върна невалиден отговор (очаква се JSON {"files":{...}})',
-    });
+    await failIteration('ИИ върна невалиден отговор (очаква се JSON {"files":{...}})');
     return;
   }
 
@@ -314,24 +352,20 @@ Rules:
   );
   const MAX_CHANGED = shouldAugmentWithLocalizationFiles(planData, `${changeRequest}\n${refinedSpec}`) ? 16 : 10;
   if (changedPaths.length > MAX_CHANGED || illegal.length > 0) {
-    await publishEvent(sessionId, {
-      type: 'fatal',
-      message:
-        'Промяната изглежда твърде широка или засяга неподходящи файлове. ' +
-        'Моля, уточнете по-точно какво да се промени и къде, за да го приложим без да развалим дизайна.',
-    });
+    await failIteration(
+      'Промяната изглежда твърде широка или засяга неподходящи файлове. Моля, уточнете по-точно какво да се промени и къде, за да го приложим без да развалим дизайна.',
+      `Changed paths: ${changedPaths.join(', ')}\nIllegal paths: ${illegal.join(', ')}`,
+    );
     return;
   }
 
   // Extra guardrail: block edits to high-risk global files unless they were explicitly in the scoped set.
   const riskyTouched = changedPaths.filter((p) => isHighRiskGlobalFile(p) && !allowed.has(p));
   if (riskyTouched.length > 0) {
-    await publishEvent(sessionId, {
-      type: 'fatal',
-      message:
-        'Промяната засяга глобални файлове (тема/основен вход), което е рисково и често разваля дизайна. ' +
-        'Моля, уточнете какво точно трябва да се промени глобално, или ограничете промяната до конкретен екран.',
-    });
+    await failIteration(
+      'Промяната засяга глобални файлове (тема/основен вход), което е рисково и често разваля дизайна. Моля, уточнете какво точно трябва да се промени глобално, или ограничете промяната до конкретен екран.',
+      `Risky paths: ${riskyTouched.join(', ')}`,
+    );
     return;
   }
 
@@ -377,7 +411,7 @@ Rules:
     });
 
     if (!fixResult.success) {
-      await publishEvent(sessionId, { type: 'fatal', message: 'Неуспех при поправка на компилацията' });
+      await failIteration('Неуспех при поправка на компилацията. Върнах предишната работеща версия.', fixResult.log);
       return;
     }
     buildResult = fixResult;
@@ -389,7 +423,7 @@ Rules:
   const runResult = await runProject(project.id);
 
   if (!runResult.success) {
-    await publishEvent(sessionId, { type: 'fatal', message: 'Приложението не стартира след промяната' });
+    await failIteration('Приложението не стартира след промяната. Върнах предишната работеща версия.', runResult.log);
     return;
   }
 
@@ -401,5 +435,11 @@ Rules:
   await publishEvent(sessionId, { step: 5, label: GEN_STEP_LABELS[5], status: 'done' });
   await publishEvent(sessionId, { type: 'user_progress', message: ITERATE_FINISHING });
   await publishEvent(sessionId, { type: 'preview_updated', port: runResult.port, projectId: project.id });
+  if (opts?.planId) {
+    await prisma.iterationPlan.update({
+      where: { id: opts.planId },
+      data: { status: 'applied', appliedAt: new Date() },
+    }).catch(() => {});
+  }
 
 }

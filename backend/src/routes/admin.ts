@@ -17,6 +17,7 @@ import { FIX_SYSTEM } from '../lib/prompts';
 import { streamProjectZip } from '../lib/zipBuilder';
 import { projectPath } from '../lib/fileWriter';
 import { clearSessionEvents, publishEvent } from '../services/eventBus';
+import { createProjectSnapshot, restoreProjectSnapshot } from '../services/projectSnapshotService';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -643,9 +644,16 @@ router.get('/projects/:id/download', async (req, res, next) => {
 });
 
 router.post('/projects/:id/import-files', async (req, res, next) => {
+  let snapshotId: string | null = null;
   try {
     const project = await loadAdminProject(String(req.params.id));
     const files = parseAdminImportFiles(req.body?.files);
+    const snapshot = await createProjectSnapshot({
+      projectId: project.id,
+      source: 'admin_import',
+      reason: 'Before admin source upload',
+    });
+    snapshotId = snapshot.id;
 
     await stopProject(project.id);
     await prisma.project.update({
@@ -692,6 +700,25 @@ router.post('/projects/:id/import-files', async (req, res, next) => {
 
     res.json({ ok: true, port: run.port ?? null, fileCount: Object.keys(files).length });
   } catch (err) {
+    if (snapshotId) {
+      try {
+        const restored = await restoreProjectSnapshot(snapshotId);
+        if (restored.status === 'running') {
+          const build = await buildProject(restored.projectId);
+          if (build.success) {
+            const run = await runProject(restored.projectId);
+            if (run.success) {
+              await prisma.project.update({
+                where: { id: restored.projectId },
+                data: { status: 'running', runPort: run.port ?? null, errorLog: null },
+              });
+            }
+          }
+        }
+      } catch (rollbackErr) {
+        console.error('[admin import] snapshot rollback failed', rollbackErr);
+      }
+    }
     next(err);
   }
 });

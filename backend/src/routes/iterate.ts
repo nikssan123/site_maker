@@ -6,6 +6,7 @@ import { clarifyIteration } from '../services/iterateClarifyService';
 import { assertCanIterate } from '../services/tokenAccountingService';
 import { prisma } from '../index';
 import { AppError } from '../middleware/errorHandler';
+import { createProjectSnapshot } from '../services/projectSnapshotService';
 
 export const FREE_ITERATION_LIMIT = 2;
 
@@ -23,18 +24,45 @@ router.post('/clarify', requireAuth, async (req, res, next) => {
 
     const userId = req.user.userId;
     const result = await clarifyIteration(sessionId, userId, messages);
-    res.json(result);
+
+    if (result.kind === 'ready') {
+      const session = await prisma.session.findFirst({
+        where: { id: sessionId, userId },
+        include: { project: true },
+      });
+      if (!session?.project) throw new AppError(400, 'Проектът не е намерен');
+
+      const changeRequest = [...messages].reverse().find((m) => m.role === 'user')?.content?.trim() ?? '';
+      const plan = await prisma.iterationPlan.create({
+        data: {
+          projectId: session.project.id,
+          userId,
+          changeRequest,
+          summary: result.summary,
+          planBulletsBg: result.planBulletsBg,
+          spec: result.spec,
+          targetFiles: result.targetFiles,
+          nonGoals: result.nonGoals,
+          explorerContextNotes: result.explorerContextNotes,
+        },
+      });
+
+      return res.json({ ...result, planId: plan.id });
+    }
+
+    return res.json(result);
   } catch (err) {
-    next(err);
+    return next(err);
   }
 });
 
 router.post('/', requireAuth, async (req, res, next) => {
   try {
-    const { sessionId, message, spec, targetFiles, explorerContextNotes } = z
+    const { sessionId, message, spec, targetFiles, explorerContextNotes, planId } = z
       .object({
         sessionId: z.string(),
         message: z.string().min(1),
+        planId: z.string().optional(),
         spec: z.string().min(1).optional(),
         targetFiles: z.array(z.string().min(1)).max(12).optional(),
         explorerContextNotes: z.string().max(50_000).optional(),
@@ -52,8 +80,6 @@ router.post('/', requireAuth, async (req, res, next) => {
 
     const project = session.project;
 
-    // Free tier: first FREE_ITERATION_LIMIT iterations on a given project are always allowed.
-    // Past that, access is gated by the per-user iteration-subscription token quota.
     const freeUsed = await prisma.iterationLog.count({
       where: { projectId: project.id },
     });
@@ -62,25 +88,72 @@ router.post('/', requireAuth, async (req, res, next) => {
       await assertCanIterate(userId);
     }
 
-    // Title = first line of user-facing message (not the internal English spec)
+    let applyMessage = message;
+    let applySpec = spec;
+    let applyTargetFiles = targetFiles;
+    let applyExplorerContextNotes = explorerContextNotes;
+    let approvedPlanId: string | undefined;
+
+    if (planId) {
+      const plan = await prisma.iterationPlan.findFirst({
+        where: { id: planId, userId, projectId: project.id },
+      });
+      if (!plan) throw new AppError(404, 'Планът за промяна не е намерен');
+      if (plan.status !== 'draft') throw new AppError(409, 'Този план вече е използван');
+
+      const bullets = Array.isArray(plan.planBulletsBg) ? (plan.planBulletsBg as string[]) : [];
+      applyMessage = [plan.summary, ...bullets].filter(Boolean).join('\n');
+      applySpec = plan.spec;
+      applyTargetFiles = Array.isArray(plan.targetFiles) ? (plan.targetFiles as string[]) : [];
+      applyExplorerContextNotes = plan.explorerContextNotes ?? undefined;
+      approvedPlanId = plan.id;
+    }
+
+    const snapshot = await createProjectSnapshot({
+      projectId: project.id,
+      userId,
+      source: 'iteration',
+      reason: applyMessage,
+    });
+
+    if (approvedPlanId) {
+      await prisma.iterationPlan.update({
+        where: { id: approvedPlanId },
+        data: { status: 'approved', approvedAt: new Date(), snapshotBeforeId: snapshot.id },
+      });
+    }
+
     const titleLine =
-      message
+      applyMessage
         .split('\n')
         .map((l) => l.trim())
-        .find((l) => l.length > 0) ?? message;
+        .find((l) => l.length > 0) ?? applyMessage;
 
     const log = await prisma.iterationLog.create({
       data: { projectId: project.id, userId, title: titleLine.slice(0, 120) },
     });
 
-    // Fire and forget — pipeline runs to completion regardless of client connection
-    runIteration(sessionId, userId, message, { spec, targetFiles, explorerContextNotes, logId: log.id }).catch((err) => {
+    if (approvedPlanId) {
+      await prisma.iterationPlan.update({
+        where: { id: approvedPlanId },
+        data: { status: 'applying', iterationLogId: log.id },
+      });
+    }
+
+    runIteration(sessionId, userId, applyMessage, {
+      spec: applySpec,
+      targetFiles: applyTargetFiles,
+      explorerContextNotes: applyExplorerContextNotes,
+      logId: log.id,
+      planId: approvedPlanId,
+      snapshotBeforeId: snapshot.id,
+    }).catch((err) => {
       console.error('[iterate] unhandled pipeline error', err);
     });
 
-    res.json({ sessionId });
+    return res.json({ sessionId });
   } catch (err) {
-    next(err);
+    return next(err);
   }
 });
 

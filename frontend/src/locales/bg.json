@@ -259,6 +259,17 @@
     "changesApplied": "Промените са приложени успешно.",
     "historyLabel": "История на подобренията ({{n}})",
     "historyUntitled": "Подобрение",
+    "savedVersionsLabel": "Запазени версии ({{n}})",
+    "snapshotRestore": "Възстанови",
+    "snapshotRestoring": "Възстановяване",
+    "snapshotRestoringMessage": "Възстановяваме запазената версия…",
+    "snapshotRestored": "Проектът е възстановен към избраната запазена версия.",
+    "snapshotRestoreFailed": "Не успяхме да възстановим тази запазена версия.",
+    "snapshotSourceIteration": "Преди подобрение",
+    "snapshotSourceAdminImport": "Преди админ качване",
+    "snapshotSourceManualRestore": "Преди възстановяване",
+    "snapshotSourceRepair": "Преди поправка",
+    "snapshotSourceDefault": "Запазена версия",
     "support": "Поддръжка"
   },
   "iteration": {

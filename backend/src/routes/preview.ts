@@ -15,6 +15,7 @@ import { deriveAdminToken, writeAdminTokenFile } from '../lib/adminToken';
 import { FREE_ITERATION_LIMIT } from './iterate';
 import { isHostingActive } from '../lib/hostingActive';
 import { resolveIconName } from '../lib/iconFingerprint';
+import { createProjectSnapshot, restoreProjectSnapshot } from '../services/projectSnapshotService';
 
 const EDIT_TOKEN_TTL_MS = 3_600_000; // 1 hour
 
@@ -1477,6 +1478,94 @@ router.get('/:projectId/iteration-history', requireAuth, async (req, res, next) 
       take: 50,
     });
     return res.json(logs);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// User-visible restore points created before improvements/admin imports.
+router.get('/:projectId/snapshots', requireAuth, async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId);
+    await prisma.project.findFirstOrThrow({
+      where: { id: projectId, session: { userId: req.user.userId } },
+    });
+    const snapshots = await prisma.projectSnapshot.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' },
+      take: 30,
+      select: {
+        id: true,
+        source: true,
+        reason: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+    return res.json(snapshots);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/:projectId/snapshots/:snapshotId/restore', requireAuth, async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId);
+    const snapshotId = String(req.params.snapshotId);
+    const project = await prisma.project.findFirstOrThrow({
+      where: { id: projectId, session: { userId: req.user.userId } },
+    });
+    const snapshot = await prisma.projectSnapshot.findFirst({
+      where: { id: snapshotId, projectId },
+    });
+    if (!snapshot) throw new AppError(404, 'Snapshot not found');
+    if (project.status === 'building' || project.status === 'generating') {
+      throw new AppError(409, 'A build is already in progress. Please wait and try again.');
+    }
+
+    await createProjectSnapshot({
+      projectId,
+      userId: req.user.userId,
+      source: 'manual_restore',
+      reason: `Before restoring snapshot ${snapshotId}`,
+    });
+
+    await stopProject(projectId);
+    await restoreProjectSnapshot(snapshotId);
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { status: 'building', runPort: null, errorLog: null },
+    });
+
+    const build = await buildProject(projectId);
+    if (!build.success) {
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { status: 'error', errorLog: build.log?.slice(0, 50_000) ?? 'Build failed after restore' },
+      });
+      throw new AppError(500, 'Build failed after restore');
+    }
+
+    const run = await runProject(projectId);
+    if (!run.success) {
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { status: 'error', buildLog: build.log?.slice(-50_000) ?? null, errorLog: run.log?.slice(0, 50_000) ?? 'Run failed after restore' },
+      });
+      throw new AppError(500, 'Runtime failed after restore');
+    }
+
+    await prisma.project.update({
+      where: { id: projectId },
+      data: {
+        status: 'running',
+        runPort: run.port ?? null,
+        buildLog: build.log?.slice(-50_000) ?? null,
+        errorLog: null,
+      },
+    });
+
+    return res.json({ ok: true, port: run.port ?? null });
   } catch (err) {
     return next(err);
   }
