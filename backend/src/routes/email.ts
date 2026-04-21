@@ -160,7 +160,18 @@ router.get('/settings/:projectId', requireAuth, async (req, res, next) => {
       where: { projectId },
       include: { domain: { select: { id: true, domain: true, verified: true } } },
     });
-    if (!settings) return res.json(null);
+    if (!settings) {
+      return res.json({
+        projectId,
+        domainId: null,
+        domain: null,
+        fromName: null,
+        fromEmail: emailSvc.platformFrom,
+        platformFromEmail: emailSvc.platformFrom,
+        verified: true,
+        provider: 'resend',
+      });
+    }
 
     return res.json({
       projectId: settings.projectId,
@@ -168,6 +179,7 @@ router.get('/settings/:projectId', requireAuth, async (req, res, next) => {
       domain: settings.domain?.domain ?? null,
       fromName: settings.fromName ?? null,
       fromEmail: settings.fromEmail,
+      platformFromEmail: emailSvc.platformFrom,
       verified: settings.domain?.verified ?? false,
       provider: 'resend',
     });
@@ -227,19 +239,20 @@ router.put('/settings/:projectId', requireAuth, async (req, res, next) => {
         fromName: fromName?.trim() || null,
         fromEmail: from,
         domainId: chosenDomain?.id ?? null,
-        verified: chosenDomain?.verified ?? false,
+        verified: chosenDomain?.verified ?? true,
       },
       update: {
         fromName: fromName?.trim() || null,
         fromEmail: from,
         domainId: chosenDomain?.id ?? null,
-        verified: chosenDomain?.verified ?? false,
+        verified: chosenDomain?.verified ?? true,
       },
       select: { projectId: true, fromName: true, fromEmail: true, domainId: true, verified: true },
     });
 
     return res.json({
       ...settings,
+      platformFromEmail: emailSvc.platformFrom,
       provider: 'resend',
     });
   } catch (err) {
@@ -349,4 +362,3 @@ router.post('/webhook', async (req, res, next) => {
 });
 
 export default router;
-

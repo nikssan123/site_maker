@@ -44,6 +44,7 @@ type SettingsRow = null | {
   domain: string | null;
   fromName: string | null;
   fromEmail: string;
+  platformFromEmail: string;
   verified: boolean;
   provider: 'resend';
 };
@@ -58,6 +59,16 @@ function prettyJson(v: unknown): string {
   } catch {
     return String(v ?? '');
   }
+}
+
+function emailLocalPart(email: string): string {
+  const at = email.indexOf('@');
+  return at > 0 ? email.slice(0, at) : email;
+}
+
+function emailDomainPart(email: string): string {
+  const at = email.lastIndexOf('@');
+  return at >= 0 ? email.slice(at + 1) : '';
 }
 
 export default function EmailPanel({ projectId }: { projectId: string }) {
@@ -75,7 +86,8 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [createDomain, setCreateDomain] = useState('');
   const [fromName, setFromName] = useState('');
-  const [fromEmail, setFromEmail] = useState('');
+  const [fromEmailLocal, setFromEmailLocal] = useState('no-reply');
+  const [platformFromEmail, setPlatformFromEmail] = useState('');
   const [domainId, setDomainId] = useState<string | null>(null);
   const [templateEventType, setTemplateEventType] = useState<string>(EVENT_TYPE_KEYS[1]);
   const [templateSubject, setTemplateSubject] = useState('');
@@ -94,6 +106,21 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
     return t('emailPanel.templates.variablesHint', { vars, interpolation: { escapeValue: false } });
   }, [t]);
 
+  const selectedSenderDomain = useMemo(() => {
+    if (domainId) return domains.find((d) => d.id === domainId)?.domain ?? '';
+    return emailDomainPart(platformFromEmail);
+  }, [domainId, domains, platformFromEmail]);
+
+  const platformDomainLabel = useMemo(() => {
+    const domain = emailDomainPart(platformFromEmail);
+    return domain ? `${t('emailPanel.sender.platformDefault')} - ${domain}` : t('emailPanel.sender.platformDefault');
+  }, [platformFromEmail, t]);
+
+  const constructedFromEmail = useMemo(() => {
+    const local = fromEmailLocal.trim();
+    return local && selectedSenderDomain ? `${local}@${selectedSenderDomain}` : '';
+  }, [fromEmailLocal, selectedSenderDomain]);
+
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
@@ -108,11 +135,13 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
 
       if (s) {
         setFromName(s.fromName ?? '');
-        setFromEmail(s.fromEmail ?? '');
+        setFromEmailLocal(emailLocalPart(s.fromEmail ?? '') || 'no-reply');
+        setPlatformFromEmail(s.platformFromEmail ?? s.fromEmail ?? '');
         setDomainId(s.domainId ?? null);
       } else {
         setFromName('');
-        setFromEmail('');
+        setFromEmailLocal('no-reply');
+        setPlatformFromEmail('');
         setDomainId(null);
       }
 
@@ -151,7 +180,7 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
       setCreateOpen(false);
       setCreateDomain('');
       await loadAll();
-      if (!settings && typeof res.domain === 'string') setFromEmail(`no-reply@${res.domain}`);
+      if (!settings && typeof res.domain === 'string') setFromEmailLocal('no-reply');
     } catch (e: any) {
       setToast({ open: true, severity: 'error', message: e?.message ?? t('emailPanel.toasts.generic') });
     }
@@ -183,7 +212,7 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
 
   const onSaveSender = async () => {
     try {
-      const res = await api.emailSettingsPut(projectId, { fromName: fromName || undefined, fromEmail, domainId });
+      const res = await api.emailSettingsPut(projectId, { fromName: fromName || undefined, fromEmail: constructedFromEmail, domainId });
       setToast({ open: true, severity: 'success', message: t('emailPanel.toasts.settingsSaved') });
       setSettings({
         projectId: res.projectId,
@@ -191,6 +220,7 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
         domain: domains.find((d) => d.id === res.domainId)?.domain ?? null,
         fromName: res.fromName,
         fromEmail: res.fromEmail,
+        platformFromEmail: res.platformFromEmail,
         verified: res.verified,
         provider: 'resend',
       });
@@ -325,9 +355,25 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
                         labelId="email-domain-select-label"
                         label={t('emailPanel.sender.domainLabel')}
                         value={domainId ?? ''}
-                        onChange={(e) => setDomainId(String(e.target.value || '') || null)}
+                        displayEmpty
+                        renderValue={(value) => {
+                          const selected = String(value || '');
+                          if (!selected) return platformDomainLabel;
+                          return domains.find((d) => d.id === selected)?.domain ?? selected;
+                        }}
+                        onChange={(e) => {
+                          const nextDomainId = String(e.target.value || '') || null;
+                          setDomainId(nextDomainId);
+                        }}
                       >
-                        <MenuItem value="">{t('emailPanel.sender.platformDefault')}</MenuItem>
+                        <MenuItem value="">
+                          <Stack spacing={0.25}>
+                            <Typography variant="body2">{platformDomainLabel}</Typography>
+                            {platformFromEmail && (
+                              <Typography variant="caption" color="text.secondary">{platformFromEmail}</Typography>
+                            )}
+                          </Stack>
+                        </MenuItem>
                         {domains.map((d) => (
                           <MenuItem key={d.id} value={d.id} disabled={!d.verified}>
                             {d.domain} {d.verified ? '' : t('emailPanel.sender.notVerifiedSuffix')}
@@ -337,14 +383,32 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
                     </FormControl>
 
                     <TextField
-                      label={t('emailPanel.sender.emailLabel')}
-                      value={fromEmail}
-                      onChange={(e) => setFromEmail(e.target.value)}
+                      label={t('emailPanel.sender.emailNameLabel')}
+                      value={fromEmailLocal}
+                      onChange={(e) => setFromEmailLocal(e.target.value.replace(/@.*/, '').trim())}
                       fullWidth
                     />
 
+                    <TextField
+                      label={t('emailPanel.sender.emailLabel')}
+                      value={constructedFromEmail}
+                      fullWidth
+                      InputProps={{ readOnly: true }}
+                      helperText={t('emailPanel.sender.emailReadonlyHint')}
+                      sx={{
+                        '& .MuiInputBase-input.Mui-readOnly': {
+                          cursor: 'default',
+                          color: 'text.secondary',
+                          WebkitTextFillColor: 'currentColor',
+                        },
+                        '& .MuiOutlinedInput-root': {
+                          bgcolor: 'action.hover',
+                        },
+                      }}
+                    />
+
                     <Stack direction="row" gap={1} justifyContent="flex-end">
-                      <Button variant="contained" onClick={onSaveSender}>{t('emailPanel.sender.save')}</Button>
+                      <Button variant="contained" onClick={onSaveSender} disabled={!constructedFromEmail}>{t('emailPanel.sender.save')}</Button>
                     </Stack>
                   </Stack>
                 </Paper>

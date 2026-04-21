@@ -272,11 +272,12 @@ export const api = {
       domain: string | null;
       fromName: string | null;
       fromEmail: string;
+      platformFromEmail: string;
       verified: boolean;
       provider: 'resend';
     }>('GET', `/email/settings/${projectId}`),
   emailSettingsPut: (projectId: string, body: { fromName?: string; fromEmail: string; domainId?: string | null }) =>
-    request<{ projectId: string; fromName: string | null; fromEmail: string; domainId: string | null; verified: boolean; provider: 'resend' }>(
+    request<{ projectId: string; fromName: string | null; fromEmail: string; platformFromEmail: string; domainId: string | null; verified: boolean; provider: 'resend' }>(
       'PUT',
       `/email/settings/${projectId}`,
       body,

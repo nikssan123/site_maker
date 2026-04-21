@@ -50,6 +50,7 @@ type SettingsRow = null | {
   domain: string | null;
   fromName: string | null;
   fromEmail: string;
+  platformFromEmail: string;
   verified: boolean;
   provider: 'resend';
 };
@@ -70,6 +71,16 @@ function prettyJson(v: unknown): string {
   } catch {
     return String(v ?? '');
   }
+}
+
+function emailLocalPart(email: string): string {
+  const at = email.indexOf('@');
+  return at > 0 ? email.slice(0, at) : email;
+}
+
+function emailDomainPart(email: string): string {
+  const at = email.lastIndexOf('@');
+  return at >= 0 ? email.slice(at + 1) : '';
 }
 
 export default function EmailPage() {
@@ -93,7 +104,8 @@ export default function EmailPage() {
   const [createDomain, setCreateDomain] = useState('');
 
   const [fromName, setFromName] = useState('');
-  const [fromEmail, setFromEmail] = useState('');
+  const [fromEmailLocal, setFromEmailLocal] = useState('no-reply');
+  const [platformFromEmail, setPlatformFromEmail] = useState('');
   const [domainId, setDomainId] = useState<string | null>(null);
 
   const [templateEventType, setTemplateEventType] = useState(EVENT_TYPES[1].key);
@@ -105,6 +117,21 @@ export default function EmailPage() {
     for (const t of templates) m.set(t.eventType, t);
     return m;
   }, [templates]);
+
+  const selectedSenderDomain = useMemo(() => {
+    if (domainId) return domains.find((d) => d.id === domainId)?.domain ?? '';
+    return emailDomainPart(platformFromEmail);
+  }, [domainId, domains, platformFromEmail]);
+
+  const platformDomainLabel = useMemo(() => {
+    const domain = emailDomainPart(platformFromEmail);
+    return domain ? `Platform domain (default) - ${domain}` : 'Platform domain (default)';
+  }, [platformFromEmail]);
+
+  const constructedFromEmail = useMemo(() => {
+    const local = fromEmailLocal.trim();
+    return local && selectedSenderDomain ? `${local}@${selectedSenderDomain}` : '';
+  }, [fromEmailLocal, selectedSenderDomain]);
 
   const loadAll = useCallback(async () => {
     if (!projectId) return;
@@ -122,11 +149,13 @@ export default function EmailPage() {
       // hydrate sender form from settings or defaults
       if (s) {
         setFromName(s.fromName ?? '');
-        setFromEmail(s.fromEmail ?? '');
+        setFromEmailLocal(emailLocalPart(s.fromEmail ?? '') || 'no-reply');
+        setPlatformFromEmail(s.platformFromEmail ?? s.fromEmail ?? '');
         setDomainId(s.domainId ?? null);
       } else {
         setFromName('');
-        setFromEmail('');
+        setFromEmailLocal('no-reply');
+        setPlatformFromEmail('');
         setDomainId(null);
       }
 
@@ -162,7 +191,7 @@ export default function EmailPage() {
 
       // if no settings yet, pre-fill fromEmail suggestion
       if (!settings && typeof res.domain === 'string') {
-        setFromEmail(`no-reply@${res.domain}`);
+        setFromEmailLocal('no-reply');
       }
     } catch (e: any) {
       setToast({ open: true, severity: 'error', message: e?.message ?? 'Грешка' });
@@ -196,7 +225,7 @@ export default function EmailPage() {
   const onSaveSender = async () => {
     if (!projectId) return;
     try {
-      const res = await api.emailSettingsPut(projectId, { fromName: fromName || undefined, fromEmail, domainId });
+      const res = await api.emailSettingsPut(projectId, { fromName: fromName || undefined, fromEmail: constructedFromEmail, domainId });
       setToast({ open: true, severity: 'success', message: 'Настройките са запазени.' });
       setSettings({
         projectId: res.projectId,
@@ -204,6 +233,7 @@ export default function EmailPage() {
         domain: domains.find((d) => d.id === res.domainId)?.domain ?? null,
         fromName: res.fromName,
         fromEmail: res.fromEmail,
+        platformFromEmail: res.platformFromEmail,
         verified: res.verified,
         provider: 'resend',
       });
@@ -370,10 +400,24 @@ export default function EmailPage() {
                         labelId="domain-select-label"
                         label="Домейн"
                         value={domainId ?? ''}
-                        onChange={(e) => setDomainId(String(e.target.value || '') || null)}
+                        displayEmpty
+                        renderValue={(value) => {
+                          const selected = String(value || '');
+                          if (!selected) return platformDomainLabel;
+                          return domains.find((d) => d.id === selected)?.domain ?? selected;
+                        }}
+                        onChange={(e) => {
+                          const nextDomainId = String(e.target.value || '') || null;
+                          setDomainId(nextDomainId);
+                        }}
                       >
                         <MenuItem value="">
-                          Платформен домейн (по подразбиране)
+                          <Stack spacing={0.25}>
+                            <Typography variant="body2">{platformDomainLabel}</Typography>
+                            {platformFromEmail && (
+                              <Typography variant="caption" color="text.secondary">{platformFromEmail}</Typography>
+                            )}
+                          </Stack>
                         </MenuItem>
                         {domains.map((d) => (
                           <MenuItem key={d.id} value={d.id} disabled={!d.verified}>
@@ -384,15 +428,33 @@ export default function EmailPage() {
                     </FormControl>
 
                     <TextField
-                      label="Имейл на подателя"
-                      value={fromEmail}
-                      onChange={(e) => setFromEmail(e.target.value)}
-                      placeholder={domainId ? 'hello@yourdomain.com' : 'no-reply@myplatform.com'}
+                      label="Email name"
+                      value={fromEmailLocal}
+                      onChange={(e) => setFromEmailLocal(e.target.value.replace(/@.*/, '').trim())}
+                      placeholder="no-reply"
                       fullWidth
                     />
 
+                    <TextField
+                      label="Sender email"
+                      value={constructedFromEmail}
+                      fullWidth
+                      InputProps={{ readOnly: true }}
+                      helperText="Read-only. Built from the email name and selected domain."
+                      sx={{
+                        '& .MuiInputBase-input.Mui-readOnly': {
+                          cursor: 'default',
+                          color: 'text.secondary',
+                          WebkitTextFillColor: 'currentColor',
+                        },
+                        '& .MuiOutlinedInput-root': {
+                          bgcolor: 'action.hover',
+                        },
+                      }}
+                    />
+
                     <Stack direction="row" gap={1} justifyContent="flex-end" flexWrap="wrap">
-                      <Button variant="contained" onClick={onSaveSender}>
+                      <Button variant="contained" onClick={onSaveSender} disabled={!constructedFromEmail}>
                         Запази
                       </Button>
                     </Stack>
