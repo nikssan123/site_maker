@@ -638,7 +638,14 @@
     "deleteConfirmTitle": "Да изтрия ли този елемент?",
     "deleteConfirmBody": "Това ще премахне елемента от страницата при следващото прилагане.",
     "deleteConfirmCta": "Изтрий",
-    "charCount": "{{count}} символа"
+    "charCount": "{{count}} символа",
+    "bold": "Удебелен",
+    "italic": "Курсив",
+    "size": "Размер",
+    "sizeDefault": "Авто",
+    "font": "Шрифт",
+    "fontDefault": "По подразбиране",
+    "color": "Цвят"
   },
   "iconPicker": {
     "title": "Избери иконка",

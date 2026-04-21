@@ -465,7 +465,14 @@
     "deleteConfirmTitle": "Delete this element?",
     "deleteConfirmBody": "The element will be removed from the page on the next apply.",
     "deleteConfirmCta": "Delete",
-    "charCount": "{{count}} characters"
+    "charCount": "{{count}} characters",
+    "bold": "Bold",
+    "italic": "Italic",
+    "size": "Size",
+    "sizeDefault": "Auto",
+    "font": "Font",
+    "fontDefault": "Default",
+    "color": "Color"
   },
   "iconPicker": {
     "title": "Pick an icon",

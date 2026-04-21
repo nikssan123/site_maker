@@ -198,6 +198,18 @@ export const api = {
       ops: Array<
         | { op: 'content'; original: string; replacement: string }
         | {
+            op: 'textStyle';
+            original: string;
+            replacement: string;
+            style: {
+              bold?: boolean;
+              italic?: boolean;
+              fontSize?: string;
+              fontFamily?: string;
+              color?: string;
+            };
+          }
+        | {
             op: 'icon';
             sourcePathD: string;
             newIconName?: string;

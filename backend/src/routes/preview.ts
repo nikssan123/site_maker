@@ -270,6 +270,49 @@ function sourceFileHasAnchor(content: string, anchor: string): boolean {
   return new RegExp(escaped.replace(/ /g, '\\s+')).test(content);
 }
 
+function renderedJsxText(body: string): string {
+  return normalizePatchText(
+    body
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ')
+      .replace(/<br\s*\/?>/gi, ' ')
+      .replace(/\{`([\s\S]*?)`\}/g, (_, value: string) => ` ${value} `)
+      .replace(/\{"((?:\\.|[^"])*)"\}/g, (_, value: string) => ` ${value.replace(/\\"/g, '"')} `)
+      .replace(/\{'((?:\\.|[^'])*)'\}/g, (_, value: string) => ` ${value.replace(/\\'/g, "'")} `)
+      .replace(/\{[^}]+\}/g, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' '),
+  );
+}
+
+const TextStyleSchema = z.object({
+  bold: z.boolean().optional(),
+  italic: z.boolean().optional(),
+  fontSize: z.string().regex(/^\d{1,3}(\.\d+)?(px|rem|em|%)$/).optional(),
+  fontFamily: z.string().max(120).regex(/^[\w\s"',.-]+$/).optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+});
+
+type TextStyleInput = z.infer<typeof TextStyleSchema>;
+
+function textStyleToReactProps(style: TextStyleInput): string {
+  const parts: string[] = [];
+  if (style.bold) parts.push('fontWeight: 700');
+  if (style.italic) parts.push("fontStyle: 'italic'");
+  if (style.fontSize) parts.push(`fontSize: ${JSON.stringify(style.fontSize)}`);
+  if (style.fontFamily) parts.push(`fontFamily: ${JSON.stringify(style.fontFamily)}`);
+  if (style.color) parts.push(`color: ${JSON.stringify(style.color)}`);
+  return parts.join(', ');
+}
+
+function applyReactStyleToOpeningTag(openingTag: string, style: TextStyleInput): string {
+  const props = textStyleToReactProps(style);
+  if (!props) return openingTag;
+  if (/style=\{\{/.test(openingTag)) {
+    return openingTag.replace(/style=\{\{/, `style={{ ${props}, `);
+  }
+  return openingTag.replace(/>$/, ` style={{ ${props} }}>`);
+}
+
 function inspectEditAnchor(projectId: string, target: { kind: 'text' | 'image'; anchor: string }): {
   classification: 'editable' | 'dynamic' | 'unknown';
 } {
@@ -549,6 +592,48 @@ function applyContentPatch(projectId: string, original: string, replacement: str
   }
 
   throw new AppError(404, 'Original text not found in any source file');
+}
+
+function applyTextStylePatch(
+  projectId: string,
+  original: string,
+  replacement: string,
+  style: TextStyleInput,
+): void {
+  const projectDir = projectPath(projectId);
+  const files = walkSourceFiles(projectDir).filter((f) => /\.[jt]sx$/i.test(f));
+  const norm = normalizePatchText(original);
+
+  for (const fp of files) {
+    const content = fs.readFileSync(fp, 'utf8');
+    const elementRegex = /<([A-Za-z][\w.]*)\b[^>]*>([\s\S]*?)<\/\1>/g;
+    let match: RegExpExecArray | null;
+    while ((match = elementRegex.exec(content)) !== null) {
+      const full = match[0];
+      const body = match[2] ?? '';
+      if (renderedJsxText(body) !== norm) continue;
+
+      const openingEnd = full.indexOf('>');
+      if (openingEnd < 0) continue;
+      const opening = full.slice(0, openingEnd + 1);
+      const closing = `</${match[1]}>`;
+      const nextBody = replacement.trim() || original;
+      const updatedFull = `${applyReactStyleToOpeningTag(opening, style)}${nextBody}${closing}`;
+      fs.writeFileSync(
+        fp,
+        content.slice(0, match.index) + updatedFull + content.slice(match.index + full.length),
+        'utf8',
+      );
+      return;
+    }
+  }
+
+  if (replacement.trim() !== original.trim()) {
+    applyContentPatch(projectId, original, replacement);
+    return;
+  }
+
+  throw new AppError(422, 'This text style could not be applied safely. Try selecting a simpler text block.');
 }
 
 // ─── Icon swap / upload helpers ──────────────────────────────────────────────
@@ -1759,6 +1844,12 @@ const BatchOpSchema = z.discriminatedUnion('op', [
     replacement: z.string(),
   }),
   z.object({
+    op: z.literal('textStyle'),
+    original: z.string().min(1),
+    replacement: z.string(),
+    style: TextStyleSchema,
+  }),
+  z.object({
     op: z.literal('icon'),
     sourcePathD: z.string().min(1),
     newIconName: z.string().regex(/^[A-Z][A-Za-z0-9]*$/).optional(),
@@ -1795,6 +1886,8 @@ router.patch('/:projectId/content-batch', requireAuth, async (req, res, next) =>
       try {
         if (op.op === 'content') {
           applyContentPatch(projectId, op.original, op.replacement);
+        } else if (op.op === 'textStyle') {
+          applyTextStylePatch(projectId, op.original, op.replacement, op.style);
         } else if (op.op === 'icon') {
           if (Boolean(op.newIconName) === Boolean(op.uploadedUrl)) {
             throw new AppError(422, 'Provide exactly one of newIconName or uploadedUrl');

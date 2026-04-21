@@ -1,17 +1,29 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Dialog, DialogContent, Box, Typography, TextField, IconButton, Button,
-  Stack, Chip, CircularProgress,
+  Stack, Chip, CircularProgress, ToggleButton, ToggleButtonGroup, Select,
+  MenuItem, FormControl,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import FormatBoldIcon from '@mui/icons-material/FormatBold';
+import FormatItalicIcon from '@mui/icons-material/FormatItalic';
+import FormatColorTextIcon from '@mui/icons-material/FormatColorText';
 import { useTranslation } from 'react-i18next';
 import IconPickerBody, { type IconPickResult } from './IconPickerBody';
 
+export type TextStylePatch = {
+  bold?: boolean;
+  italic?: boolean;
+  fontSize?: string;
+  fontFamily?: string;
+  color?: string;
+};
+
 export type EditTarget =
-  | { kind: 'text'; anchor: string }
+  | { kind: 'text'; anchor: string; style?: TextStylePatch }
   | { kind: 'image'; anchor: string }
   | { kind: 'icon'; sourcePathD: string; width: number; height: number };
 
@@ -20,7 +32,7 @@ export type EditTarget =
  * (uploading any data URLs to S3 first and converting to the final URL).
  */
 export type EditEvent =
-  | { kind: 'text'; anchor: string; replacement: string }
+  | { kind: 'text'; anchor: string; replacement: string; style?: TextStylePatch }
   | { kind: 'image-url'; anchor: string; replacement: string }
   | { kind: 'image-file'; anchor: string; dataUrl: string; filename: string }
   | { kind: 'icon-library'; sourcePathD: string; width: number; height: number; name: string }
@@ -35,11 +47,27 @@ interface Props {
   busy?: boolean;
 }
 
+function cleanTextStyle(style: TextStylePatch): TextStylePatch {
+  return {
+    ...(style.bold ? { bold: true } : {}),
+    ...(style.italic ? { italic: true } : {}),
+    ...(style.fontSize ? { fontSize: style.fontSize } : {}),
+    ...(style.fontFamily ? { fontFamily: style.fontFamily } : {}),
+    ...(style.color ? { color: style.color } : {}),
+  };
+}
+
+function normalizeColorInput(color?: string): string {
+  if (color && /^#[0-9a-f]{6}$/i.test(color)) return color;
+  return '#f4f4f5';
+}
+
 export default function EditDialog({ target, onSave, onClose, busy = false }: Props) {
   const { t } = useTranslation();
   const open = target !== null;
 
   const [textValue, setTextValue] = useState('');
+  const [textStyle, setTextStyle] = useState<TextStylePatch>({});
   const [imageUrl, setImageUrl] = useState('');
   const [uploadedFile, setUploadedFile] = useState<{ dataUrl: string; filename: string } | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -49,12 +77,15 @@ export default function EditDialog({ target, onSave, onClose, busy = false }: Pr
     if (!target) return;
     if (target.kind === 'text') {
       setTextValue(target.anchor);
+      setTextStyle(cleanTextStyle(target.style ?? {}));
       setImageUrl('');
     } else if (target.kind === 'image') {
       setImageUrl(target.anchor);
       setTextValue('');
+      setTextStyle({});
     } else {
       setTextValue('');
+      setTextStyle({});
       setImageUrl('');
     }
     setUploadedFile(null);
@@ -74,11 +105,13 @@ export default function EditDialog({ target, onSave, onClose, busy = false }: Pr
   const handleSaveText = () => {
     if (!target || target.kind !== 'text') return;
     const replacement = textValue.trim();
-    if (!replacement || replacement === target.anchor) {
+    const cleanedStyle = cleanTextStyle(textStyle);
+    const styleChanged = JSON.stringify(cleanedStyle) !== JSON.stringify(cleanTextStyle(target.style ?? {}));
+    if (!replacement || (replacement === target.anchor && !styleChanged)) {
       onClose();
       return;
     }
-    onSave({ kind: 'text', anchor: target.anchor, replacement });
+    onSave({ kind: 'text', anchor: target.anchor, replacement, style: cleanedStyle });
   };
 
   const handleSaveImage = () => {
@@ -133,6 +166,16 @@ export default function EditDialog({ target, onSave, onClose, busy = false }: Pr
     : target?.kind === 'icon' ? t('editDialog.typeIcon')
     : '';
 
+  const fontOptions = [
+    { value: '', label: t('editDialog.fontDefault') },
+    { value: 'Inter, system-ui, sans-serif', label: 'Inter' },
+    { value: 'Arial, sans-serif', label: 'Arial' },
+    { value: 'Georgia, serif', label: 'Georgia' },
+    { value: '"Times New Roman", serif', label: 'Times' },
+    { value: '"Courier New", monospace', label: 'Courier' },
+  ];
+  const sizeOptions = ['', '12px', '14px', '16px', '18px', '20px', '24px', '32px', '40px', '48px'];
+
   return (
     <Dialog
       open={open}
@@ -183,6 +226,151 @@ export default function EditDialog({ target, onSave, onClose, busy = false }: Pr
 
         {target?.kind === 'text' && (
           <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.75,
+                p: 0.75,
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 2.5,
+                bgcolor: 'rgba(24,24,27,0.78)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+                flexWrap: 'wrap',
+              }}
+            >
+              <ToggleButtonGroup
+                size="small"
+                value={[textStyle.bold ? 'bold' : '', textStyle.italic ? 'italic' : ''].filter(Boolean)}
+                onChange={(_, values) => {
+                  const selected = Array.isArray(values) ? values : [];
+                  setTextStyle((s) => ({
+                    ...s,
+                    bold: selected.includes('bold'),
+                    italic: selected.includes('italic'),
+                  }));
+                }}
+                sx={{
+                  '& .MuiToggleButton-root': {
+                    color: '#d4d4d8',
+                    borderColor: 'transparent',
+                    bgcolor: 'rgba(255,255,255,0.04)',
+                    width: 32,
+                    height: 30,
+                    p: 0,
+                    borderRadius: '8px !important',
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' },
+                    '&.Mui-selected': {
+                      color: '#fff',
+                      bgcolor: 'rgba(99,102,241,0.75)',
+                      boxShadow: '0 6px 16px rgba(99,102,241,0.2)',
+                    },
+                    '&.Mui-selected:hover': { bgcolor: 'rgba(99,102,241,0.85)' },
+                  },
+                }}
+              >
+                <ToggleButton value="bold" aria-label={t('editDialog.bold')}>
+                  <FormatBoldIcon fontSize="small" />
+                </ToggleButton>
+                <ToggleButton value="italic" aria-label={t('editDialog.italic')}>
+                  <FormatItalicIcon fontSize="small" />
+                </ToggleButton>
+              </ToggleButtonGroup>
+
+              <Box sx={{ width: '1px', height: 22, flex: '0 0 auto', bgcolor: 'rgba(255,255,255,0.08)' }} />
+
+              <FormControl size="small" sx={{ minWidth: 88 }}>
+                <Select
+                  value={textStyle.fontSize ?? ''}
+                  displayEmpty
+                  aria-label={t('editDialog.size')}
+                  renderValue={(value) => String(value || t('editDialog.sizeDefault'))}
+                  onChange={(e) => setTextStyle((s) => ({ ...s, fontSize: String(e.target.value) || undefined }))}
+                  sx={{
+                    color: '#f4f4f5',
+                    height: 30,
+                    borderRadius: 2,
+                    bgcolor: 'rgba(255,255,255,0.04)',
+                    fontSize: 13,
+                    '& .MuiSelect-select': { py: 0.5, pl: 1.25, pr: 3 },
+                    '& .MuiOutlinedInput-notchedOutline': { borderColor: 'transparent' },
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' },
+                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#6366f1' },
+                    '& .MuiSvgIcon-root': { color: '#a1a1aa' },
+                  }}
+                >
+                  {sizeOptions.map((size) => (
+                    <MenuItem key={size || 'default'} value={size}>
+                      {size || t('editDialog.sizeDefault')}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <FormControl size="small" sx={{ minWidth: 126, flex: 1 }}>
+                <Select
+                  value={textStyle.fontFamily ?? ''}
+                  displayEmpty
+                  aria-label={t('editDialog.font')}
+                  renderValue={(value) => fontOptions.find((font) => font.value === value)?.label ?? t('editDialog.fontDefault')}
+                  onChange={(e) => setTextStyle((s) => ({ ...s, fontFamily: String(e.target.value) || undefined }))}
+                  sx={{
+                    color: '#f4f4f5',
+                    height: 30,
+                    borderRadius: 2,
+                    bgcolor: 'rgba(255,255,255,0.04)',
+                    fontSize: 13,
+                    '& .MuiSelect-select': { py: 0.5, pl: 1.25, pr: 3 },
+                    '& .MuiOutlinedInput-notchedOutline': { borderColor: 'transparent' },
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' },
+                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#6366f1' },
+                    '& .MuiSvgIcon-root': { color: '#a1a1aa' },
+                  }}
+                >
+                  {fontOptions.map((font) => (
+                    <MenuItem key={font.value || 'default'} value={font.value} sx={{ fontFamily: font.value || undefined }}>
+                      {font.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <Box
+                sx={{
+                  height: 30,
+                  px: 0.75,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.75,
+                  color: '#d4d4d8',
+                  bgcolor: 'rgba(255,255,255,0.04)',
+                  borderRadius: 2,
+                  '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' },
+                }}
+              >
+                <FormatColorTextIcon sx={{ fontSize: 18 }} />
+                <Box
+                  component="input"
+                  type="color"
+                  value={normalizeColorInput(textStyle.color)}
+                  onChange={(e) => setTextStyle((s) => ({ ...s, color: e.target.value }))}
+                  aria-label={t('editDialog.color')}
+                  sx={{
+                    width: 24,
+                    height: 24,
+                    p: 0,
+                    border: '1px solid rgba(255,255,255,0.16)',
+                    borderRadius: '999px',
+                    bgcolor: 'transparent',
+                    cursor: 'pointer',
+                    overflow: 'hidden',
+                    '&::-webkit-color-swatch-wrapper': { p: 0 },
+                    '&::-webkit-color-swatch': { border: 0, borderRadius: '999px' },
+                  }}
+                />
+              </Box>
+            </Box>
+
             <TextField
               autoFocus
               value={textValue}
@@ -199,7 +387,14 @@ export default function EditDialog({ target, onSave, onClose, busy = false }: Pr
               InputLabelProps={{ sx: { color: '#a1a1aa' } }}
               InputProps={{
                 sx: {
-                  bgcolor: '#09090b', color: '#f4f4f5', borderRadius: 2, fontSize: 14, lineHeight: 1.55,
+                  bgcolor: '#09090b',
+                  color: textStyle.color || '#f4f4f5',
+                  borderRadius: 2,
+                  fontSize: textStyle.fontSize || 14,
+                  fontFamily: textStyle.fontFamily,
+                  fontWeight: textStyle.bold ? 700 : undefined,
+                  fontStyle: textStyle.italic ? 'italic' : undefined,
+                  lineHeight: 1.55,
                   '& fieldset': { borderColor: '#3f3f46' },
                   '&:hover fieldset': { borderColor: '#52525b' },
                   '&.Mui-focused fieldset': { borderColor: '#6366f1 !important', borderWidth: '1.5px !important' },

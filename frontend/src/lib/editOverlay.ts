@@ -240,8 +240,30 @@ export const EDIT_OVERLAY_SCRIPT = `
     } else {
       anchor = t.innerText.trim();
     }
-    postToParent({ type: 'EDIT_SELECT', target: { kind: 'text', anchor: anchor } });
+    var styleSource = hasInlineChildElements(t) && tn ? tn.parentElement : t;
+    var cs = styleSource ? window.getComputedStyle(styleSource) : null;
+    postToParent({
+      type: 'EDIT_SELECT',
+      target: {
+        kind: 'text',
+        anchor: anchor,
+        style: cs ? {
+          bold: parseInt(cs.fontWeight || '400', 10) >= 600,
+          italic: cs.fontStyle === 'italic',
+          fontSize: cs.fontSize,
+          fontFamily: cs.fontFamily,
+          color: rgbToHex(cs.color),
+        } : undefined,
+      },
+    });
   }, true);
+
+  function rgbToHex(color) {
+    var m = String(color || '').match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/);
+    if (!m) return undefined;
+    function h(n) { return Math.max(0, Math.min(255, Number(n))).toString(16).padStart(2, '0'); }
+    return '#' + h(m[1]) + h(m[2]) + h(m[3]);
+  }
 
   // ── Optimistic DOM mutations (EDIT_APPLY) ─────────────────────────────────
   function findTextNodeByValue(anchor) {
@@ -282,6 +304,13 @@ export const EDIT_OVERLAY_SCRIPT = `
         var leading = (tn.nodeValue || '').match(/^\\s*/)[0];
         var trailing = (tn.nodeValue || '').match(/\\s*$/)[0];
         tn.nodeValue = leading + msg.replacement + trailing;
+        if (msg.style && tn.parentElement) {
+          if (msg.style.bold) tn.parentElement.style.fontWeight = '700';
+          if (msg.style.italic) tn.parentElement.style.fontStyle = 'italic';
+          if (msg.style.fontSize) tn.parentElement.style.fontSize = msg.style.fontSize;
+          if (msg.style.fontFamily) tn.parentElement.style.fontFamily = msg.style.fontFamily;
+          if (msg.style.color) tn.parentElement.style.color = msg.style.color;
+        }
       } else if (msg.op === 'replace-image') {
         var img = findImageBySrc(msg.anchor);
         if (img) img.setAttribute('src', msg.replacement);

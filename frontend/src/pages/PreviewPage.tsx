@@ -37,6 +37,7 @@ import PaymentsSetupDialog from '../components/PaymentsSetupDialog';
 import SupportDialog from '../components/SupportDialog';
 import MessageBubble from '../components/MessageBubble';
 import EditDialog, { type EditTarget, type EditEvent } from '../components/EditDialog';
+import type { TextStylePatch } from '../components/EditDialog';
 
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
@@ -208,6 +209,7 @@ export default function PreviewPage() {
   const [editDialogBusy, setEditDialogBusy] = useState(false);
   const [pendingEdits, setPendingEdits] = useState<Array<
     | { op: 'content'; original: string; replacement: string }
+    | { op: 'textStyle'; original: string; replacement: string; style: TextStylePatch }
     | { op: 'icon'; sourcePathD: string; width: number; height: number; newIconName?: string; uploadedUrl?: string }
     | { op: 'delete'; kind: 'text' | 'image' | 'icon'; anchor: string }
   >>([]);
@@ -450,9 +452,11 @@ export default function PreviewPage() {
       if (event.kind === 'text') {
         setPendingEdits((prev) => [
           ...prev,
-          { op: 'content', original: event.anchor, replacement: event.replacement },
+          event.style && Object.keys(event.style).length > 0
+            ? { op: 'textStyle', original: event.anchor, replacement: event.replacement, style: event.style }
+            : { op: 'content', original: event.anchor, replacement: event.replacement },
         ]);
-        post({ op: 'replace-text', anchor: event.anchor, replacement: event.replacement });
+        post({ op: 'replace-text', anchor: event.anchor, replacement: event.replacement, style: event.style });
         setEditDialogTarget(null);
         return;
       }
