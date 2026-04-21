@@ -224,6 +224,8 @@
     "iterationFailed": "The change failed: {{msg}}",
     "downloadFailed": "Download failed",
     "refresh": "Refresh",
+    "switchToMobile": "Toggle mobile preview",
+    "switchToDesktop": "Toggle desktop preview",
     "showImprovements": "Show improvements",
     "hideImprovements": "Hide improvements",
     "improvementsHint": "Describe what you want to change and I will apply it immediately.",

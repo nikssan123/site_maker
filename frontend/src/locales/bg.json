@@ -247,6 +247,8 @@
     "iterationFailed": "Промяната неуспя: {{msg}}",
     "downloadFailed": "Изтеглянето неуспа",
     "refresh": "Опресни",
+    "switchToMobile": "Превключи към мобилен преглед",
+    "switchToDesktop": "Превключи към десктоп преглед",
     "showImprovements": "Отвори подобренията",
     "hideImprovements": "Скрий подобренията",
     "improvementsHint": "Опиши какво да промениш и ще го приложа веднага.",

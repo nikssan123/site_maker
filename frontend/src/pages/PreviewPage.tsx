@@ -26,6 +26,7 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import SettingsIcon from '@mui/icons-material/Settings';
+import ImportantDevicesIcon from '@mui/icons-material/ImportantDevices';
 
 import AppLogo from '../components/AppLogo';
 import PreviewFrame, { type PreviewFrameHandle } from '../components/PreviewFrame';
@@ -170,6 +171,7 @@ export default function PreviewPage() {
   const [clarifyingIteration, setClarifyingIteration] = useState(false);
   const [iterating, setIterating] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [downloadPreparingOpen, setDownloadPreparingOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(() => !window.matchMedia('(max-width:899.95px)').matches);
   const [drawerMode, setDrawerMode] = useState<'improvements' | AdminWorkspaceMode>('improvements');
@@ -904,6 +906,23 @@ export default function PreviewPage() {
             {t('preview.title')}
           </Typography>
           <Box sx={{ flex: 1 }} />
+          <Tooltip title={previewDevice === 'desktop' ? t('preview.switchToMobile') : t('preview.switchToDesktop')}>
+            <span>
+              <IconButton
+                size="small"
+                onClick={() => setPreviewDevice((mode) => (mode === 'desktop' ? 'mobile' : 'desktop'))}
+                aria-label={previewDevice === 'desktop' ? t('preview.switchToMobile') : t('preview.switchToDesktop')}
+                sx={{
+                  borderRadius: 1.5,
+                  color: previewDevice === 'mobile' ? 'primary.main' : 'text.secondary',
+                  bgcolor: previewDevice === 'mobile' ? 'action.selected' : 'transparent',
+                  '&:hover': { bgcolor: previewDevice === 'mobile' ? 'action.selected' : 'action.hover' },
+                }}
+              >
+                <ImportantDevicesIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
           <Tooltip title={t('tour.replayTooltip')}>
             <span>
               <IconButton size="small" onClick={tour.replay}>
@@ -1157,9 +1176,35 @@ export default function PreviewPage() {
                   </Button>
                 </Box>
               )}
-              <Box sx={{ flex: 1, overflow: 'hidden' }}>
+              <Box
+                sx={{
+                  flex: 1,
+                  overflow: 'hidden',
+                  display: 'flex',
+                  alignItems: previewDevice === 'mobile' ? 'center' : 'stretch',
+                  justifyContent: 'center',
+                  p: previewDevice === 'mobile' ? { xs: 1, md: 2 } : 0,
+                  bgcolor: previewDevice === 'mobile' ? 'rgba(15,23,42,0.04)' : 'transparent',
+                }}
+              >
                 {store.runPort != null ? (
-                  <PreviewFrame ref={previewFrameRef} key={refreshKey} projectId={projectId} port={store.runPort ?? 0} editToken={editToken} />
+                  <Box
+                    sx={{
+                      width: previewDevice === 'mobile' ? 'min(440px, 100%)' : '100%',
+                      height: previewDevice === 'mobile' ? 'min(920px, 100%)' : '100%',
+                      maxHeight: '100%',
+                      flexShrink: 0,
+                      borderRadius: previewDevice === 'mobile' ? '28px' : 0,
+                      border: previewDevice === 'mobile' ? '8px solid #111827' : 0,
+                      bgcolor: previewDevice === 'mobile' ? '#111827' : 'transparent',
+                      boxShadow: previewDevice === 'mobile'
+                        ? '0 28px 80px rgba(15,23,42,0.28), 0 0 0 1px rgba(255,255,255,0.08)'
+                        : 'none',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <PreviewFrame ref={previewFrameRef} key={refreshKey} projectId={projectId} port={store.runPort ?? 0} editToken={editToken} />
+                  </Box>
                 ) : (
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                     <CircularProgress />
