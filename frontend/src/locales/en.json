@@ -436,6 +436,7 @@
     "saving": "Saving changes…",
     "openCatalog": "Open content",
     "dynamicContentError": "This content is managed from the admin workspace. Open the correct panel to edit it safely.",
+    "dynamicContentHover": "This content is managed from Catalog.",
     "patchFailed": "The change could not be saved. Try again or edit via chat.",
     "useCatalogTooltip": "Open catalog — edit dynamic content here",
     "pendingCount_one": "{{count}} unsaved edit",

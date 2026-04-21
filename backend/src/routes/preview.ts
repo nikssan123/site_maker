@@ -253,6 +253,41 @@ function walkSourceFiles(projectDir: string): string[] {
   return results;
 }
 
+function normalizePatchText(text: string): string {
+  return text
+    .replace(/\u00a0/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function sourceFileHasAnchor(content: string, anchor: string): boolean {
+  if (!anchor) return false;
+  if (content.includes(anchor)) return true;
+  const norm = normalizePatchText(anchor);
+  if (!norm) return false;
+  const escaped = norm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(escaped.replace(/ /g, '\\s+')).test(content);
+}
+
+function inspectEditAnchor(projectId: string, target: { kind: 'text' | 'image'; anchor: string }): {
+  classification: 'editable' | 'dynamic' | 'unknown';
+} {
+  const projectDir = projectPath(projectId);
+  const files = walkSourceFiles(projectDir);
+  const serverFile = path.join(projectDir, 'server.js');
+  const serverContent = fs.existsSync(serverFile) ? fs.readFileSync(serverFile, 'utf8') : '';
+  const patchableFiles = files.filter((f) => path.basename(f).toLowerCase() !== 'server.js');
+
+  for (const fp of patchableFiles) {
+    const content = fs.readFileSync(fp, 'utf8');
+    if (sourceFileHasAnchor(content, target.anchor)) return { classification: 'editable' };
+  }
+
+  if (sourceFileHasAnchor(serverContent, target.anchor)) return { classification: 'dynamic' };
+  return { classification: 'unknown' };
+}
+
 function ensureMuiBoxImport(content: string): string {
   if (/import[^;]*\bBox\b[^;]*from\s+['"]@mui\/material['"]/.test(content)) return content;
   const muiImportRegex = /(import\s*\{[^}]*)(}\s*from\s*['"]@mui\/material['"])/;
@@ -348,12 +383,6 @@ function getAdminConfig(projectId: string): AdminConfig {
 function applyContentPatch(projectId: string, original: string, replacement: string): void {
   const projectDir = projectPath(projectId);
   const files = walkSourceFiles(projectDir);
-  const normalizePatchText = (text: string): string =>
-    text
-      .replace(/\u00a0/g, ' ')
-      .replace(/&nbsp;/gi, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
   const decodeSimpleJsxString = (value: string): string =>
     value
       .replace(/\\n/g, ' ')
@@ -514,8 +543,8 @@ function applyContentPatch(projectId: string, original: string, replacement: str
   if (serverHasOriginal) {
     throw new AppError(
       409,
-      'Този текст се намира само в server.js и не може да бъде редактиран в Edit Mode (за да не се чупи бекендът). ' +
-      'Променете съдържанието през Iteration/чат или преместете данните в отделен JSON/контент файл.',
+      'This content is loaded from the server and must be edited through the catalog.',
+      'dynamic_content',
     );
   }
 
@@ -1566,6 +1595,31 @@ router.post('/:projectId/snapshots/:snapshotId/restore', requireAuth, async (req
     });
 
     return res.json({ ok: true, port: run.port ?? null });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/:projectId/edit-target/inspect', requireAuth, async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId);
+    const { target } = z.object({
+      target: z.discriminatedUnion('kind', [
+        z.object({ kind: z.literal('text'), anchor: z.string().min(1).max(20_000) }),
+        z.object({ kind: z.literal('image'), anchor: z.string().min(1).max(20_000) }),
+        z.object({ kind: z.literal('icon'), sourcePathD: z.string().min(1).max(20_000) }),
+      ]),
+    }).parse(req.body);
+
+    await prisma.project.findFirstOrThrow({
+      where: { id: projectId, session: { userId: req.user.userId } },
+    });
+
+    if (target.kind === 'icon') {
+      return res.json({ classification: 'editable' });
+    }
+
+    return res.json(inspectEditAnchor(projectId, target));
   } catch (err) {
     return next(err);
   }

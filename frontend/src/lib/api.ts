@@ -158,6 +158,19 @@ export const api = {
   getAdminToken: (projectId: string) =>
     request<{ token: string }>('GET', `/preview/${projectId}/admin-token`),
 
+  inspectEditTarget: (
+    projectId: string,
+    target:
+      | { kind: 'text'; anchor: string }
+      | { kind: 'image'; anchor: string }
+      | { kind: 'icon'; sourcePathD: string; width?: number; height?: number },
+  ) =>
+    request<{ classification: 'editable' | 'dynamic' | 'unknown' }>(
+      'POST',
+      `/preview/${projectId}/edit-target/inspect`,
+      { target },
+    ),
+
   patchContent: (projectId: string, body: { token: string; original: string; replacement: string }) =>
     request<{ ok: boolean }>('PATCH', `/preview/${projectId}/content`, body),
 

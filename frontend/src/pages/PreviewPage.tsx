@@ -382,13 +382,38 @@ export default function PreviewPage() {
     }
   };
 
+  const showDynamicContentNotice = useCallback(() => {
+    setEditDialogTarget(null);
+    setEditDynamicError(true);
+  }, []);
+
+  const handleEditSelect = useCallback(async (target: EditTarget) => {
+    if (!projectId) return;
+    if (target.kind === 'text' || target.kind === 'image') {
+      try {
+        const result = await api.inspectEditTarget(projectId, target);
+        if (result.classification === 'dynamic') {
+          showDynamicContentNotice();
+          return;
+        }
+      } catch {
+        // Non-fatal: keep the existing edit flow and let save-time validation decide.
+      }
+    }
+    setEditDialogTarget(target);
+  }, [projectId, showDynamicContentNotice]);
+
   // Listen for click-selects from the in-iframe overlay and route them to the EditDialog.
   useEffect(() => {
     if (!editToken) return;
     const handler = (e: MessageEvent) => {
       if (!e.data) return;
       if (e.data.type === 'EDIT_SELECT' && e.data.target) {
-        setEditDialogTarget(e.data.target as EditTarget);
+        void handleEditSelect(e.data.target as EditTarget);
+        return;
+      }
+      if (e.data.type === 'EDIT_DYNAMIC_BLOCKED') {
+        showDynamicContentNotice();
         return;
       }
       if (e.data.type === 'EDIT_ESCAPE') {
@@ -397,12 +422,12 @@ export default function PreviewPage() {
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [editToken]);
+  }, [editToken, handleEditSelect, showDynamicContentNotice]);
 
   const reportEditError = (err: any) => {
     const msg: string = err?.message ?? '';
     const status: number | undefined = err?.status;
-    if (status === 409) {
+    if (err?.code === 'dynamic_content') {
       setEditDynamicError(true);
     } else {
       const userFacing = status === 404 || status === 422;

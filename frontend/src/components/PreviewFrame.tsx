@@ -104,8 +104,9 @@ const PreviewFrame = forwardRef<PreviewFrameHandle, Props>(function PreviewFrame
         doc.body.appendChild(script); // IIFE runs synchronously, sets __editOverlayInjected
       }
     }
+    win.__editDynamicMessage = t('editMode.dynamicContentHover');
     win.__editActive = true;
-  }, []);
+  }, [t]);
 
   /** Activate or deactivate the overlay without reloading the iframe. */
   useEffect(() => {

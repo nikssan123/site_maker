@@ -20,6 +20,7 @@ export const EDIT_OVERLAY_SCRIPT = `
   window.__editOverlayInjected = true;
 
   var SELECTION_ID = '__edit-overlay-selection';
+  var DYNAMIC_ATTR = 'data-appmaker-dynamic';
 
   // ── Editable detection ────────────────────────────────────────────────────
   function isEditable(el) {
@@ -65,6 +66,23 @@ export const EDIT_OVERLAY_SCRIPT = `
     return p ? (p.getAttribute('d') || '') : '';
   }
 
+  function findDynamicOwner(el) {
+    var cur = el && el.nodeType === 3 ? el.parentElement : el;
+    for (var i = 0; cur && i < 8; i++) {
+      if (cur.nodeType === 1 && cur.getAttribute && cur.getAttribute(DYNAMIC_ATTR) === 'true') return cur;
+      cur = cur.parentElement;
+    }
+    return null;
+  }
+
+  function dynamicMeta(el) {
+    return {
+      model: el && el.getAttribute ? (el.getAttribute('data-appmaker-model') || undefined) : undefined,
+      field: el && el.getAttribute ? (el.getAttribute('data-appmaker-field') || undefined) : undefined,
+      id: el && el.getAttribute ? (el.getAttribute('data-appmaker-id') || undefined) : undefined,
+    };
+  }
+
   function textNodeFromPoint(x, y) {
     try {
       if (document.caretPositionFromPoint) {
@@ -92,9 +110,11 @@ export const EDIT_OVERLAY_SCRIPT = `
   }
 
   // ── Selection ring (pure overlay div, never mutates target styles) ────────
-  function drawSelectionRing(rect) {
+  function drawSelectionRing(rect, blocked) {
     clearSelectionRing();
     if (!rect || (rect.width === 0 && rect.height === 0)) return;
+    var color = blocked ? '#f59e0b' : '#6366f1';
+    var shadow = blocked ? 'rgba(245,158,11,.22)' : 'rgba(99,102,241,.15)';
     var div = document.createElement('div');
     div.id = SELECTION_ID;
     div.setAttribute('style',
@@ -106,11 +126,23 @@ export const EDIT_OVERLAY_SCRIPT = `
       'top:' + (rect.top - 3) + 'px!important;' +
       'width:' + (rect.width + 6) + 'px!important;' +
       'height:' + (rect.height + 6) + 'px!important;' +
-      'border:2px solid #6366f1!important;' +
+      'border:2px solid ' + color + '!important;' +
       'border-radius:6px!important;' +
-      'box-shadow:0 0 0 4px rgba(99,102,241,.15)!important;' +
+      'box-shadow:0 0 0 4px ' + shadow + '!important;' +
       'transition:left .08s ease-out, top .08s ease-out, width .08s ease-out, height .08s ease-out!important;'
     );
+    if (blocked) {
+      div.textContent = window.__editDynamicMessage || 'Managed in catalog';
+      div.style.font = '12px system-ui, -apple-system, Segoe UI, sans-serif';
+      div.style.color = '#111827';
+      div.style.background = 'rgba(245,158,11,.94)';
+      div.style.padding = '3px 7px';
+      div.style.height = 'auto';
+      div.style.minHeight = (rect.height + 6) + 'px';
+      div.style.display = 'flex';
+      div.style.alignItems = 'flex-start';
+      div.style.justifyContent = 'flex-start';
+    }
     document.body.appendChild(div);
   }
 
@@ -125,18 +157,19 @@ export const EDIT_OVERLAY_SCRIPT = `
     if (!window.__editActive) { clearSelectionRing(); return; }
     if (!isEditable(e.target)) { clearSelectionRing(); return; }
     document.body.style.cursor = 'pointer';
+    var dyn = findDynamicOwner(e.target);
     var iconSvg = findOwningIconSvg(e.target);
-    if (iconSvg) { drawSelectionRing(rectForTarget(iconSvg)); return; }
+    if (iconSvg) { drawSelectionRing(rectForTarget(iconSvg), !!dyn); return; }
     if (e.target.tagName !== 'IMG' && hasInlineChildElements(e.target)) {
       var tn = textNodeFromPoint(e.clientX, e.clientY);
       if (tn && tn.nodeValue && tn.nodeValue.trim()) {
-        drawSelectionRing(rectForTarget(tn));
+        drawSelectionRing(rectForTarget(tn), !!dyn || !!findDynamicOwner(tn));
         return;
       }
       clearSelectionRing();
       return;
     }
-    drawSelectionRing(rectForTarget(e.target));
+    drawSelectionRing(rectForTarget(e.target), !!dyn);
   }, true);
 
   document.addEventListener('mouseleave', function () { clearSelectionRing(); });
@@ -158,6 +191,12 @@ export const EDIT_OVERLAY_SCRIPT = `
 
     var t = e.target;
     if (!t || t === document.body || t === document.documentElement) return;
+
+    var dynamicOwner = findDynamicOwner(t);
+    if (dynamicOwner) {
+      postToParent({ type: 'EDIT_DYNAMIC_BLOCKED', target: dynamicMeta(dynamicOwner) });
+      return;
+    }
 
     // Icon click
     var iconSvg = findOwningIconSvg(t);
