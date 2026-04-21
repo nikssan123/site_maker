@@ -851,10 +851,12 @@
       "noProjects": "No projects found",
       "actionStop": "Stop",
       "actionRestart": "Restart",
+      "actionResolve": "Try to resolve",
       "actionClearError": "Clear error",
       "actionDelete": "Delete",
       "confirmStop": "Stop this generated app? It will no longer serve preview traffic.",
       "confirmRestart": "Rebuild and restart this project? Any running instance will be stopped first.",
+      "confirmResolve": "Try to automatically resolve this project's build/runtime issue? This may modify generated source files.",
       "confirmClearError": "Clear the error state and reset fix attempts? This keeps files untouched.",
       "confirmDelete": "Permanently delete this project and its data? This cannot be undone.",
       "actionSuccess": "Action completed.",
@@ -913,9 +915,27 @@
       "colOwner": "Owner",
       "colFixAttempts": "Fix Attempts",
       "colUpdated": "Updated",
+      "colActions": "Actions",
       "errorLog": "Error Log:",
       "buildLog": "Build Log:",
+      "resolveCta": "Resolve",
+      "confirmResolve": "Try to automatically resolve this project's build/runtime issue? This may modify generated source files.",
+      "resolveSuccess": "Repair completed. The project is running again.",
       "noErrors": "No errors"
+    },
+    "repairModal": {
+      "title": "AI repair prompt",
+      "body": "Paste the exact error or describe the fix. The AI will edit the generated source files, then the system will install, rebuild, and restart the app.",
+      "promptLabel": "Repair instructions",
+      "promptPlaceholder": "Example: Fix the missing ./components/Navbar import from src/App.tsx. Either create src/components/Navbar.tsx or inline the navbar so the Vite build passes.",
+      "submit": "Repair and rebuild",
+      "running": "Repairing..."
+    },
+    "import": {
+      "download": "Download source ZIP",
+      "upload": "Upload fixed source folder",
+      "success": "Imported {{n}} files, rebuilt, and restarted the app.",
+      "noFiles": "No text source files were found in the selected folder."
     },
     "system": {
       "diskUsage": "Disk Usage",

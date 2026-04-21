@@ -465,7 +465,15 @@ PAYMENTS (only when paymentsEnabled is true):
 - When PAYMENTS_ENABLED is false: disable checkout buttons and show an MUI Alert severity="warning" with text "Плащанията не са активирани. Собственикът трябва да свърже Stripe акаунт." — do NOT hide the checkout UI entirely, just show the notice above it.
 - scripts: { "build": "vite build" } only — no "start" script
 
-File count: aim for 10-18 files total. Split into logical components (e.g. src/components/BookingForm.tsx, src/pages/Admin.tsx).
+File count: aim for 8-14 files total. Prefer a self-contained src/App.tsx for small/medium apps. Only split into separate component/page files when you will emit every one of those files in the JSON.
+
+IMPORT INTEGRITY IS MANDATORY:
+- Never write placeholder imports for files you do not emit.
+- Every relative import you write (./ or ../) MUST resolve to a file included in the JSON output, with exact Linux path casing and a valid extension (.tsx, .ts, .jsx, .js, .json, .css).
+- Before final output, mentally build an import manifest: for every emitted file, list its relative imports; each one must map to an emitted file path.
+- If src/App.tsx imports "./components/Navbar", "./components/Hero", "./components/Footer", etc., then the JSON MUST include src/components/Navbar.tsx, src/components/Hero.tsx, src/components/Footer.tsx, etc.
+- If you cannot fit a component file completely, remove the import and define that component inside src/App.tsx instead.
+- Prefer inline local components in src/App.tsx over many tiny files. A complete single-file app is better than a broken multi-file app.
 
 ═══ SEO BASICS (MUST follow) ═══
 Every generated app must include basic SEO so it is discoverable by search engines and looks good when shared on social media.
@@ -536,6 +544,9 @@ Mobile check: mentally resize to 375px width. Does the nav collapse to a hamburg
 - NEVER output source code outside the JSON object
 - If space is tight: emit fewer or smaller files — never truncate inside a JSON string (invalid JSON breaks the pipeline)
 - server.js only when hasDatabase is true
+- Every relative import in every emitted file must point to another emitted file or to an existing generated file path exactly, including case
+- Do a final import audit before output: no src/App.tsx component/page imports may reference missing files
+- If the app is at risk of missing split components, collapse those components into src/App.tsx and remove the imports
 
 {"files":{"index.html":"...","package.json":"...","vite.config.ts":"...","src/main.tsx":"...","src/App.tsx":"..."}}${BG_LANGUAGE_BLOCK}`;
 
@@ -887,7 +898,15 @@ export function buildFixPrompt(errorLog: string, files: Record<string, string>, 
     : failedStep === 'build'
       ? `\n\nThis is a BUILD error (vite build failed). Fix the TypeScript/import errors in the affected source files.
 
-CRITICAL for "failed to resolve import" errors:
+CRITICAL for import resolution errors ("failed to resolve import", "Could not resolve", "Module not found"):
+Local relative imports are the most common case:
+- If the unresolved import starts with "./" or "../", it is a local file/component problem, not a dependency problem.
+- Either return the missing file with the exact path and case the import expects, or update the importing file to inline/remove that component and delete the bad import.
+- Example: Could not resolve "./components/Navbar" from "src/App.tsx" requires either src/components/Navbar.tsx or a corrected src/App.tsx import. Case must match Linux exactly.
+- If many local components/pages imported by src/App.tsx are missing, treat the app as an incomplete split-file generation. Prefer rewriting src/App.tsx as a complete self-contained file with inline components and no missing local imports, unless creating all missing files is smaller and safer.
+- After fixing, audit every remaining ./ or ../ import and make sure it points to an existing returned file path.
+
+Package import cases:
 1. Check if the package is listed in the provided package.json dependencies.
 2. If it IS listed but still fails: the icon/component may not exist in that package. Replace the import with a similar one that exists (e.g. replace a non-existent icon like "Eco" with a known one like "Nature" or "Park").
 3. If it is NOT listed: add it to package.json dependencies AND return the updated package.json in your response.
@@ -930,6 +949,3 @@ export function buildIteratorPrompt(
     (notes ? `Extra exploration context (internal):\n${notes}\n\n` : '') +
     `Current files (SCOPED SUBSET):\n\n${fileList}\n\nHard constraints:\n- Keep UI/layout stable; do not restyle unrelated areas.\n- No surprise features; implement only what is requested.\n- Keep all existing Bulgarian user-visible strings Bulgarian; any new user-visible strings must be Bulgarian.\n- Prefer minimal diffs; avoid broad refactors.\n- You MAY create new frontend files when needed for the requested change, especially under src/components, src/pages, src/hooks, src/lib, src/features, src/styles, src/assets, or src/data.\n- Only create backend or config files when the request clearly requires them and the spec/exploration context points to the exact path.\n- If creating a new file, wire it into the existing scoped files instead of rewriting unrelated areas.\n- Preserve any APPMAKER_LOGO_SLOT_START/END and APPMAKER_HERO_BG_START/END markers that already exist; do not remove or rename them.\n\nЛокализация: запази и допълни потребителските текстове на български език.`;
 }
-
-
-

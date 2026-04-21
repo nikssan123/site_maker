@@ -1,11 +1,11 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, AppBar, Toolbar, Typography, IconButton, Stack,
   CircularProgress, Paper, Grid, Chip, Tabs, Tab,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   TablePagination, TextField, Select, MenuItem, FormControl, InputLabel,
-  Collapse, Button, Snackbar, Alert, Tooltip,
+  Collapse, Button, Snackbar, Alert, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
@@ -24,6 +24,9 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import StopIcon from '@mui/icons-material/Stop';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import BuildIcon from '@mui/icons-material/Build';
+import DownloadIcon from '@mui/icons-material/Download';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import CleaningServicesIcon from '@mui/icons-material/CleaningServices';
 import {
@@ -80,6 +83,8 @@ interface ProjectRow {
   hosted: boolean;
   customDomain: string | null;
   fixAttempts: number;
+  errorLog: string | null;
+  buildLog: string | null;
   paidIterationCredits: number;
   runPort: number | null;
   createdAt: string;
@@ -186,6 +191,10 @@ const STATUS_COLORS: Record<string, 'success' | 'error' | 'warning' | 'info' | '
 };
 
 const PIE_COLORS = ['#7c3aed', '#06b6d4', '#f59e0b', '#ef4444', '#10b981', '#ec4899', '#8b5cf6'];
+const ADMIN_IMPORT_TEXT_EXTENSIONS = new Set([
+  'html', 'css', 'js', 'jsx', 'ts', 'tsx', 'json', 'md', 'txt', 'yml', 'yaml',
+  'toml', 'env', 'cjs', 'mjs', 'svg', 'xml',
+]);
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -206,6 +215,98 @@ function formatUptime(s: number): string {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function isAdminImportTextFile(pathname: string): boolean {
+  const clean = pathname.replace(/\\/g, '/');
+  const base = clean.split('/').pop() ?? clean;
+  if (base === 'Dockerfile' || base.startsWith('.env') || base.startsWith('.gitignore')) return true;
+  const ext = base.includes('.') ? base.split('.').pop()?.toLowerCase() : '';
+  return !!ext && ADMIN_IMPORT_TEXT_EXTENSIONS.has(ext);
+}
+
+async function readAdminImportFiles(fileList: FileList): Promise<Record<string, string>> {
+  const entries = Array.from(fileList);
+  const files: Record<string, string> = {};
+  for (const file of entries) {
+    const webkitPath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
+    const parts = webkitPath.replace(/\\/g, '/').split('/').filter(Boolean);
+    const rel = parts.length > 1 ? parts.slice(1).join('/') : parts.join('/');
+    if (!rel || /(^|\/)(node_modules|dist|dist-hosted|\.git)(\/|$)/i.test(rel)) continue;
+    if (!isAdminImportTextFile(rel)) continue;
+    files[rel] = await file.text();
+  }
+  return files;
+}
+
+function RepairPromptDialog({
+  open,
+  project,
+  prompt,
+  busy,
+  onPromptChange,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  project: { id: string; errorLog: string | null; buildLog: string | null } | null;
+  prompt: string;
+  busy: boolean;
+  onPromptChange: (value: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="md">
+      <DialogTitle>{t('admin.repairModal.title')}</DialogTitle>
+      <DialogContent dividers>
+        <Stack spacing={2}>
+          <Typography variant="body2" color="text.secondary">
+            {t('admin.repairModal.body')}
+          </Typography>
+          {project?.errorLog && (
+            <Box>
+              <Typography variant="caption" fontWeight={700} color="error.main">{t('admin.errorsTab.errorLog')}</Typography>
+              <Box component="pre" sx={{ mt: 0.5, p: 1.5, borderRadius: 1, bgcolor: 'rgba(0,0,0,0.35)', fontSize: 11, fontFamily: 'monospace', overflow: 'auto', maxHeight: 180, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                {project.errorLog}
+              </Box>
+            </Box>
+          )}
+          {project?.buildLog && (
+            <Box>
+              <Typography variant="caption" fontWeight={700}>{t('admin.errorsTab.buildLog')}</Typography>
+              <Box component="pre" sx={{ mt: 0.5, p: 1.5, borderRadius: 1, bgcolor: 'rgba(0,0,0,0.35)', fontSize: 11, fontFamily: 'monospace', overflow: 'auto', maxHeight: 180, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                {project.buildLog}
+              </Box>
+            </Box>
+          )}
+          <TextField
+            autoFocus
+            multiline
+            minRows={6}
+            label={t('admin.repairModal.promptLabel')}
+            placeholder={t('admin.repairModal.promptPlaceholder')}
+            value={prompt}
+            disabled={busy}
+            onChange={(e) => onPromptChange(e.target.value)}
+            fullWidth
+          />
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={busy}>{t('admin.common.cancel')}</Button>
+        <Button
+          variant="contained"
+          onClick={onSubmit}
+          disabled={busy || prompt.trim().length === 0}
+          startIcon={busy ? <CircularProgress size={16} color="inherit" /> : <BuildIcon fontSize="small" />}
+        >
+          {busy ? t('admin.repairModal.running') : t('admin.repairModal.submit')}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
 }
 
 /* ─── Tab Panels ─────────────────────────────────────────────────────────── */
@@ -464,6 +565,7 @@ function UsersPanel() {
 
 function ProjectsPanel() {
   const { t } = useTranslation();
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -473,6 +575,9 @@ function ProjectsPanel() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [acting, setActing] = useState<string | null>(null);
   const [toast, setToast] = useState<{ open: boolean; severity: 'success' | 'error'; message: string }>({ open: false, severity: 'success', message: '' });
+  const [repairProject, setRepairProject] = useState<ProjectRow | null>(null);
+  const [repairPrompt, setRepairPrompt] = useState('');
+  const [importProject, setImportProject] = useState<ProjectRow | null>(null);
 
   const load = (p: number, rpp: number, s: string) => {
     setLoading(true);
@@ -503,10 +608,76 @@ function ProjectsPanel() {
     }
   };
 
+  const openRepair = (project: ProjectRow) => {
+    setRepairProject(project);
+    setRepairPrompt(project.errorLog || project.buildLog || '');
+  };
+
+  const submitRepair = async () => {
+    if (!repairProject) return;
+    const projectId = repairProject.id;
+    setActing(projectId);
+    try {
+      await api.post(`/admin/projects/${projectId}/resolve`, { prompt: repairPrompt });
+      setToast({ open: true, severity: 'success', message: t('admin.errorsTab.resolveSuccess') });
+      setRepairProject(null);
+      setRepairPrompt('');
+      load(page, rowsPerPage, status);
+    } catch (e: any) {
+      setToast({ open: true, severity: 'error', message: t('admin.projects.actionFailed', { message: e?.message ?? '?' }) });
+      load(page, rowsPerPage, status);
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const downloadProject = async (projectId: string) => {
+    try {
+      await api.download(`/admin/projects/${projectId}/download`, `project-${projectId}.zip`);
+    } catch (e: any) {
+      setToast({ open: true, severity: 'error', message: t('admin.projects.actionFailed', { message: e?.message ?? '?' }) });
+    }
+  };
+
+  const openImport = (project: ProjectRow) => {
+    setImportProject(project);
+    importInputRef.current?.click();
+  };
+
+  const handleImportFiles = async (fileList: FileList | null) => {
+    const project = importProject;
+    setImportProject(null);
+    if (!project || !fileList || fileList.length === 0) return;
+    setActing(project.id);
+    try {
+      const files = await readAdminImportFiles(fileList);
+      if (Object.keys(files).length === 0) {
+        throw new Error(t('admin.import.noFiles'));
+      }
+      await api.post(`/admin/projects/${project.id}/import-files`, { files });
+      setToast({ open: true, severity: 'success', message: t('admin.import.success', { n: Object.keys(files).length }) });
+      load(page, rowsPerPage, status);
+    } catch (e: any) {
+      setToast({ open: true, severity: 'error', message: t('admin.projects.actionFailed', { message: e?.message ?? '?' }) });
+      load(page, rowsPerPage, status);
+    } finally {
+      setActing(null);
+      if (importInputRef.current) importInputRef.current.value = '';
+    }
+  };
+
   const COL_COUNT = 10;
 
   return (
     <Stack spacing={2}>
+      <input
+        ref={importInputRef}
+        type="file"
+        multiple
+        style={{ display: 'none' }}
+        onChange={(e) => handleImportFiles(e.target.files).catch(() => {})}
+        {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
+      />
       <FormControl size="small" sx={{ maxWidth: 200 }}>
         <InputLabel>{t('admin.projects.statusLabel')}</InputLabel>
         <Select value={status} label={t('admin.projects.statusLabel')} onChange={(e) => { setStatus(e.target.value); setPage(0); }}>
@@ -566,6 +737,21 @@ function ProjectsPanel() {
                             <RestartAltIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
+                        <Tooltip title={t('admin.projects.actionResolve')}>
+                          <IconButton size="small" color="success" disabled={acting === p.id} onClick={() => openRepair(p)}>
+                            <BuildIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title={t('admin.import.download')}>
+                          <IconButton size="small" color="primary" disabled={acting === p.id} onClick={() => downloadProject(p.id)}>
+                            <DownloadIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title={t('admin.import.upload')}>
+                          <IconButton size="small" color="secondary" disabled={acting === p.id} onClick={() => openImport(p)}>
+                            <UploadFileIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
                         {p.status === 'error' && (
                           <Tooltip title={t('admin.projects.actionClearError')}>
                             <IconButton size="small" color="info" disabled={acting === p.id} onClick={() => doAction(p.id, 'clear-error', 'confirmClearError')}>
@@ -591,6 +777,22 @@ function ProjectsPanel() {
                           {p.runPort && <><Typography variant="caption" fontWeight={700}>{t('admin.projects.port')}</Typography><Typography variant="body2" mb={1}>{p.runPort}</Typography></>}
                           <Typography variant="caption" fontWeight={700}>{t('admin.projects.updated')}</Typography>
                           <Typography variant="body2">{formatDate(p.updatedAt)}</Typography>
+                          {p.errorLog && (
+                            <Box mt={2}>
+                              <Typography variant="caption" fontWeight={700} color="error.main">{t('admin.errorsTab.errorLog')}</Typography>
+                              <Box component="pre" sx={{ mt: 0.5, p: 1.5, borderRadius: 1, bgcolor: 'rgba(0,0,0,0.3)', fontSize: 11, fontFamily: 'monospace', overflow: 'auto', maxHeight: 260, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                {p.errorLog}
+                              </Box>
+                            </Box>
+                          )}
+                          {p.buildLog && (
+                            <Box mt={2}>
+                              <Typography variant="caption" fontWeight={700}>{t('admin.errorsTab.buildLog')}</Typography>
+                              <Box component="pre" sx={{ mt: 0.5, p: 1.5, borderRadius: 1, bgcolor: 'rgba(0,0,0,0.3)', fontSize: 11, fontFamily: 'monospace', overflow: 'auto', maxHeight: 260, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                {p.buildLog}
+                              </Box>
+                            </Box>
+                          )}
                         </Box>
                       </Collapse>
                     </TableCell>
@@ -614,6 +816,19 @@ function ProjectsPanel() {
       <Snackbar open={toast.open} autoHideDuration={5000} onClose={() => setToast((t) => ({ ...t, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         <Alert severity={toast.severity} onClose={() => setToast((t) => ({ ...t, open: false }))} sx={{ width: '100%' }}>{toast.message}</Alert>
       </Snackbar>
+      <RepairPromptDialog
+        open={!!repairProject}
+        project={repairProject}
+        prompt={repairPrompt}
+        busy={!!repairProject && acting === repairProject.id}
+        onPromptChange={setRepairPrompt}
+        onClose={() => {
+          if (acting) return;
+          setRepairProject(null);
+          setRepairPrompt('');
+        }}
+        onSubmit={submitRepair}
+      />
     </Stack>
   );
 }
@@ -883,12 +1098,18 @@ function PlansPanel() {
 
 function ErrorsPanel() {
   const { t } = useTranslation();
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const [projects, setProjects] = useState<ErrorProject[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(20);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [acting, setActing] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ open: boolean; severity: 'success' | 'error'; message: string }>({ open: false, severity: 'success', message: '' });
+  const [repairProject, setRepairProject] = useState<ErrorProject | null>(null);
+  const [repairPrompt, setRepairPrompt] = useState('');
+  const [importProject, setImportProject] = useState<ErrorProject | null>(null);
 
   const load = (p: number, rpp: number) => {
     setLoading(true);
@@ -900,8 +1121,74 @@ function ErrorsPanel() {
 
   useEffect(() => { load(page, rowsPerPage); }, [page, rowsPerPage]);
 
+  const openRepair = (project: ErrorProject) => {
+    setRepairProject(project);
+    setRepairPrompt(project.errorLog || project.buildLog || '');
+  };
+
+  const resolveProject = async () => {
+    if (!repairProject) return;
+    const projectId = repairProject.id;
+    setActing(projectId);
+    try {
+      await api.post(`/admin/projects/${projectId}/resolve`, { prompt: repairPrompt });
+      setToast({ open: true, severity: 'success', message: t('admin.errorsTab.resolveSuccess') });
+      setRepairProject(null);
+      setRepairPrompt('');
+      load(page, rowsPerPage);
+    } catch (e: any) {
+      setToast({ open: true, severity: 'error', message: t('admin.projects.actionFailed', { message: e?.message ?? '?' }) });
+      load(page, rowsPerPage);
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const downloadProject = async (projectId: string) => {
+    try {
+      await api.download(`/admin/projects/${projectId}/download`, `project-${projectId}.zip`);
+    } catch (e: any) {
+      setToast({ open: true, severity: 'error', message: t('admin.projects.actionFailed', { message: e?.message ?? '?' }) });
+    }
+  };
+
+  const openImport = (project: ErrorProject) => {
+    setImportProject(project);
+    importInputRef.current?.click();
+  };
+
+  const handleImportFiles = async (fileList: FileList | null) => {
+    const project = importProject;
+    setImportProject(null);
+    if (!project || !fileList || fileList.length === 0) return;
+    setActing(project.id);
+    try {
+      const files = await readAdminImportFiles(fileList);
+      if (Object.keys(files).length === 0) {
+        throw new Error(t('admin.import.noFiles'));
+      }
+      await api.post(`/admin/projects/${project.id}/import-files`, { files });
+      setToast({ open: true, severity: 'success', message: t('admin.import.success', { n: Object.keys(files).length }) });
+      load(page, rowsPerPage);
+    } catch (e: any) {
+      setToast({ open: true, severity: 'error', message: t('admin.projects.actionFailed', { message: e?.message ?? '?' }) });
+      load(page, rowsPerPage);
+    } finally {
+      setActing(null);
+      if (importInputRef.current) importInputRef.current.value = '';
+    }
+  };
+
   return (
     <Stack spacing={2}>
+      <input
+        ref={importInputRef}
+        type="file"
+        multiple
+        style={{ display: 'none' }}
+        onChange={(e) => handleImportFiles(e.target.files).catch(() => {})}
+        {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
+      />
       <Typography variant="body2" color="text.secondary">{t('admin.errorsTab.countInfo', { n: total })}</Typography>
       {loading ? <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress size={28} /></Box> : (
         <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
@@ -913,22 +1200,44 @@ function ErrorsPanel() {
                 <TableCell align="center" sx={TH_SX}>{t('admin.errorsTab.colOwner')}</TableCell>
                 <TableCell align="center" sx={TH_SX}>{t('admin.errorsTab.colFixAttempts')}</TableCell>
                 <TableCell align="center" sx={TH_SX}>{t('admin.errorsTab.colUpdated')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.errorsTab.colActions')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {projects.map((p) => (
                 <Box component="tbody" key={p.id}>
-                  <TableRow hover onClick={() => setExpanded(expanded === p.id ? null : p.id)} sx={{ cursor: 'pointer' }}>
-                    <TableCell align="center" sx={{ width: 30 }}>
+                  <TableRow hover sx={{ cursor: 'pointer' }}>
+                    <TableCell align="center" sx={{ width: 30 }} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>
                       {expanded === p.id ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                     </TableCell>
-                    <TableCell align="center" sx={{ fontFamily: 'monospace', fontSize: 12 }}>{p.id.slice(0, 8)}</TableCell>
-                    <TableCell align="center">{p.session.user.email}</TableCell>
-                    <TableCell align="center">{p.fixAttempts}</TableCell>
-                    <TableCell align="center">{formatDate(p.updatedAt)}</TableCell>
+                    <TableCell align="center" sx={{ fontFamily: 'monospace', fontSize: 12 }} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.id.slice(0, 8)}</TableCell>
+                    <TableCell align="center" onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.session.user.email}</TableCell>
+                    <TableCell align="center" onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.fixAttempts}</TableCell>
+                    <TableCell align="center" onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{formatDate(p.updatedAt)}</TableCell>
+                    <TableCell align="center">
+                      <Button
+                        size="small"
+                        variant="contained"
+                        startIcon={acting === p.id ? <CircularProgress size={14} color="inherit" /> : <BuildIcon fontSize="small" />}
+                        disabled={acting === p.id}
+                        onClick={() => openRepair(p)}
+                      >
+                        {t('admin.errorsTab.resolveCta')}
+                      </Button>
+                      <Tooltip title={t('admin.import.download')}>
+                        <IconButton size="small" color="primary" disabled={acting === p.id} onClick={() => downloadProject(p.id)}>
+                          <DownloadIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title={t('admin.import.upload')}>
+                        <IconButton size="small" color="secondary" disabled={acting === p.id} onClick={() => openImport(p)}>
+                          <UploadFileIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell colSpan={5} sx={{ p: 0, border: 0 }}>
+                    <TableCell colSpan={6} sx={{ p: 0, border: 0 }}>
                       <Collapse in={expanded === p.id}>
                         <Box sx={{ p: 2, bgcolor: 'background.default' }}>
                           {p.errorLog && (
@@ -954,7 +1263,7 @@ function ErrorsPanel() {
                 </Box>
               ))}
               {projects.length === 0 && (
-                <TableRow><TableCell colSpan={5} align="center">{t('admin.errorsTab.noErrors')}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} align="center">{t('admin.errorsTab.noErrors')}</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -966,6 +1275,22 @@ function ErrorsPanel() {
           />
         </TableContainer>
       )}
+      <Snackbar open={toast.open} autoHideDuration={5000} onClose={() => setToast((s) => ({ ...s, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert severity={toast.severity} onClose={() => setToast((s) => ({ ...s, open: false }))} sx={{ width: '100%' }}>{toast.message}</Alert>
+      </Snackbar>
+      <RepairPromptDialog
+        open={!!repairProject}
+        project={repairProject}
+        prompt={repairPrompt}
+        busy={!!repairProject && acting === repairProject.id}
+        onPromptChange={setRepairPrompt}
+        onClose={() => {
+          if (acting) return;
+          setRepairProject(null);
+          setRepairPrompt('');
+        }}
+        onSubmit={resolveProject}
+      />
     </Stack>
   );
 }

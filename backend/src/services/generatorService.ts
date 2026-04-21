@@ -54,12 +54,83 @@ const CODE_GEN_MAX_TOKENS = parseInt(process.env.CODE_GEN_MAX_TOKENS ?? '32768',
 const CODE_GEN_AI_TIMEOUT_MS = parseInt(process.env.CODE_GEN_AI_TIMEOUT_MS ?? '600000', 10);
 const CODE_GEN_REPAIR_INPUT_CHARS = parseInt(process.env.CODE_GEN_REPAIR_INPUT_CHARS ?? '120000', 10);
 const MAX_MSG = 12_000;
+const LOCAL_IMPORT_RE = /import\s+(?:[\s\S]*?\s+from\s+)?['"](\.{1,2}\/[^'"]+)['"]|import\(\s*['"](\.{1,2}\/[^'"]+)['"]\s*\)/g;
+const LOCAL_IMPORT_EXTENSIONS = ['', '.ts', '.tsx', '.js', '.jsx', '.json', '.css'];
 
 /** One in-flight generation or resume per session (prevents duplicate pipelines). */
 const generationPromises = new Map<string, Promise<void>>();
 
 export function isGenerationActive(sessionId: string): boolean {
   return generationPromises.has(sessionId);
+}
+
+function normalizeGeneratedPath(p: string): string {
+  return p.replace(/\\/g, '/').replace(/^\.?\//, '');
+}
+
+function dirname(p: string): string {
+  const clean = normalizeGeneratedPath(p);
+  const idx = clean.lastIndexOf('/');
+  return idx >= 0 ? clean.slice(0, idx) : '';
+}
+
+function resolveRelativeImport(fromFile: string, specifier: string): string {
+  const parts = `${dirname(fromFile)}/${specifier}`.split('/');
+  const out: string[] = [];
+  for (const part of parts) {
+    if (!part || part === '.') continue;
+    if (part === '..') out.pop();
+    else out.push(part);
+  }
+  return out.join('/');
+}
+
+function findMissingLocalImports(files: Record<string, string>): string[] {
+  const paths = new Set(Object.keys(files).map(normalizeGeneratedPath));
+  const missing = new Set<string>();
+  for (const [rawPath, content] of Object.entries(files)) {
+    const filePath = normalizeGeneratedPath(rawPath);
+    if (!/\.(tsx?|jsx?)$/.test(filePath)) continue;
+    LOCAL_IMPORT_RE.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = LOCAL_IMPORT_RE.exec(content)) !== null) {
+      const specifier = match[1] ?? match[2];
+      if (!specifier) continue;
+      const resolved = resolveRelativeImport(filePath, specifier);
+      const exists = LOCAL_IMPORT_EXTENSIONS.some((ext) => paths.has(`${resolved}${ext}`)) ||
+        LOCAL_IMPORT_EXTENSIONS.some((ext) => paths.has(`${resolved}/index${ext}`));
+      if (!exists) missing.add(`${filePath} -> ${specifier}`);
+    }
+  }
+  return [...missing];
+}
+
+async function repairMissingLocalImports(
+  ai: ReturnType<typeof getCodeClient>,
+  userContent: string,
+  files: Record<string, string>,
+): Promise<Record<string, string> | null> {
+  const missing = findMissingLocalImports(files);
+  if (missing.length === 0) return files;
+
+  const repairPrompt = `${userContent}
+
+---
+
+The generated JSON has missing local relative imports and must be repaired before build.
+Missing imports:
+${missing.map((m) => `- ${m}`).join('\n')}
+
+Return one complete JSON object {"files":{...}} for the entire app.
+Every ./ or ../ import must resolve to an emitted file path exactly, including Linux case.
+If many src/App.tsx component imports are missing, rewrite src/App.tsx to inline those components instead of importing absent files.`;
+
+  const rawRepair = await ai.complete([{ role: 'user', content: repairPrompt }], CODE_GEN_SYSTEM, {
+    maxTokens: CODE_GEN_MAX_TOKENS,
+  });
+  const repaired = extractFilesFromCodegenResponse(rawRepair);
+  if (!repaired) return null;
+  return findMissingLocalImports(repaired).length === 0 ? repaired : null;
 }
 
 /** Install, build, run — shared by full generation (after codegen) and resume-from-disk. */
@@ -430,6 +501,21 @@ async function runGenerationPipelineBody(sessionId: string, paid: boolean): Prom
     });
     return;
   }
+
+  const importRepairedFiles = await repairMissingLocalImports(ai, userContent, files);
+  if (!importRepairedFiles) {
+    await publishEvent(sessionId, {
+      step: 1,
+      label: GEN_STEP_LABELS[1],
+      status: 'error',
+      detail: 'Generated source referenced local files that were not included in the output.',
+    });
+    await failGeneration(sessionId, genUserMsgBuildStopped('Generated source referenced missing local component files. Please retry generation.'), {
+      sseMessage: GEN_SSE_CODEGEN_FAIL,
+    });
+    return;
+  }
+  files = importRepairedFiles;
 
   await publishEvent(sessionId, { step: 1, label: GEN_STEP_LABELS[1], status: 'done' });
   await publishEvent(sessionId, { type: 'user_progress', message: GEN_WRAP_UP_STEP });

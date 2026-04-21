@@ -6,14 +6,27 @@ import { exec } from 'child_process';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
-import { stopProject, buildProject, runProject, stopPersistentHosting } from '../services/appRunner';
+import { stopProject, installDeps, buildProject, runProject, stopPersistentHosting, type RunnerResult } from '../services/appRunner';
 import { AppError } from '../middleware/errorHandler';
 import { grantTokens } from '../services/tokenAccountingService';
+import { autoFix } from '../services/fixerService';
+import { writeProjectFiles } from '../lib/fileWriter';
+import { getCodeClient } from '../services/aiClient';
+import { extractFilesFromCodegenResponse } from '../lib/extractCodegenJson';
+import { FIX_SYSTEM } from '../lib/prompts';
+import { streamProjectZip } from '../lib/zipBuilder';
+import { projectPath } from '../lib/fileWriter';
+import { clearSessionEvents, publishEvent } from '../services/eventBus';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ADMIN_REPAIR_MAX_TOKENS = parseInt(process.env.ADMIN_REPAIR_MAX_TOKENS ?? '8192', 10);
+const ADMIN_REPAIR_FILE_CONTENT_MAX = 8000;
+const ADMIN_REPAIR_LOG_MAX = 12000;
+const ADMIN_IMPORT_MAX_FILES = 500;
+const ADMIN_IMPORT_MAX_TOTAL_CHARS = 5_000_000;
 
 // ─── Overview stats ─────────────────────────────────────────────────────────
 
@@ -283,6 +296,8 @@ router.get('/projects', async (req: Request, res: Response, next: NextFunction) 
           hosted: true,
           customDomain: true,
           fixAttempts: true,
+          errorLog: true,
+          buildLog: true,
           paidIterationCredits: true,
           runPort: true,
           createdAt: true,
@@ -314,10 +329,172 @@ async function loadAdminProject(projectId: string) {
   if (!UUID_RE.test(projectId)) throw new AppError(400, 'Invalid project id');
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    select: { id: true, status: true, hosted: true, sessionId: true },
+    select: { id: true, status: true, hosted: true, sessionId: true, files: true, buildEnv: true },
   });
   if (!project) throw new AppError(404, 'Project not found');
   return project;
+}
+
+function normalizeProjectFiles(files: unknown): Record<string, string> {
+  if (!files || typeof files !== 'object' || Array.isArray(files)) return {};
+  return Object.fromEntries(
+    Object.entries(files as Record<string, unknown>).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+  );
+}
+
+function normalizeImportPath(input: string): string | null {
+  const rel = input.replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!rel || rel.includes('\0')) return null;
+  const parts = rel.split('/').filter(Boolean);
+  if (parts.some((p) => p === '..')) return null;
+  const first = parts[0]?.toLowerCase();
+  if (!first || first === 'node_modules' || first === 'dist' || first === 'dist-hosted' || first === '.git') {
+    return null;
+  }
+  return parts.join('/');
+}
+
+async function cleanProjectForSourceImport(projectId: string): Promise<void> {
+  const dir = projectPath(projectId);
+  await fs.mkdir(dir, { recursive: true });
+  const keep = new Set(['node_modules', 'uploads']);
+  const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+  await Promise.all(entries.map(async (entry) => {
+    if (keep.has(entry.name)) return;
+    await fs.rm(path.join(dir, entry.name), { recursive: true, force: true });
+  }));
+}
+
+function parseAdminImportFiles(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new AppError(400, 'files must be an object of path to text content');
+  }
+  const out: Record<string, string> = {};
+  let totalChars = 0;
+  for (const [rawPath, rawContent] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof rawContent !== 'string') continue;
+    const rel = normalizeImportPath(rawPath);
+    if (!rel) continue;
+    totalChars += rawContent.length;
+    if (totalChars > ADMIN_IMPORT_MAX_TOTAL_CHARS) {
+      throw new AppError(413, 'Uploaded source files are too large');
+    }
+    out[rel] = rawContent;
+  }
+  if (Object.keys(out).length === 0) throw new AppError(400, 'No valid source files were uploaded');
+  if (Object.keys(out).length > ADMIN_IMPORT_MAX_FILES) throw new AppError(413, 'Too many files uploaded');
+  return out;
+}
+
+async function writeBuildEnvFile(projectId: string, buildEnv: unknown): Promise<void> {
+  if (!buildEnv || typeof buildEnv !== 'object' || Array.isArray(buildEnv)) return;
+  const envLines = Object.entries(buildEnv as Record<string, unknown>)
+    .filter(([k, v]) => k.startsWith('VITE_') && typeof v === 'string')
+    .map(([k, v]) => `${k}=${v}`);
+  if (envLines.length > 0) {
+    await writeProjectFiles(projectId, { '.env.production': envLines.join('\n') });
+  }
+}
+
+async function persistResolveFailure(projectId: string, result: RunnerResult, buildLog?: string | null): Promise<void> {
+  await prisma.project.update({
+    where: { id: projectId },
+    data: {
+      status: 'error',
+      runPort: null,
+      ...(buildLog !== undefined ? { buildLog: buildLog?.slice(-50_000) ?? null } : {}),
+      errorLog: result.log?.slice(-50_000) ?? null,
+    },
+  });
+}
+
+function truncateForRepair(value: string | null | undefined, max: number): string {
+  if (!value) return '';
+  return value.length > max ? `${value.slice(-max)}\n... truncated to latest ${max} chars` : value;
+}
+
+function buildAdminRepairPrompt(params: {
+  operatorPrompt: string;
+  errorLog: string | null;
+  buildLog: string | null;
+  files: Record<string, string>;
+}): string {
+  const fileList = Object.entries(params.files)
+    .map(([p, content]) => {
+      const body = content.length > ADMIN_REPAIR_FILE_CONTENT_MAX
+        ? `${content.slice(0, ADMIN_REPAIR_FILE_CONTENT_MAX)}\n// ... truncated`
+        : content;
+      return `// ${p}\n${body}`;
+    })
+    .join('\n\n---\n\n');
+
+  return `Admin repair request:
+${params.operatorPrompt}
+
+Latest stored error log:
+\`\`\`
+${truncateForRepair(params.errorLog, ADMIN_REPAIR_LOG_MAX)}
+\`\`\`
+
+Latest stored build log:
+\`\`\`
+${truncateForRepair(params.buildLog, ADMIN_REPAIR_LOG_MAX)}
+\`\`\`
+
+Current source files:
+
+${fileList}
+
+Return ONLY a single JSON object shaped like {"files":{"path":"complete file contents"}}.
+Return complete replacement files, not diffs.
+Fix only what is needed for the admin repair request and logs.
+For local relative import errors, either create the exact missing file with Linux-case-correct path or update the importing file to remove/fix the import.
+Preserve any APPMAKER_LOGO_SLOT_START/END and APPMAKER_HERO_BG_START/END markers that already exist; do not remove or rename them.`;
+}
+
+async function applyAdminPromptRepair(projectId: string, files: Record<string, string>, operatorPrompt: string): Promise<Record<string, string>> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { errorLog: true, buildLog: true },
+  });
+  const ai = getCodeClient();
+  const raw = await ai.complete(
+    [{
+      role: 'user',
+      content: buildAdminRepairPrompt({
+        operatorPrompt,
+        errorLog: project?.errorLog ?? null,
+        buildLog: project?.buildLog ?? null,
+        files,
+      }),
+    }],
+    FIX_SYSTEM,
+    { maxTokens: ADMIN_REPAIR_MAX_TOKENS },
+  );
+
+  const fixedFiles = extractFilesFromCodegenResponse(raw);
+  if (!fixedFiles || Object.keys(fixedFiles).length === 0) {
+    throw new AppError(500, 'AI repair did not return any valid files');
+  }
+
+  const merged = { ...files, ...fixedFiles };
+  await writeProjectFiles(projectId, fixedFiles);
+  await prisma.project.update({
+    where: { id: projectId },
+    data: { files: merged },
+  });
+  return merged;
+}
+
+async function markSessionRunningFromAdmin(sessionId: string, projectId: string, port: number | null | undefined): Promise<void> {
+  await prisma.session.update({ where: { id: sessionId }, data: { status: 'running' } }).catch(() => {});
+  await clearSessionEvents(sessionId).catch(() => {});
+  await publishEvent(sessionId, {
+    type: 'done',
+    projectId,
+    port: typeof port === 'number' ? port : null,
+    source: 'admin_manual_repair',
+  }).catch(() => {});
 }
 
 router.post('/projects/:id/stop', async (req, res, next) => {
@@ -357,6 +534,163 @@ router.post('/projects/:id/restart', async (req, res, next) => {
       },
     });
     res.json({ ok: run.success, port: run.port ?? null });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/projects/:id/resolve', async (req, res, next) => {
+  try {
+    const project = await loadAdminProject(String(req.params.id));
+    const operatorPrompt = typeof req.body?.prompt === 'string' ? req.body.prompt.trim() : '';
+    let files = normalizeProjectFiles(project.files);
+    if (Object.keys(files).length === 0) {
+      throw new AppError(400, 'Project has no saved source files to repair');
+    }
+    if (operatorPrompt.length > 20_000) {
+      throw new AppError(400, 'Repair prompt is too long');
+    }
+
+    await stopProject(project.id);
+    await prisma.project.update({
+      where: { id: project.id },
+      data: { status: 'building', runPort: null },
+    });
+
+    await writeProjectFiles(project.id, files);
+    await writeBuildEnvFile(project.id, project.buildEnv);
+    if (operatorPrompt) {
+      files = await applyAdminPromptRepair(project.id, files, operatorPrompt);
+    }
+
+    const install = await installDeps(project.id);
+    if (!install.success) {
+      await persistResolveFailure(project.id, install);
+      throw new AppError(500, 'Dependency install failed during repair');
+    }
+
+    let build = await buildProject(project.id);
+    if (!build.success && !operatorPrompt) {
+      build = await autoFix({
+        projectId: project.id,
+        files,
+        failedStep: 'build',
+        errorLog: build.log,
+        onAttempt: (attempt, error) => {
+          console.log(`[admin-resolve] project=${project.id} build autofix attempt=${attempt}: ${error.slice(0, 300)}`);
+        },
+      });
+      if (!build.success) {
+        await persistResolveFailure(project.id, build);
+        throw new AppError(500, 'Autofix could not resolve the build error');
+      }
+      const repaired = await prisma.project.findUnique({
+        where: { id: project.id },
+        select: { files: true },
+      });
+      files = normalizeProjectFiles(repaired?.files);
+    }
+    if (!build.success) {
+      await persistResolveFailure(project.id, build);
+      throw new AppError(500, operatorPrompt ? 'Build failed after admin AI repair' : 'Autofix could not resolve the build error');
+    }
+
+    let run = await runProject(project.id);
+    if (!run.success && !operatorPrompt) {
+      run = await autoFix({
+        projectId: project.id,
+        files,
+        failedStep: 'run',
+        errorLog: run.log,
+        onAttempt: (attempt, error) => {
+          console.log(`[admin-resolve] project=${project.id} run autofix attempt=${attempt}: ${error.slice(0, 300)}`);
+        },
+      });
+      if (!run.success) {
+        await persistResolveFailure(project.id, run, build.log);
+        throw new AppError(500, 'Autofix could not resolve the runtime error');
+      }
+    }
+    if (!run.success) {
+      await persistResolveFailure(project.id, run, build.log);
+      throw new AppError(500, operatorPrompt ? 'Runtime failed after admin AI repair' : 'Autofix could not resolve the runtime error');
+    }
+
+    await prisma.project.update({
+      where: { id: project.id },
+      data: {
+        status: 'running',
+        runPort: run.port ?? null,
+        buildLog: build.log?.slice(-50_000) ?? null,
+        errorLog: null,
+      },
+    });
+    await markSessionRunningFromAdmin(project.sessionId, project.id, run.port);
+
+    res.json({ ok: true, port: run.port ?? null });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/projects/:id/download', async (req, res, next) => {
+  try {
+    const project = await loadAdminProject(String(req.params.id));
+    streamProjectZip(project.id, res);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/projects/:id/import-files', async (req, res, next) => {
+  try {
+    const project = await loadAdminProject(String(req.params.id));
+    const files = parseAdminImportFiles(req.body?.files);
+
+    await stopProject(project.id);
+    await prisma.project.update({
+      where: { id: project.id },
+      data: { status: 'building', runPort: null, errorLog: null },
+    });
+
+    await cleanProjectForSourceImport(project.id);
+    await writeProjectFiles(project.id, files);
+    await writeBuildEnvFile(project.id, project.buildEnv);
+    await prisma.project.update({
+      where: { id: project.id },
+      data: { files, fixAttempts: 0 },
+    });
+
+    const install = await installDeps(project.id);
+    if (!install.success) {
+      await persistResolveFailure(project.id, install);
+      throw new AppError(500, 'Dependency install failed after source import');
+    }
+
+    const build = await buildProject(project.id);
+    if (!build.success) {
+      await persistResolveFailure(project.id, build);
+      throw new AppError(500, 'Build failed after source import');
+    }
+
+    const run = await runProject(project.id);
+    if (!run.success) {
+      await persistResolveFailure(project.id, run, build.log);
+      throw new AppError(500, 'Runtime failed after source import');
+    }
+
+    await prisma.project.update({
+      where: { id: project.id },
+      data: {
+        status: 'running',
+        runPort: run.port ?? null,
+        buildLog: build.log?.slice(-50_000) ?? null,
+        errorLog: null,
+      },
+    });
+    await markSessionRunningFromAdmin(project.sessionId, project.id, run.port);
+
+    res.json({ ok: true, port: run.port ?? null, fileCount: Object.keys(files).length });
   } catch (err) {
     next(err);
   }

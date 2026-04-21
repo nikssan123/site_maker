@@ -11,6 +11,10 @@ const FIX_MAX_OUTPUT_TOKENS_RUN = parseInt(process.env.FIX_MAX_OUTPUT_TOKENS_RUN
 const FIX_ERROR_LOG_MAX = 3000;
 const FIX_FILE_CONTENT_MAX = 6000;
 
+function isImportResolutionError(log: string): boolean {
+  return /failed to resolve import|could not resolve|module not found/i.test(log);
+}
+
 export interface FixContext {
   projectId: string;
   files: Record<string, string>;
@@ -95,10 +99,10 @@ export async function autoFix(ctx: FixContext): Promise<RunnerResult> {
     // (the package may be listed in package.json but not installed due to stale lockfile)
     const needsReinstall =
       !!fixedFiles['package.json'] ||
-      (ctx.failedStep === 'build' && /failed to resolve import/i.test(ctx.errorLog));
+      (ctx.failedStep === 'build' && isImportResolutionError(ctx.errorLog));
 
     if (needsReinstall) {
-      console.log(`[autofix] project=${ctx.projectId} attempt=${attempt} — re-installing deps (package.json changed: ${!!fixedFiles['package.json']}, resolve error: ${/failed to resolve import/i.test(ctx.errorLog)})`);
+      console.log(`[autofix] project=${ctx.projectId} attempt=${attempt} — re-installing deps (package.json changed: ${!!fixedFiles['package.json']}, resolve error: ${isImportResolutionError(ctx.errorLog)})`);
       const installResult = await installDeps(ctx.projectId);
       if (!installResult.success) {
         ctx.errorLog = installResult.log;

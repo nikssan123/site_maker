@@ -49,10 +49,11 @@ function applySessionFromApi(session: any) {
     proj?.status === 'running' &&
     typeof proj.runPort === 'number' &&
     proj.runPort > 0;
+  const isRunningProject = proj?.status === 'running';
 
-  if (hasLivePreview) {
+  if (hasLivePreview || isRunningProject) {
     projectId = proj!.id;
-    runPort = proj!.runPort!;
+    runPort = typeof proj!.runPort === 'number' ? proj!.runPort! : null;
     phase = 'running';
   } else if (session.status === 'error' || proj?.status === 'error') {
     projectId = proj?.id ?? null;
@@ -196,6 +197,7 @@ export default function ChatPage() {
           st.setPhase('running');
           navigate(`/preview/${pid}`);
         } else {
+          st.setPhase('running');
           const sid = st.sessionId ?? sessionId;
           if (sid) api.get<any>(`/sessions/${sid}`).then(applySessionFromApi).catch(() => {});
         }

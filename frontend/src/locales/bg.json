@@ -860,10 +860,12 @@
       "noProjects": "Няма намерени проекти",
       "actionStop": "Спри",
       "actionRestart": "Рестартирай",
+      "actionResolve": "Опитай поправка",
       "actionClearError": "Изчисти грешка",
       "actionDelete": "Изтрий",
       "confirmStop": "Да спрем ли това приложение? То няма повече да обслужва трафик за preview.",
       "confirmRestart": "Да прекомпилираме и рестартираме проекта? Всяка активна инстанция ще бъде спряна първо.",
+      "confirmResolve": "Да опитаме автоматично да поправим build/runtime грешката? Това може да промени генерираните файлове.",
       "confirmClearError": "Да изчистим грешката и да нулираме опитите за поправка? Файловете не се променят.",
       "confirmDelete": "Да изтрием окончателно този проект и данните му? Действието е необратимо.",
       "actionSuccess": "Действието е изпълнено.",
@@ -922,9 +924,27 @@
       "colOwner": "Собственик",
       "colFixAttempts": "Опити за поправка",
       "colUpdated": "Обновен",
+      "colActions": "Действия",
       "errorLog": "Лог на грешка:",
       "buildLog": "Лог на изграждане:",
+      "resolveCta": "Поправи",
+      "confirmResolve": "Да опитаме автоматично да поправим build/runtime грешката? Това може да промени генерираните файлове.",
+      "resolveSuccess": "Поправката е готова. Проектът работи отново.",
       "noErrors": "Няма грешки"
+    },
+    "repairModal": {
+      "title": "AI поправка",
+      "body": "Постави точната грешка или опиши поправката. AI ще редактира генерираните файлове, след което системата ще инсталира, rebuild-не и рестартира приложението.",
+      "promptLabel": "Инструкции за поправка",
+      "promptPlaceholder": "Пример: Fix the missing ./components/Navbar import from src/App.tsx. Either create src/components/Navbar.tsx or inline the navbar so the Vite build passes.",
+      "submit": "Поправи и rebuild-ни",
+      "running": "Поправяне..."
+    },
+    "import": {
+      "download": "Изтегли source ZIP",
+      "upload": "Качи поправена source папка",
+      "success": "Импортирани са {{n}} файла, приложението е rebuild-нато и рестартирано.",
+      "noFiles": "В избраната папка няма намерени текстови source файлове."
     },
     "system": {
       "diskUsage": "Заето дисково пространство",
