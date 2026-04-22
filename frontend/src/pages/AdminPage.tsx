@@ -78,6 +78,7 @@ interface UserRow {
 
 interface ProjectRow {
   id: string;
+  kind?: 'project' | 'session';
   status: string;
   paid: boolean;
   hosted: boolean;
@@ -116,12 +117,30 @@ interface EmailHealth {
 
 interface ErrorProject {
   id: string;
+  kind?: 'project' | 'session';
   errorLog: string | null;
   buildLog: string | null;
   fixAttempts: number;
   createdAt: string;
   updatedAt: string;
   session: { id: string; user: { email: string } };
+}
+
+interface GenerationRow {
+  id: string;
+  status: string;
+  active: boolean;
+  createdAt: string;
+  user: { email: string };
+  project: { id: string; status: string; runPort: number | null; errorLog: string | null; buildLog: string | null } | null;
+  latestEvent: { id: number; payload: unknown; createdAt: string } | null;
+}
+
+interface GenerationLogResponse {
+  sessionId: string;
+  active: boolean;
+  project: { id: string; buildLog: string | null; errorLog: string | null } | null;
+  events: Array<{ id: number; payload: unknown; createdAt: string }>;
 }
 
 interface PlanRow {
@@ -608,6 +627,20 @@ function ProjectsPanel() {
     }
   };
 
+  const stopSessionGeneration = async (sessionId: string) => {
+    if (!window.confirm(t('admin.generations.confirmStop'))) return;
+    setActing(sessionId);
+    try {
+      await api.post(`/admin/generations/${sessionId}/stop`, {});
+      setToast({ open: true, severity: 'success', message: t('admin.generations.stopSuccess') });
+      load(page, rowsPerPage, status);
+    } catch (e: any) {
+      setToast({ open: true, severity: 'error', message: t('admin.projects.actionFailed', { message: e?.message ?? '?' }) });
+    } finally {
+      setActing(null);
+    }
+  };
+
   const openRepair = (project: ProjectRow) => {
     setRepairProject(project);
     setRepairPrompt(project.errorLog || project.buildLog || '');
@@ -713,7 +746,14 @@ function ProjectsPanel() {
                     <TableCell align="center" sx={{ width: 30 }} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>
                       {expanded === p.id ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                     </TableCell>
-                    <TableCell align="center" sx={{ fontFamily: 'monospace', fontSize: 12 }} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.id.slice(0, 8)}</TableCell>
+                    <TableCell align="center" sx={{ fontFamily: 'monospace', fontSize: 12 }} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>
+                      {p.id.slice(0, 8)}
+                      {p.kind === 'session' && (
+                        <Typography variant="caption" color="warning.main" display="block" sx={{ fontFamily: 'inherit' }}>
+                          {t('admin.errorsTab.sessionOnly')}
+                        </Typography>
+                      )}
+                    </TableCell>
                     <TableCell align="center" onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.session.user.email}</TableCell>
                     <TableCell align="center" onClick={() => setExpanded(expanded === p.id ? null : p.id)}>
                       <Chip label={t(`admin.statusLabels.${p.status}`, { defaultValue: p.status })} size="small" color={STATUS_COLORS[p.status] ?? 'default'} />
@@ -725,45 +765,55 @@ function ProjectsPanel() {
                     <TableCell align="center" onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{formatDate(p.createdAt)}</TableCell>
                     <TableCell align="center">
                       <Stack direction="row" gap={0.5} justifyContent="center" flexWrap="wrap">
-                        {(p.status === 'running' || p.runPort) && (
+                        {p.kind === 'session' ? (
+                          <Tooltip title={t('admin.generations.stop')}>
+                            <IconButton size="small" color="warning" disabled={acting === p.id || p.status !== 'generating'} onClick={() => stopSessionGeneration(p.id)}>
+                              <StopIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        ) : (p.status === 'running' || p.runPort) && (
                           <Tooltip title={t('admin.projects.actionStop')}>
                             <IconButton size="small" color="warning" disabled={acting === p.id} onClick={() => doAction(p.id, 'stop', 'confirmStop')}>
                               <StopIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
                         )}
-                        <Tooltip title={t('admin.projects.actionRestart')}>
-                          <IconButton size="small" color="primary" disabled={acting === p.id} onClick={() => doAction(p.id, 'restart', 'confirmRestart')}>
-                            <RestartAltIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title={t('admin.projects.actionResolve')}>
-                          <IconButton size="small" color="success" disabled={acting === p.id} onClick={() => openRepair(p)}>
-                            <BuildIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title={t('admin.import.download')}>
-                          <IconButton size="small" color="primary" disabled={acting === p.id} onClick={() => downloadProject(p.id)}>
-                            <DownloadIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title={t('admin.import.upload')}>
-                          <IconButton size="small" color="secondary" disabled={acting === p.id} onClick={() => openImport(p)}>
-                            <UploadFileIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        {p.status === 'error' && (
-                          <Tooltip title={t('admin.projects.actionClearError')}>
-                            <IconButton size="small" color="info" disabled={acting === p.id} onClick={() => doAction(p.id, 'clear-error', 'confirmClearError')}>
-                              <CleaningServicesIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
+                        {p.kind !== 'session' && (
+                          <>
+                            <Tooltip title={t('admin.projects.actionRestart')}>
+                              <IconButton size="small" color="primary" disabled={acting === p.id} onClick={() => doAction(p.id, 'restart', 'confirmRestart')}>
+                                <RestartAltIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title={t('admin.projects.actionResolve')}>
+                              <IconButton size="small" color="success" disabled={acting === p.id} onClick={() => openRepair(p)}>
+                                <BuildIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title={t('admin.import.download')}>
+                              <IconButton size="small" color="primary" disabled={acting === p.id} onClick={() => downloadProject(p.id)}>
+                                <DownloadIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title={t('admin.import.upload')}>
+                              <IconButton size="small" color="secondary" disabled={acting === p.id} onClick={() => openImport(p)}>
+                                <UploadFileIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            {p.status === 'error' && (
+                              <Tooltip title={t('admin.projects.actionClearError')}>
+                                <IconButton size="small" color="info" disabled={acting === p.id} onClick={() => doAction(p.id, 'clear-error', 'confirmClearError')}>
+                                  <CleaningServicesIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                            <Tooltip title={t('admin.projects.actionDelete')}>
+                              <IconButton size="small" color="error" disabled={acting === p.id} onClick={() => doAction(p.id, 'delete', 'confirmDelete')}>
+                                <DeleteForeverIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </>
                         )}
-                        <Tooltip title={t('admin.projects.actionDelete')}>
-                          <IconButton size="small" color="error" disabled={acting === p.id} onClick={() => doAction(p.id, 'delete', 'confirmDelete')}>
-                            <DeleteForeverIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
                         {acting === p.id && <CircularProgress size={16} />}
                       </Stack>
                     </TableCell>
@@ -774,6 +824,11 @@ function ProjectsPanel() {
                         <Box sx={{ p: 2, bgcolor: 'background.default' }}>
                           <Typography variant="caption" fontWeight={700}>{t('admin.projects.sessionId')}</Typography>
                           <Typography variant="body2" fontFamily="monospace" mb={1}>{p.session.id}</Typography>
+                          {p.kind === 'session' && (
+                            <Alert severity="warning" sx={{ mb: 1 }}>
+                              {t('admin.projects.sessionOnlyHint')}
+                            </Alert>
+                          )}
                           {p.runPort && <><Typography variant="caption" fontWeight={700}>{t('admin.projects.port')}</Typography><Typography variant="body2" mb={1}>{p.runPort}</Typography></>}
                           <Typography variant="caption" fontWeight={700}>{t('admin.projects.updated')}</Typography>
                           <Typography variant="body2">{formatDate(p.updatedAt)}</Typography>
@@ -934,6 +989,137 @@ function EmailHealthPanel() {
           </ResponsiveContainer>
         </Paper>
       )}
+    </Stack>
+  );
+}
+
+function GenerationsPanel() {
+  const { t } = useTranslation();
+  const [sessions, setSessions] = useState<GenerationRow[]>([]);
+  const [logs, setLogs] = useState<Record<string, GenerationLogResponse>>({});
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [acting, setActing] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ open: boolean; severity: 'success' | 'error'; message: string }>({ open: false, severity: 'success', message: '' });
+
+  const load = (p: number, rpp: number) => {
+    setLoading(true);
+    api.get<{ sessions: GenerationRow[]; total: number }>(`/admin/generations?page=${p + 1}&limit=${rpp}`)
+      .then((d) => { setSessions(d.sessions); setTotal(d.total); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { load(page, rowsPerPage); }, [page, rowsPerPage]);
+
+  const loadLogs = async (sessionId: string) => {
+    const data = await api.get<GenerationLogResponse>(`/admin/generations/${sessionId}/logs`);
+    setLogs((prev) => ({ ...prev, [sessionId]: data }));
+  };
+  const toggleExpanded = async (sessionId: string) => {
+    const next = expanded === sessionId ? null : sessionId;
+    setExpanded(next);
+    if (next && !logs[next]) await loadLogs(next).catch(() => {});
+  };
+  const stopGeneration = async (sessionId: string) => {
+    setActing(sessionId);
+    try {
+      await api.post(`/admin/generations/${sessionId}/stop`, {});
+      setToast({ open: true, severity: 'success', message: t('admin.generations.stopSuccess') });
+      await loadLogs(sessionId).catch(() => {});
+      load(page, rowsPerPage);
+    } catch (e: any) {
+      setToast({ open: true, severity: 'error', message: t('admin.projects.actionFailed', { message: e?.message ?? '?' }) });
+    } finally {
+      setActing(null);
+    }
+  };
+  const eventTitle = (payload: unknown): string => {
+    const p = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
+    if (p.type === 'codegen_prompt') return t('admin.generations.codegenPrompt');
+    if (p.type === 'runner_log') return t('admin.generations.runnerLog', { step: String(p.step ?? '') });
+    return String(p.type ?? p.label ?? 'event');
+  };
+  const renderPayload = (payload: unknown): string => {
+    const p = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
+    if (p.type === 'codegen_prompt') return String(p.prompt ?? '');
+    if (p.type === 'runner_log') return `[${String(p.step ?? 'runner')}] ${p.status ?? (p.success ? 'success' : 'failed')}\n${String(p.log ?? '')}`;
+    return JSON.stringify(payload, null, 2);
+  };
+
+  return (
+    <Stack spacing={2}>
+      <Typography variant="body2" color="text.secondary">{t('admin.generations.countInfo', { n: total })}</Typography>
+      {loading ? <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress size={28} /></Box> : (
+        <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell align="center" sx={{ ...TH_SX, width: 30 }} />
+                <TableCell align="center" sx={TH_SX}>{t('admin.generations.colSession')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.generations.colOwner')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.generations.colStatus')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.generations.colProject')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.generations.colCreated')}</TableCell>
+                <TableCell align="center" sx={TH_SX}>{t('admin.generations.colActions')}</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {sessions.map((s) => (
+                <Box component="tbody" key={s.id}>
+                  <TableRow hover>
+                    <TableCell align="center" onClick={() => toggleExpanded(s.id)}>
+                      {expanded === s.id ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                    </TableCell>
+                    <TableCell align="center" sx={{ fontFamily: 'monospace', fontSize: 12 }} onClick={() => toggleExpanded(s.id)}>{s.id.slice(0, 8)}</TableCell>
+                    <TableCell align="center" onClick={() => toggleExpanded(s.id)}>{s.user.email}</TableCell>
+                    <TableCell align="center" onClick={() => toggleExpanded(s.id)}>
+                      <Stack direction="row" gap={0.75} justifyContent="center">
+                        <Chip size="small" label={s.status} color={s.status === 'error' ? 'error' : s.active ? 'warning' : 'default'} />
+                        {s.active && <Chip size="small" label={t('admin.generations.active')} color="success" variant="outlined" />}
+                      </Stack>
+                    </TableCell>
+                    <TableCell align="center" sx={{ fontFamily: 'monospace', fontSize: 12 }} onClick={() => toggleExpanded(s.id)}>{s.project?.id?.slice(0, 8) ?? '-'}</TableCell>
+                    <TableCell align="center" onClick={() => toggleExpanded(s.id)}>{formatDate(s.createdAt)}</TableCell>
+                    <TableCell align="center">
+                      <Button size="small" color="error" variant="outlined" startIcon={acting === s.id ? <CircularProgress size={14} color="inherit" /> : <StopIcon fontSize="small" />} disabled={acting === s.id || (!s.active && s.status !== 'generating')} onClick={() => stopGeneration(s.id)}>
+                        {t('admin.generations.stop')}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell colSpan={7} sx={{ p: 0, border: 0 }}>
+                      <Collapse in={expanded === s.id}>
+                        <Box sx={{ p: 2, bgcolor: 'background.default' }}>
+                          {!logs[s.id] ? <CircularProgress size={18} /> : (
+                            <Stack spacing={1.5}>
+                              {logs[s.id].events.map((ev) => (
+                                <Box key={ev.id}>
+                                  <Typography variant="caption" fontWeight={800}>{formatDate(ev.createdAt)} - {eventTitle(ev.payload)}</Typography>
+                                  <Box component="pre" sx={{ mt: 0.5, p: 1.5, borderRadius: 1, bgcolor: 'rgba(0,0,0,0.3)', fontSize: 11, fontFamily: 'monospace', overflow: 'auto', maxHeight: 260, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{renderPayload(ev.payload)}</Box>
+                                </Box>
+                              ))}
+                              {logs[s.id].project?.buildLog && <Box><Typography variant="caption" fontWeight={800}>{t('admin.errorsTab.buildLog')}</Typography><Box component="pre" sx={{ mt: 0.5, p: 1.5, borderRadius: 1, bgcolor: 'rgba(0,0,0,0.3)', fontSize: 11, fontFamily: 'monospace', overflow: 'auto', maxHeight: 260, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{logs[s.id].project?.buildLog}</Box></Box>}
+                              {logs[s.id].project?.errorLog && <Box><Typography variant="caption" fontWeight={800} color="error.main">{t('admin.errorsTab.errorLog')}</Typography><Box component="pre" sx={{ mt: 0.5, p: 1.5, borderRadius: 1, bgcolor: 'rgba(0,0,0,0.3)', fontSize: 11, fontFamily: 'monospace', overflow: 'auto', maxHeight: 260, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{logs[s.id].project?.errorLog}</Box></Box>}
+                            </Stack>
+                          )}
+                        </Box>
+                      </Collapse>
+                    </TableCell>
+                  </TableRow>
+                </Box>
+              ))}
+              {sessions.length === 0 && <TableRow><TableCell colSpan={7} align="center">{t('admin.generations.noRows')}</TableCell></TableRow>}
+            </TableBody>
+          </Table>
+          <TablePagination component="div" count={total} page={page} rowsPerPage={rowsPerPage} onPageChange={(_, p) => setPage(p)} onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }} rowsPerPageOptions={ROWS_PER_PAGE_OPTIONS} />
+        </TableContainer>
+      )}
+      <Snackbar open={toast.open} autoHideDuration={5000} onClose={() => setToast((s) => ({ ...s, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert severity={toast.severity} onClose={() => setToast((s) => ({ ...s, open: false }))} sx={{ width: '100%' }}>{toast.message}</Alert>
+      </Snackbar>
     </Stack>
   );
 }
@@ -1122,6 +1308,7 @@ function ErrorsPanel() {
   useEffect(() => { load(page, rowsPerPage); }, [page, rowsPerPage]);
 
   const openRepair = (project: ErrorProject) => {
+    if (project.kind === 'session') return;
     setRepairProject(project);
     setRepairPrompt(project.errorLog || project.buildLog || '');
   };
@@ -1153,6 +1340,7 @@ function ErrorsPanel() {
   };
 
   const openImport = (project: ErrorProject) => {
+    if (project.kind === 'session') return;
     setImportProject(project);
     importInputRef.current?.click();
   };
@@ -1210,7 +1398,14 @@ function ErrorsPanel() {
                     <TableCell align="center" sx={{ width: 30 }} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>
                       {expanded === p.id ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                     </TableCell>
-                    <TableCell align="center" sx={{ fontFamily: 'monospace', fontSize: 12 }} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.id.slice(0, 8)}</TableCell>
+                    <TableCell align="center" sx={{ fontFamily: 'monospace', fontSize: 12 }} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>
+                      {p.id.slice(0, 8)}
+                      {p.kind === 'session' && (
+                        <Typography variant="caption" color="warning.main" display="block" sx={{ fontFamily: 'inherit' }}>
+                          {t('admin.errorsTab.sessionOnly')}
+                        </Typography>
+                      )}
+                    </TableCell>
                     <TableCell align="center" onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.session.user.email}</TableCell>
                     <TableCell align="center" onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{p.fixAttempts}</TableCell>
                     <TableCell align="center" onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{formatDate(p.updatedAt)}</TableCell>
@@ -1219,18 +1414,18 @@ function ErrorsPanel() {
                         size="small"
                         variant="contained"
                         startIcon={acting === p.id ? <CircularProgress size={14} color="inherit" /> : <BuildIcon fontSize="small" />}
-                        disabled={acting === p.id}
+                        disabled={acting === p.id || p.kind === 'session'}
                         onClick={() => openRepair(p)}
                       >
                         {t('admin.errorsTab.resolveCta')}
                       </Button>
                       <Tooltip title={t('admin.import.download')}>
-                        <IconButton size="small" color="primary" disabled={acting === p.id} onClick={() => downloadProject(p.id)}>
+                        <IconButton size="small" color="primary" disabled={acting === p.id || p.kind === 'session'} onClick={() => downloadProject(p.id)}>
                           <DownloadIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                       <Tooltip title={t('admin.import.upload')}>
-                        <IconButton size="small" color="secondary" disabled={acting === p.id} onClick={() => openImport(p)}>
+                        <IconButton size="small" color="secondary" disabled={acting === p.id || p.kind === 'session'} onClick={() => openImport(p)}>
                           <UploadFileIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
@@ -1566,6 +1761,7 @@ export default function AdminPage() {
           <Tab label={t('admin.tabs.projects')} />
           <Tab label={t('admin.tabs.revenue')} />
           <Tab label={t('admin.tabs.email')} />
+          <Tab label={t('admin.tabs.generations')} />
           <Tab label={t('admin.tabs.plans')} />
           <Tab label={t('admin.tabs.errors')} />
           <Tab label={t('admin.tabs.support')} />
@@ -1579,10 +1775,11 @@ export default function AdminPage() {
         {tab === 2 && <ProjectsPanel />}
         {tab === 3 && <RevenuePanel />}
         {tab === 4 && <EmailHealthPanel />}
-        {tab === 5 && <PlansPanel />}
-        {tab === 6 && <ErrorsPanel />}
-        {tab === 7 && <SupportPanel />}
-        {tab === 8 && <SystemPanel />}
+        {tab === 5 && <GenerationsPanel />}
+        {tab === 6 && <PlansPanel />}
+        {tab === 7 && <ErrorsPanel />}
+        {tab === 8 && <SupportPanel />}
+        {tab === 9 && <SystemPanel />}
       </Box>
     </Box>
   );

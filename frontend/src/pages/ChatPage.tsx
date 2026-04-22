@@ -3,13 +3,14 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box, TextField, Stack, Typography, IconButton,
   Tooltip, CircularProgress, Chip, Button, LinearProgress,
-  Drawer, useMediaQuery, useTheme,
+  Drawer, useMediaQuery, useTheme, Alert,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import LogoutIcon from '@mui/icons-material/Logout';
 import SettingsIcon from '@mui/icons-material/Settings';
 import MenuIcon from '@mui/icons-material/Menu';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import Sidebar from '../components/Sidebar';
 import AppLogo from '../components/AppLogo';
 import BrandMark from '../components/BrandMark';
@@ -19,6 +20,7 @@ import MessageBubble from '../components/MessageBubble';
 import PlanSummary from '../components/PlanSummary';
 import GenerationStatus from '../components/GenerationStatus';
 import UsageBanner from '../components/UsageBanner';
+import SupportDialog from '../components/SupportDialog';
 
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
@@ -141,6 +143,7 @@ export default function ChatPage() {
   }>({});
   /** When a plan is present, hide chat until user explicitly clicks Edit. */
   const [chatUnlockedForEditing, setChatUnlockedForEditing] = useState(true);
+  const [supportOpen, setSupportOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const generationRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -148,6 +151,8 @@ export default function ChatPage() {
   const buildStartedInTabRef = useRef(false);
   /** Session ID last explicitly loaded from API in this component instance. */
   const loadedSessionRef = useRef<string | null>(null);
+  /** Avoid reopening the support form every time the user closes it on a failed session. */
+  const supportPromptShownForSessionRef = useRef<string | null>(null);
 
   const { logout, user, updateUser } = useAuthStore();
   const store = useProjectStore();
@@ -258,6 +263,12 @@ export default function ChatPage() {
     api.get<any>(`/sessions/${paramSessionId}`)
       .then((session) => {
         applySessionFromApi(session);
+        const failedGeneration = session.status === 'error' || session.project?.status === 'error';
+        const activeGeneration =
+          session.status === 'generating' ||
+          session.project?.status === 'generating' ||
+          session.project?.status === 'building';
+        const hasRunningProject = session.project?.status === 'running';
         const sessionHasGenerationState = isSessionGenerating(session);
         const preservePendingGenerationUi =
           shouldAutoStartGeneration &&
@@ -283,6 +294,16 @@ export default function ChatPage() {
           return;
         }
 
+        if (
+          shouldAutoStartGeneration &&
+          !failedGeneration &&
+          !activeGeneration &&
+          !hasRunningProject
+        ) {
+          startGeneration(paramSessionId);
+          return;
+        }
+
         if (session.plan) {
           setPlanVisible(!sessionHasGenerationState);
           setChatUnlockedForEditing(false);
@@ -294,11 +315,18 @@ export default function ChatPage() {
   }, [isSessionGenerating, paramSessionId, shouldAutoStartGeneration, t]);
 
   useEffect(() => {
-    if (shouldAutoStartGeneration && paramSessionId) {
-      store.setSessionId(paramSessionId);
-      startGeneration(paramSessionId);
+    if (store.phase === 'error' && paramSessionId) {
+      if (supportPromptShownForSessionRef.current !== paramSessionId) {
+        supportPromptShownForSessionRef.current = paramSessionId;
+        setSupportOpen(true);
+      }
+      return;
     }
-  }, [paramSessionId, shouldAutoStartGeneration]);
+
+    if (store.phase !== 'error') {
+      supportPromptShownForSessionRef.current = null;
+    }
+  }, [paramSessionId, store.phase]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -702,6 +730,36 @@ export default function ChatPage() {
           </div>
         )}
 
+        {store.phase === 'error' && (
+          <Alert
+            severity="error"
+            sx={{
+              borderRadius: 3,
+              border: '1px solid rgba(239,68,68,0.28)',
+              bgcolor: 'rgba(239,68,68,0.08)',
+              alignItems: 'flex-start',
+            }}
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                startIcon={<SupportAgentIcon fontSize="small" />}
+                onClick={() => setSupportOpen(true)}
+                sx={{ mt: 0.25, fontWeight: 700, whiteSpace: 'nowrap' }}
+              >
+                {t('chat.contactSupport')}
+              </Button>
+            }
+          >
+            <Typography variant="body2" fontWeight={700} color="text.primary">
+              {t('chat.generationFailedTitle')}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {t('chat.generationFailedBody')}
+            </Typography>
+          </Alert>
+        )}
+
         {store.phase === 'running' &&
           store.projectId &&
           store.runPort != null &&
@@ -783,6 +841,43 @@ export default function ChatPage() {
               {t('chat.openPreview')}
             </Button>
           </Box>
+        ) : store.phase === 'error' ? (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              px: 2.5,
+              py: 1.75,
+              borderRadius: 3,
+              border: '1px solid rgba(239,68,68,0.22)',
+              background: 'rgba(239,68,68,0.05)',
+            }}
+          >
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="body2" fontWeight={700} color="text.primary">
+                {t('chat.generationFailedTitle')}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {t('chat.generationFailedInputHint')}
+              </Typography>
+            </Box>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<SupportAgentIcon fontSize="small" />}
+              onClick={() => setSupportOpen(true)}
+              sx={{
+                flexShrink: 0,
+                background: 'linear-gradient(135deg, #ef4444, #f97316)',
+                fontSize: 12,
+                px: 2,
+                '&:hover': { background: 'linear-gradient(135deg, #dc2626, #ea580c)' },
+              }}
+            >
+              {t('chat.contactSupport')}
+            </Button>
+          </Box>
         ) : (
           !planBlockingChat ? (
           <>
@@ -859,6 +954,12 @@ export default function ChatPage() {
           ) : null
         )}
       </Box>
+
+      <SupportDialog
+        open={supportOpen}
+        onClose={() => setSupportOpen(false)}
+        presetSubject={t('chat.generationFailedSupportSubject', { sessionId: paramSessionId ?? store.sessionId ?? '' })}
+      />
 
       </Box>{/* end main column */}
     </Box>

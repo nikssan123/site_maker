@@ -18,6 +18,7 @@ import { streamProjectZip } from '../lib/zipBuilder';
 import { projectPath } from '../lib/fileWriter';
 import { clearSessionEvents, publishEvent } from '../services/eventBus';
 import { createProjectSnapshot, restoreProjectSnapshot } from '../services/projectSnapshotService';
+import { cancelGeneration, isGenerationActive } from '../services/generatorService';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -286,8 +287,9 @@ router.get('/projects', async (req: Request, res: Response, next: NextFunction) 
     const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
     const status = req.query.status as string | undefined;
     const where = status ? { status } : {};
+    const includeSessionOnly = !status || status === 'generating' || status === 'error';
 
-    const [projects, total] = await Promise.all([
+    const [projects, sessionOnly] = await Promise.all([
       prisma.project.findMany({
         where,
         select: {
@@ -312,13 +314,61 @@ router.get('/projects', async (req: Request, res: Response, next: NextFunction) 
           _count: { select: { iterationLogs: true } },
         },
         orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
       }),
-      prisma.project.count({ where }),
+      includeSessionOnly
+        ? prisma.session.findMany({
+            where: {
+              status: status ? status : { in: ['generating', 'error'] },
+              project: null,
+            },
+            select: {
+              id: true,
+              status: true,
+              generationPurchased: true,
+              createdAt: true,
+              user: { select: { email: true } },
+              messages: {
+                where: { role: 'assistant' },
+                select: { content: true, createdAt: true },
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+              },
+              generationEvents: {
+                orderBy: { id: 'desc' },
+                take: 1,
+                select: { createdAt: true },
+              },
+            },
+            orderBy: { createdAt: 'desc' },
+          })
+        : Promise.resolve([]),
     ]);
 
-    res.json({ projects, total, page, limit });
+    const sessionRows = sessionOnly.map((session) => ({
+      id: session.id,
+      kind: 'session' as const,
+      status: session.status,
+      paid: session.generationPurchased,
+      hosted: false,
+      customDomain: null,
+      fixAttempts: 0,
+      errorLog: session.status === 'error' ? (session.messages[0]?.content ?? 'Generation failed before project files were saved.') : null,
+      buildLog: null,
+      paidIterationCredits: 0,
+      runPort: null,
+      createdAt: session.createdAt,
+      updatedAt: session.generationEvents[0]?.createdAt ?? session.messages[0]?.createdAt ?? session.createdAt,
+      session: { id: session.id, user: session.user },
+      _count: { iterationLogs: 0 },
+    }));
+
+    const rows = [
+      ...projects.map((project) => ({ ...project, kind: 'project' as const })),
+      ...sessionRows,
+    ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const skip = (page - 1) * limit;
+    res.json({ projects: rows.slice(skip, skip + limit), total: rows.length, page, limit });
   } catch (err) {
     next(err);
   }
@@ -822,8 +872,9 @@ router.get('/errors', async (req: Request, res: Response, next: NextFunction) =>
   try {
     const page = Math.max(Number(req.query.page) || 1, 1);
     const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
+    const skip = (page - 1) * limit;
 
-    const [projects, total] = await Promise.all([
+    const [projectErrors, failedSessions, projectErrorTotal, failedSessionTotal] = await Promise.all([
       prisma.project.findMany({
         where: { status: 'error' },
         select: {
@@ -841,19 +892,135 @@ router.get('/errors', async (req: Request, res: Response, next: NextFunction) =>
           },
         },
         orderBy: { updatedAt: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
+      }),
+      prisma.session.findMany({
+        where: { status: 'error', project: null },
+        select: {
+          id: true,
+          createdAt: true,
+          user: { select: { email: true } },
+          messages: {
+            where: { role: 'assistant' },
+            select: { content: true, createdAt: true },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
+        },
+        orderBy: { createdAt: 'desc' },
       }),
       prisma.project.count({ where: { status: 'error' } }),
+      prisma.session.count({ where: { status: 'error', project: null } }),
     ]);
 
-    res.json({ projects, total, page, limit });
+    const rows = [
+      ...projectErrors.map((project) => ({ ...project, kind: 'project' as const })),
+      ...failedSessions.map((session) => ({
+        id: session.id,
+        kind: 'session' as const,
+        errorLog: session.messages[0]?.content ?? 'Generation failed before project files were saved.',
+        buildLog: null,
+        fixAttempts: 0,
+        createdAt: session.createdAt,
+        updatedAt: session.messages[0]?.createdAt ?? session.createdAt,
+        session: { id: session.id, user: session.user },
+      })),
+    ].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+    res.json({ projects: rows.slice(skip, skip + limit), total: projectErrorTotal + failedSessionTotal, page, limit });
   } catch (err) {
     next(err);
   }
 });
 
 // ─── Plans ──────────────────────────────────────────────────────────────────
+
+// ─── Generation logs ────────────────────────────────────────────────────────
+
+router.get('/generations', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
+    const where = {
+      OR: [
+        { status: { in: ['generating', 'error'] } },
+        { generationEvents: { some: {} } },
+      ],
+    };
+
+    const [sessions, total] = await Promise.all([
+      prisma.session.findMany({
+        where,
+        select: {
+          id: true,
+          status: true,
+          createdAt: true,
+          user: { select: { email: true } },
+          project: { select: { id: true, status: true, runPort: true, errorLog: true, buildLog: true } },
+          generationEvents: {
+            orderBy: { id: 'desc' },
+            take: 1,
+            select: { id: true, payload: true, createdAt: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.session.count({ where }),
+    ]);
+
+    res.json({
+      sessions: sessions.map((s) => ({
+        ...s,
+        active: isGenerationActive(s.id),
+        latestEvent: s.generationEvents[0] ?? null,
+        generationEvents: undefined,
+      })),
+      total,
+      page,
+      limit,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/generations/:sessionId/logs', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const sessionId = String(req.params.sessionId ?? '');
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { id: true, project: { select: { id: true, buildLog: true, errorLog: true } } },
+    });
+    if (!session) throw new AppError(404, 'Session not found');
+
+    const events = await prisma.generationEvent.findMany({
+      where: { sessionId },
+      orderBy: { id: 'asc' },
+      select: { id: true, payload: true, createdAt: true },
+    });
+
+    res.json({ sessionId, active: isGenerationActive(sessionId), project: session.project, events });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/generations/:sessionId/stop', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const sessionId = String(req.params.sessionId ?? '');
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { id: true, project: { select: { id: true } } },
+    });
+    if (!session) throw new AppError(404, 'Session not found');
+    await cancelGeneration(sessionId);
+    if (session.project?.id) await stopProject(session.project.id).catch(() => {});
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.get('/plans', async (req: Request, res: Response, next: NextFunction) => {
   try {

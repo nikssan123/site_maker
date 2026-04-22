@@ -59,9 +59,32 @@ const LOCAL_IMPORT_EXTENSIONS = ['', '.ts', '.tsx', '.js', '.jsx', '.json', '.cs
 
 /** One in-flight generation or resume per session (prevents duplicate pipelines). */
 const generationPromises = new Map<string, Promise<void>>();
+const cancelledGenerations = new Set<string>();
 
 export function isGenerationActive(sessionId: string): boolean {
   return generationPromises.has(sessionId);
+}
+
+function assertNotCancelled(sessionId: string): void {
+  if (cancelledGenerations.has(sessionId)) {
+    throw new AppError(409, 'Generation stopped by admin', 'generation_cancelled');
+  }
+}
+
+export async function cancelGeneration(sessionId: string): Promise<void> {
+  cancelledGenerations.add(sessionId);
+  await prisma.session.update({ where: { id: sessionId }, data: { status: 'error' } }).catch(() => {});
+  const project = await prisma.project.findUnique({
+    where: { sessionId },
+    select: { id: true },
+  }).catch(() => null);
+  if (project) {
+    await prisma.project.update({
+      where: { id: project.id },
+      data: { status: 'error', errorLog: 'Generation stopped by admin.' },
+    }).catch(() => {});
+  }
+  await publishEvent(sessionId, { type: 'fatal', message: 'Generation stopped by admin.' }).catch(() => {});
 }
 
 function normalizeGeneratedPath(p: string): string {
@@ -112,6 +135,10 @@ async function repairMissingLocalImports(
 ): Promise<Record<string, string> | null> {
   const missing = findMissingLocalImports(files);
   if (missing.length === 0) return files;
+  const currentFiles = Object.entries(files)
+    .map(([filePath, content]) => `--- ${filePath} ---\n${content.slice(0, 80_000)}`)
+    .join('\n\n')
+    .slice(0, CODE_GEN_REPAIR_INPUT_CHARS);
 
   const repairPrompt = `${userContent}
 
@@ -121,9 +148,13 @@ The generated JSON has missing local relative imports and must be repaired befor
 Missing imports:
 ${missing.map((m) => `- ${m}`).join('\n')}
 
+Current generated files:
+${currentFiles}
+
 Return one complete JSON object {"files":{...}} for the entire app.
 Every ./ or ../ import must resolve to an emitted file path exactly, including Linux case.
-If many src/App.tsx component imports are missing, rewrite src/App.tsx to inline those components instead of importing absent files.`;
+If many src/App.tsx component imports are missing, rewrite src/App.tsx to inline those components instead of importing absent files.
+Preserve the app's visible design and behavior as much as possible. Do not drop major pages, data models, routes, payment/email hooks, or admin markers.`;
 
   const rawRepair = await ai.complete([{ role: 'user', content: repairPrompt }], CODE_GEN_SYSTEM, {
     maxTokens: CODE_GEN_MAX_TOKENS,
@@ -142,6 +173,7 @@ async function runInstallBuildRunTail(
 ): Promise<void> {
   let project = projectRow;
 
+  assertNotCancelled(sessionId);
   await writeProjectFiles(project.id, files);
   try {
     await writeAdminTokenFile(project.id);
@@ -152,7 +184,10 @@ async function runInstallBuildRunTail(
   await publishEvent(sessionId, { step: 3, label: GEN_STEP_LABELS[3], status: 'running' });
   await publishEvent(sessionId, { type: 'user_progress', message: GEN_WORKING_ON_STEP[3]! });
 
+  await publishEvent(sessionId, { type: 'runner_log', step: 'install', status: 'running', log: 'Starting dependency install...' });
   const installResult = await installDeps(project.id);
+  await publishEvent(sessionId, { type: 'runner_log', step: 'install', success: installResult.success, log: installResult.log });
+  assertNotCancelled(sessionId);
   if (!installResult.success) {
     await publishEvent(sessionId, { step: 3, label: GEN_STEP_LABELS[3], status: 'error', detail: installResult.log });
     await failGeneration(sessionId, genUserMsgInstallFail(installResult.log), {
@@ -178,7 +213,10 @@ async function runInstallBuildRunTail(
     }
   }
 
+  await publishEvent(sessionId, { type: 'runner_log', step: 'build', status: 'running', log: 'Starting production build...' });
   let buildResult = await buildProject(project.id);
+  await publishEvent(sessionId, { type: 'runner_log', step: 'build', success: buildResult.success, log: buildResult.log });
+  assertNotCancelled(sessionId);
 
   if (!buildResult.success) {
     await publishEvent(sessionId, { step: 4, label: GEN_STEP_LABELS[4], status: 'error', detail: buildResult.log });
@@ -211,7 +249,10 @@ async function runInstallBuildRunTail(
   await publishEvent(sessionId, { step: 5, label: GEN_STEP_LABELS[5], status: 'running' });
   await publishEvent(sessionId, { type: 'user_progress', message: GEN_WORKING_ON_STEP[5]! });
 
+  await publishEvent(sessionId, { type: 'runner_log', step: 'run', status: 'running', log: 'Starting preview server...' });
   let runResult = await runProject(project.id);
+  await publishEvent(sessionId, { type: 'runner_log', step: 'run', success: runResult.success, log: runResult.log, port: runResult.port });
+  assertNotCancelled(sessionId);
 
   if (!runResult.success) {
     const fixResult = await autoFix({
@@ -363,6 +404,7 @@ export function runGenerationPipeline(
   }
   const promise = (async () => {
     try {
+      cancelledGenerations.delete(sessionId);
       await clearSessionEvents(sessionId);
       await runGenerationPipelineBody(sessionId, paid);
     } catch (err: unknown) {
@@ -370,6 +412,7 @@ export function runGenerationPipeline(
     }
   })().finally(() => {
     generationPromises.delete(sessionId);
+    cancelledGenerations.delete(sessionId);
   });
   generationPromises.set(sessionId, promise);
   return promise;
@@ -382,12 +425,14 @@ export function runGenerationResume(sessionId: string, _userId: string): Promise
   }
   const promise = (async () => {
     try {
+      cancelledGenerations.delete(sessionId);
       await runResumePipelineBody(sessionId);
     } catch (err: unknown) {
       await handlePipelineFailure(sessionId, err);
     }
   })().finally(() => {
     generationPromises.delete(sessionId);
+    cancelledGenerations.delete(sessionId);
   });
   generationPromises.set(sessionId, promise);
   return promise;
@@ -407,6 +452,8 @@ async function runGenerationPipelineBody(sessionId: string, paid: boolean): Prom
 
   const ai = getCodeClient();
   const userContent = buildCodeGenPrompt(planData);
+  await publishEvent(sessionId, { type: 'codegen_prompt', prompt: userContent });
+  assertNotCancelled(sessionId);
 
   let raw: string;
   try {
@@ -432,6 +479,7 @@ async function runGenerationPipelineBody(sessionId: string, paid: boolean): Prom
   }
 
   let files = extractFilesFromCodegenResponse(raw);
+  assertNotCancelled(sessionId);
   let rawRetry = '';
 
   if (!files) {
@@ -459,6 +507,7 @@ async function runGenerationPipelineBody(sessionId: string, paid: boolean): Prom
       return;
     }
     files = extractFilesFromCodegenResponse(rawRetry);
+    assertNotCancelled(sessionId);
   }
 
   if (!files) {
@@ -479,6 +528,7 @@ async function runGenerationPipelineBody(sessionId: string, paid: boolean): Prom
         GEN_JSON_REPAIR_ROTATING,
       );
       files = extractFilesFromCodegenResponse(rawRepair);
+      assertNotCancelled(sessionId);
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
       await publishEvent(sessionId, { step: 1, label: GEN_STEP_LABELS[1], status: 'error', detail });
@@ -503,14 +553,42 @@ async function runGenerationPipelineBody(sessionId: string, paid: boolean): Prom
   }
 
   const importRepairedFiles = await repairMissingLocalImports(ai, userContent, files);
+  assertNotCancelled(sessionId);
   if (!importRepairedFiles) {
+    const missing = findMissingLocalImports(files);
+    const errorLog = [
+      'Generated source referenced local files that were not included in the output.',
+      '',
+      'Missing imports:',
+      ...missing.map((m) => `- ${m}`),
+      '',
+      'Raw generated files were saved so an admin can download, inspect, import a fix, or run manual repair.',
+    ].join('\n');
+    await prisma.project.upsert({
+      where: { sessionId },
+      create: {
+        sessionId,
+        files,
+        status: 'error',
+        errorLog: errorLog.slice(0, 50_000),
+      },
+      update: {
+        files,
+        status: 'error',
+        errorLog: errorLog.slice(0, 50_000),
+        buildLog: null,
+        fixAttempts: 0,
+        runPort: null,
+      },
+    });
     await publishEvent(sessionId, {
       step: 1,
       label: GEN_STEP_LABELS[1],
       status: 'error',
-      detail: 'Generated source referenced local files that were not included in the output.',
+      detail: errorLog,
     });
     await failGeneration(sessionId, genUserMsgBuildStopped('Generated source referenced missing local component files. Please retry generation.'), {
+      errorLog,
       sseMessage: GEN_SSE_CODEGEN_FAIL,
     });
     return;

@@ -319,7 +319,10 @@ router.put('/templates/:projectId/:eventType', requireAuth, async (req, res, nex
 router.post('/webhook', async (req, res, next) => {
   try {
     const secret = (process.env.RESEND_WEBHOOK_SECRET ?? '').trim();
-    if (!secret) throw new AppError(500, 'Missing RESEND_WEBHOOK_SECRET');
+    if (!secret) {
+      console.warn('[resend-webhook] RESEND_WEBHOOK_SECRET is not configured; acknowledging webhook without verification.');
+      return res.status(200).json({ ok: true, skipped: 'missing_webhook_secret' });
+    }
 
     const payload = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : JSON.stringify(req.body ?? {});
     const id = String(req.header('svix-id') ?? '');
@@ -329,11 +332,21 @@ router.post('/webhook', async (req, res, next) => {
       throw new AppError(400, 'Missing webhook headers');
     }
 
-    const event = (emailSvc as unknown as { resend: any }).resend.webhooks.verify({
-      payload,
-      headers: { id, timestamp, signature },
-      secret,
-    });
+    let event: any;
+    try {
+      event = (emailSvc as unknown as { resend: any }).resend.webhooks.verify({
+        payload,
+        headers: { id, timestamp, signature },
+        secret,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (/secret can't be empty/i.test(message)) {
+        console.warn('[resend-webhook] Resend rejected webhook secret as empty; check RESEND_WEBHOOK_SECRET.');
+        return res.status(200).json({ ok: true, skipped: 'invalid_webhook_secret' });
+      }
+      throw err;
+    }
 
     const type = String(event?.type ?? '');
     const data = event?.data ?? {};
