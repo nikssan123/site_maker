@@ -4,7 +4,6 @@ import {
 } from '@mui/material';
 import { HexColorPicker } from 'react-colorful';
 import CheckIcon from '@mui/icons-material/Check';
-import ColorLensIcon from '@mui/icons-material/ColorLens';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { useTranslation } from 'react-i18next';
 
@@ -285,27 +284,6 @@ export default function ColorThemePicker({ value, onChange, onExtractFromImage }
           style={{ display: 'none' }}
           onChange={handleImageChange}
         />
-      </Box>
-
-      <Box mt={0.75}>
-        <Button
-          size="small"
-          variant="outlined"
-          startIcon={<ColorLensIcon sx={{ fontSize: '14px !important' }} />}
-          onClick={() => setShowCustom((prev) => !prev)}
-          sx={{
-            fontSize: 12,
-            py: 0.5,
-            px: 1.5,
-            fontWeight: 600,
-            borderColor: showCustom ? 'rgba(99,102,241,0.6)' : 'rgba(99,102,241,0.35)',
-            color: showCustom ? '#a5b4fc' : '#c4b5fd',
-            bgcolor: showCustom ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.05)',
-            '&:hover': { borderColor: 'rgba(99,102,241,0.55)', bgcolor: 'rgba(99,102,241,0.1)', color: '#a5b4fc' },
-          }}
-        >
-          {t('theme.customColors')}
-        </Button>
       </Box>
 
       {extractError && (

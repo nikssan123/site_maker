@@ -521,13 +521,24 @@ export default function PlanSummary({ plan, onConfirm, onEdit, onLanguagesChange
           </Box>
         </Box>
 
-        <Divider sx={{ borderColor: 'rgba(255,255,255,0.07)', my: 1.5 }} />
-        <ColorThemePicker
-          value={colorTheme}
-          onChange={onThemeChange}
-          onExtractFromImage={onExtractFromImage}
-        />
-        <Divider sx={{ borderColor: 'rgba(255,255,255,0.07)', mt: 1.5, mb: 1 }} />
+        <Box
+          sx={{
+            mx: -2.5,
+            mt: 2,
+            mb: 1.5,
+            px: 2.5,
+            py: 2,
+            borderTop: '1px solid rgba(99,102,241,0.18)',
+            borderBottom: '1px solid rgba(99,102,241,0.18)',
+            background: 'linear-gradient(180deg, rgba(99,102,241,0.04) 0%, rgba(99,102,241,0.01) 100%)',
+          }}
+        >
+          <ColorThemePicker
+            value={colorTheme}
+            onChange={onThemeChange}
+            onExtractFromImage={onExtractFromImage}
+          />
+        </Box>
 
         <Stack direction="row" gap={1} sx={{ pt: 0.5 }}>
           <Button
