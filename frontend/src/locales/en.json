@@ -1085,7 +1085,22 @@
     "option2Title": "Option 2: Custom domain",
     "option2Body": "You can also connect your own domain, for example <b>www.yourbrand.com</b>. You'll need to add DNS records for that.",
     "manageSubscription": "Manage subscription",
-    "activateHint": "Pick \"{{cta}}\" to activate hosting and put your site online."
+    "activateHint": "Pick \"{{cta}}\" to activate hosting and put your site online.",
+    "actionLabel": "Hosting",
+    "dialogTitle": "Hosting & site address",
+    "close": "Close",
+    "purchaseCta": "Buy site & start free month",
+    "status": {
+      "notActivatedTitle": "Not activated",
+      "notActivatedBody": "Buy the site to activate hosting. You'll get 1 month free, then it's billed via Stripe.",
+      "trialTitle": "Free month",
+      "trialBody": "Hosting is free until {{date}} — {{days}} days left. Subscribe before then to keep your site online.",
+      "trialEndingSoon": "Trial ends in {{days}} days",
+      "activeTitle": "Paid subscription",
+      "activeBody": "Your hosting subscription is active.",
+      "expiredTitle": "Cancelled",
+      "expiredBody": "Hosting is no longer active. Renew to put your site back online."
+    }
   },
   "emailPanel": {
     "tabs": {

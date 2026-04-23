@@ -8,25 +8,36 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Divider,
   FormControl,
+  IconButton,
   InputLabel,
   MenuItem,
-  Paper,
   Select,
   Snackbar,
   Stack,
   Tab,
   Tabs,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import EmailIcon from '@mui/icons-material/Email';
+import DnsIcon from '@mui/icons-material/Dns';
+import PersonIcon from '@mui/icons-material/Person';
+import DescriptionIcon from '@mui/icons-material/Description';
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
+import {
+  AdminPageHeader,
+  AdminPanelLayout,
+  AdminSection,
+  AdminEmptyState,
+  AdminStatusChip,
+} from './AdminUI';
 
 type DomainRow = {
   id: string;
@@ -239,19 +250,59 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
     }
   };
 
+  const headerSubtitle: Record<typeof tab, string> = {
+    domains: t('emailPanel.domains.subtitle'),
+    sender: t('emailPanel.sender.fallbackInfo'),
+    templates: '',
+  };
+
   return (
-    <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', p: { xs: 1.25, md: 2 } }}>
-      <Stack gap={2}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'center' }} justifyContent="space-between" gap={1.5}>
-          <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ minHeight: 0 }}>
-            <Tab value="domains" label={t('emailPanel.tabs.domains')} />
-            <Tab value="sender" label={t('emailPanel.tabs.sender')} />
-            <Tab value="templates" label={t('emailPanel.tabs.templates')} />
+    <>
+      <AdminPanelLayout>
+        <AdminPageHeader
+          icon={<EmailIcon fontSize="small" />}
+          title={t(`emailPanel.tabs.${tab}`)}
+          subtitle={headerSubtitle[tab]}
+          actions={
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<RefreshIcon sx={{ fontSize: 16 }} />}
+              onClick={loadAll}
+              disabled={loading}
+            >
+              {t('emailPanel.refresh')}
+            </Button>
+          }
+        />
+
+        <Box
+          sx={{
+            borderBottom: '1px solid rgba(255,255,255,0.07)',
+            bgcolor: 'rgba(255,255,255,0.02)',
+            borderRadius: 3,
+            border: '1px solid rgba(255,255,255,0.07)',
+            px: 1,
+          }}
+        >
+          <Tabs
+            value={tab}
+            onChange={(_e, v) => setTab(v)}
+            sx={{
+              minHeight: 44,
+              '& .MuiTab-root': {
+                minHeight: 44,
+                fontWeight: 700,
+                fontSize: 13,
+                textTransform: 'none',
+              },
+            }}
+          >
+            <Tab value="domains" icon={<DnsIcon sx={{ fontSize: 16 }} />} iconPosition="start" label={t('emailPanel.tabs.domains')} />
+            <Tab value="sender" icon={<PersonIcon sx={{ fontSize: 16 }} />} iconPosition="start" label={t('emailPanel.tabs.sender')} />
+            <Tab value="templates" icon={<DescriptionIcon sx={{ fontSize: 16 }} />} iconPosition="start" label={t('emailPanel.tabs.templates')} />
           </Tabs>
-          <Button startIcon={<RefreshIcon />} onClick={loadAll} disabled={loading}>
-            {t('emailPanel.refresh')}
-          </Button>
-        </Stack>
+        </Box>
 
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
@@ -260,96 +311,153 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
         ) : (
           <>
             {tab === 'domains' && (
-              <Stack gap={2}>
-                <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'center' }} justifyContent="space-between" gap={2}>
-                    <Box>
-                      <Typography variant="h6" fontWeight={800}>{t('emailPanel.domains.heading')}</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {t('emailPanel.domains.subtitle')}
-                      </Typography>
-                    </Box>
-                    <Button startIcon={<AddIcon />} variant="contained" onClick={() => setCreateOpen(true)}>
+              <>
+                <AdminSection
+                  icon={<DnsIcon sx={{ fontSize: 16 }} />}
+                  title={t('emailPanel.domains.heading')}
+                  subtitle={t('emailPanel.domains.subtitle')}
+                  actions={
+                    <Button
+                      size="small"
+                      startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+                      variant="contained"
+                      onClick={() => setCreateOpen(true)}
+                    >
                       {t('emailPanel.domains.newDomain')}
                     </Button>
-                  </Stack>
-                </Paper>
-
-                {domains.length === 0 ? (
-                  <Alert severity="info">{t('emailPanel.domains.empty')}</Alert>
-                ) : (
-                  <Stack gap={2}>
-                    {domains.map((d) => (
-                      <Paper key={d.id} variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-                        <Stack direction={{ xs: 'column', md: 'row' }} gap={2} alignItems={{ md: 'center' }} justifyContent="space-between">
-                          <Box sx={{ flex: 1, minWidth: 260 }}>
-                            <Stack direction="row" gap={1} alignItems="center">
-                              <Typography fontWeight={800}>{d.domain}</Typography>
-                              {d.verified ? (
-                                <Stack direction="row" gap={0.5} alignItems="center">
-                                  <VerifiedIcon fontSize="small" color="success" />
-                                  <Typography variant="caption" color="success.main" fontWeight={700}>
-                                    {t('emailPanel.domains.verified')}
-                                  </Typography>
-                                </Stack>
-                              ) : (
-                                <Typography variant="caption" color="warning.main" fontWeight={700}>
-                                  {t('emailPanel.domains.notVerified')}
+                  }
+                >
+                  {domains.length === 0 ? (
+                    <AdminEmptyState
+                      icon={<DnsIcon sx={{ fontSize: 32 }} />}
+                      title={t('emailPanel.domains.empty')}
+                      action={
+                        <Button
+                          size="small"
+                          variant="contained"
+                          startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+                          onClick={() => setCreateOpen(true)}
+                        >
+                          {t('emailPanel.domains.newDomain')}
+                        </Button>
+                      }
+                    />
+                  ) : (
+                    <Stack gap={1.5}>
+                      {domains.map((d) => (
+                        <Box
+                          key={d.id}
+                          sx={{
+                            borderRadius: 2.5,
+                            border: '1px solid rgba(255,255,255,0.06)',
+                            bgcolor: 'rgba(255,255,255,0.02)',
+                            overflow: 'hidden',
+                          }}
+                        >
+                          <Stack
+                            direction={{ xs: 'column', md: 'row' }}
+                            gap={1.5}
+                            alignItems={{ md: 'center' }}
+                            justifyContent="space-between"
+                            sx={{ p: 1.75 }}
+                          >
+                            <Box sx={{ flex: 1, minWidth: 220 }}>
+                              <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
+                                <Typography sx={{ fontWeight: 800, fontFamily: 'monospace' }}>
+                                  {d.domain}
                                 </Typography>
-                              )}
+                                {d.verified ? (
+                                  <AdminStatusChip
+                                    tone="success"
+                                    icon={<VerifiedIcon />}
+                                    label={t('emailPanel.domains.verified')}
+                                  />
+                                ) : (
+                                  <AdminStatusChip
+                                    tone="warning"
+                                    label={t('emailPanel.domains.notVerified')}
+                                  />
+                                )}
+                              </Stack>
+                              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                                {t('emailPanel.domains.added', { date: new Date(d.createdAt).toLocaleString() })}
+                              </Typography>
+                            </Box>
+
+                            <Stack direction="row" gap={1} flexWrap="wrap">
+                              <Button size="small" variant="outlined" onClick={() => onVerify(d.id)}>
+                                {t('emailPanel.domains.verify')}
+                              </Button>
+                              <Tooltip title={t('emailPanel.domains.delete')}>
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  onClick={() => onDelete(d.id)}
+                                >
+                                  <DeleteIcon sx={{ fontSize: 18 }} />
+                                </IconButton>
+                              </Tooltip>
                             </Stack>
-                            <Typography variant="caption" color="text.secondary">
-                              {t('emailPanel.domains.added', { date: new Date(d.createdAt).toLocaleString() })}
-                            </Typography>
-                          </Box>
-
-                          <Stack direction="row" gap={1} flexWrap="wrap">
-                            <Button variant="outlined" onClick={() => onVerify(d.id)}>
-                              {t('emailPanel.domains.verify')}
-                            </Button>
-                            <Button variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={() => onDelete(d.id)}>
-                              {t('emailPanel.domains.delete')}
-                            </Button>
                           </Stack>
-                        </Stack>
 
-                        <Divider sx={{ my: 2 }} />
-                        <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>
-                          {t('emailPanel.domains.dnsRecords')}
-                        </Typography>
-                        <TextField
-                          value={prettyJson(d.dnsRecords)}
-                          multiline
-                          minRows={6}
-                          fullWidth
-                          InputProps={{ readOnly: true }}
-                        />
-                      </Paper>
-                    ))}
-                  </Stack>
-                )}
-              </Stack>
+                          <Box
+                            sx={{
+                              borderTop: '1px solid rgba(255,255,255,0.05)',
+                              p: 1.5,
+                              bgcolor: 'rgba(255,255,255,0.015)',
+                            }}
+                          >
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                fontWeight: 700,
+                                textTransform: 'uppercase',
+                                letterSpacing: 0.5,
+                                color: 'text.secondary',
+                                display: 'block',
+                                mb: 0.75,
+                              }}
+                            >
+                              {t('emailPanel.domains.dnsRecords')}
+                            </Typography>
+                            <TextField
+                              value={prettyJson(d.dnsRecords)}
+                              multiline
+                              minRows={5}
+                              fullWidth
+                              size="small"
+                              InputProps={{
+                                readOnly: true,
+                                sx: { fontFamily: 'monospace', fontSize: 12, bgcolor: 'rgba(0,0,0,0.2)' },
+                              }}
+                            />
+                          </Box>
+                        </Box>
+                      ))}
+                    </Stack>
+                  )}
+                </AdminSection>
+              </>
             )}
 
             {tab === 'sender' && (
-              <Stack gap={2}>
-                <Alert severity="info">
-                  {t('emailPanel.sender.fallbackInfo')}
-                </Alert>
+              <>
+                <Alert severity="info">{t('emailPanel.sender.fallbackInfo')}</Alert>
 
-                <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-                  <Typography variant="h6" fontWeight={800} sx={{ mb: 2 }}>
-                    {t('emailPanel.sender.heading')}
-                  </Typography>
+                <AdminSection
+                  icon={<PersonIcon sx={{ fontSize: 16 }} />}
+                  title={t('emailPanel.sender.heading')}
+                >
                   <Stack gap={2}>
                     <TextField
+                      size="small"
                       label={t('emailPanel.sender.nameLabel')}
                       value={fromName}
                       onChange={(e) => setFromName(e.target.value)}
                       fullWidth
                     />
 
-                    <FormControl fullWidth>
+                    <FormControl size="small" fullWidth>
                       <InputLabel id="email-domain-select-label">{t('emailPanel.sender.domainLabel')}</InputLabel>
                       <Select
                         labelId="email-domain-select-label"
@@ -383,6 +491,7 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
                     </FormControl>
 
                     <TextField
+                      size="small"
                       label={t('emailPanel.sender.emailNameLabel')}
                       value={fromEmailLocal}
                       onChange={(e) => setFromEmailLocal(e.target.value.replace(/@.*/, '').trim())}
@@ -390,10 +499,11 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
                     />
 
                     <TextField
+                      size="small"
                       label={t('emailPanel.sender.emailLabel')}
                       value={constructedFromEmail}
                       fullWidth
-                      InputProps={{ readOnly: true }}
+                      InputProps={{ readOnly: true, sx: { fontFamily: 'monospace' } }}
                       helperText={t('emailPanel.sender.emailReadonlyHint')}
                       sx={{
                         '& .MuiInputBase-input.Mui-readOnly': {
@@ -401,47 +511,67 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
                           color: 'text.secondary',
                           WebkitTextFillColor: 'currentColor',
                         },
-                        '& .MuiOutlinedInput-root': {
-                          bgcolor: 'action.hover',
-                        },
+                        '& .MuiOutlinedInput-root': { bgcolor: 'rgba(0,0,0,0.2)' },
                       }}
                     />
 
                     <Stack direction="row" gap={1} justifyContent="flex-end">
-                      <Button variant="contained" onClick={onSaveSender} disabled={!constructedFromEmail}>{t('emailPanel.sender.save')}</Button>
+                      <Button variant="contained" onClick={onSaveSender} disabled={!constructedFromEmail}>
+                        {t('emailPanel.sender.save')}
+                      </Button>
                     </Stack>
                   </Stack>
-                </Paper>
+                </AdminSection>
 
                 {settings && (
-                  <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-                    <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>
-                      {t('emailPanel.sender.currentHeading')}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {t('emailPanel.sender.currentSender', {
-                        email: `${settings.fromEmail}${settings.fromName ? ` (${settings.fromName})` : ''}`,
-                      })}<br />
-                      {t('emailPanel.sender.currentDomain', {
-                        domain: settings.domain ?? t('emailPanel.sender.platformLabel'),
-                      })}<br />
-                      {t('emailPanel.sender.currentVerified', {
-                        value: settings.verified ? t('emailPanel.sender.yes') : t('emailPanel.sender.no'),
-                      })}
-                    </Typography>
-                  </Paper>
+                  <AdminSection
+                    icon={<VerifiedIcon sx={{ fontSize: 16 }} />}
+                    title={t('emailPanel.sender.currentHeading')}
+                    dense
+                  >
+                    <Stack gap={0.75}>
+                      <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>
+                        {t('emailPanel.sender.currentSender', {
+                          email: `${settings.fromEmail}${settings.fromName ? ` (${settings.fromName})` : ''}`,
+                        })}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>
+                        {t('emailPanel.sender.currentDomain', {
+                          domain: settings.domain ?? t('emailPanel.sender.platformLabel'),
+                        })}
+                      </Typography>
+                      <Stack direction="row" gap={1} alignItems="center">
+                        <Typography variant="body2" color="text.secondary">
+                          {t('emailPanel.sender.currentVerified', { value: '' }).replace(/[:.]\s*$/, '')}
+                        </Typography>
+                        <AdminStatusChip
+                          tone={settings.verified ? 'success' : 'warning'}
+                          label={settings.verified ? t('emailPanel.sender.yes') : t('emailPanel.sender.no')}
+                        />
+                      </Stack>
+                    </Stack>
+                  </AdminSection>
                 )}
-              </Stack>
+              </>
             )}
 
             {tab === 'templates' && (
-              <Stack gap={2}>
+              <>
                 <Alert severity="info">
                   <span dangerouslySetInnerHTML={{ __html: variablesHintHtml }} />
                 </Alert>
-                <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-                  <Stack direction={{ xs: 'column', md: 'row' }} gap={2}>
-                    <FormControl sx={{ minWidth: 280 }}>
+
+                <AdminSection
+                  icon={<DescriptionIcon sx={{ fontSize: 16 }} />}
+                  title={t('emailPanel.tabs.templates')}
+                  actions={
+                    <Button size="small" variant="contained" onClick={onSaveTemplate}>
+                      {t('emailPanel.templates.saveTemplate')}
+                    </Button>
+                  }
+                >
+                  <Stack gap={2}>
+                    <FormControl size="small" fullWidth>
                       <InputLabel id="email-template-event-type-label">{t('emailPanel.templates.eventLabel')}</InputLabel>
                       <Select
                         labelId="email-template-event-type-label"
@@ -454,14 +584,9 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
                         ))}
                       </Select>
                     </FormControl>
-                    <Box sx={{ flex: 1 }} />
-                    <Button variant="contained" onClick={onSaveTemplate}>{t('emailPanel.templates.saveTemplate')}</Button>
-                  </Stack>
 
-                  <Divider sx={{ my: 2 }} />
-
-                  <Stack gap={2}>
                     <TextField
+                      size="small"
                       label={t('emailPanel.templates.subjectLabel')}
                       value={templateSubject}
                       onChange={(e) => setTemplateSubject(e.target.value)}
@@ -474,22 +599,22 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
                       multiline
                       minRows={12}
                       fullWidth
+                      InputProps={{ sx: { fontFamily: 'monospace', fontSize: 12 } }}
                     />
                   </Stack>
-                </Paper>
-              </Stack>
+                </AdminSection>
+              </>
             )}
           </>
         )}
-      </Stack>
+      </AdminPanelLayout>
 
-      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth
+        PaperProps={{ sx: { borderRadius: 3 } }}>
         <DialogTitle>{t('emailPanel.dialog.title')}</DialogTitle>
         <DialogContent>
           <Stack gap={2} sx={{ mt: 1 }}>
-            <Alert severity="info">
-              {t('emailPanel.dialog.info')}
-            </Alert>
+            <Alert severity="info">{t('emailPanel.dialog.info')}</Alert>
             <TextField
               label={t('emailPanel.dialog.domainLabel')}
               value={createDomain}
@@ -518,6 +643,6 @@ export default function EmailPanel({ projectId }: { projectId: string }) {
           {toast.message}
         </Alert>
       </Snackbar>
-    </Box>
+    </>
   );
 }

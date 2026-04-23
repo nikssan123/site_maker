@@ -3,18 +3,24 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
   CircularProgress,
   IconButton,
-  Paper,
   Stack,
   Tooltip,
   Typography,
-  alpha,
 } from '@mui/material';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import DeleteIcon from '@mui/icons-material/Delete';
+import PersonIcon from '@mui/icons-material/Person';
 import { useTranslation } from 'react-i18next';
+import {
+  AdminPageHeader,
+  AdminPanelLayout,
+  AdminSection,
+  AdminEmptyState,
+  AdminStatusChip,
+} from './AdminUI';
 
 type Inquiry = {
   id: number;
@@ -83,115 +89,79 @@ export default function InquiriesPanel({ projectId }: { projectId: string }) {
   const sorted = [...rows].sort((a, b) => String(b.id ?? 0).localeCompare(String(a.id ?? 0)));
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <Paper
-        variant="outlined"
-        sx={{
-          p: 2,
-          borderRadius: 3,
-          borderColor: (theme) => alpha(theme.palette.secondary.main, 0.24),
-          background: (theme) =>
-            `linear-gradient(135deg, ${alpha(theme.palette.secondary.main, 0.12)}, ${alpha(theme.palette.primary.main, 0.08)})`,
-        }}
-      >
-        <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} gap={1.25}>
-          <Stack direction="row" alignItems="center" gap={1}>
-            <Box
-              sx={{
-                width: 38,
-                height: 38,
-                borderRadius: 2.5,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                bgcolor: (theme) => alpha(theme.palette.secondary.main, 0.16),
-                color: 'secondary.main',
-              }}
-            >
-              <MailOutlineIcon sx={{ fontSize: 18 }} />
-            </Box>
-            <Box>
-              <Typography variant="subtitle1" fontWeight={800}>
-                {t('inquiries.heading')}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {t('inquiries.subtitle')}
-              </Typography>
-            </Box>
-          </Stack>
-          <Stack direction="row" gap={1} sx={{ ml: { sm: 'auto' } }}>
-            <Chip
+    <AdminPanelLayout>
+      <AdminPageHeader
+        tone="secondary"
+        icon={<MailOutlineIcon fontSize="small" />}
+        title={t('inquiries.heading')}
+        subtitle={t('inquiries.subtitle')}
+        actions={
+          <>
+            <AdminStatusChip tone="secondary" label={t('inquiries.total', { n: rows.length })} />
+            <Button
               size="small"
-              label={t('inquiries.total', { n: rows.length })}
-              sx={{ height: 24, fontSize: 11, bgcolor: 'rgba(52,211,153,0.10)', border: '1px solid rgba(52,211,153,0.22)' }}
-            />
-            <Button size="small" variant="outlined" onClick={load} disabled={loading || saving}>
+              variant="outlined"
+              startIcon={<RefreshIcon sx={{ fontSize: 16 }} />}
+              onClick={load}
+              disabled={loading || saving}
+            >
               {t('inquiries.refresh')}
             </Button>
-          </Stack>
-        </Stack>
-      </Paper>
+          </>
+        }
+      />
 
-      <Box sx={{ flex: 1, overflow: 'auto', mt: 1.5, pr: 0.25 }}>
-        {error && (
-          <Alert severity="error" sx={{ mb: 1.5 }}>
-            {error}
-          </Alert>
-        )}
+      {error && <Alert severity="error">{error}</Alert>}
 
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
-            <CircularProgress size={18} />
-          </Box>
-        ) : sorted.length === 0 ? (
-          <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, textAlign: 'center' }}>
-            <Typography variant="body1" fontWeight={700}>
-              {t('inquiries.emptyTitle')}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
-              {t('inquiries.emptyBody')}
-            </Typography>
-          </Paper>
-        ) : (
-          <Stack gap={1.25}>
-            {sorted.map((r) => (
-              <Paper
-                key={r.id}
-                variant="outlined"
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+          <CircularProgress size={24} />
+        </Box>
+      ) : sorted.length === 0 ? (
+        <AdminSection>
+          <AdminEmptyState
+            icon={<MailOutlineIcon sx={{ fontSize: 32 }} />}
+            title={t('inquiries.emptyTitle')}
+            body={t('inquiries.emptyBody')}
+          />
+        </AdminSection>
+      ) : (
+        <Stack gap={1.25}>
+          {sorted.map((r) => (
+            <AdminSection
+              key={r.id}
+              icon={<PersonIcon sx={{ fontSize: 16 }} />}
+              title={r.name || '—'}
+              subtitle={[r.email || '—', r.createdAt ? String(r.createdAt) : null].filter(Boolean).join(' • ')}
+              actions={
+                <Tooltip title={t('inquiries.delete')}>
+                  <span>
+                    <IconButton size="small" color="error" onClick={() => del(r.id)} disabled={saving}>
+                      <DeleteIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              }
+            >
+              <Typography
+                variant="body2"
+                color="text.primary"
                 sx={{
-                  p: 1.75,
-                  borderRadius: 3,
-                  borderColor: 'rgba(255,255,255,0.08)',
-                  bgcolor: 'rgba(255,255,255,0.02)',
-                  boxShadow: 'none',
+                  whiteSpace: 'pre-wrap',
+                  lineHeight: 1.7,
+                  fontSize: 13.5,
+                  bgcolor: 'rgba(255,255,255,0.025)',
+                  p: 1.5,
+                  borderRadius: 2,
+                  border: '1px solid rgba(255,255,255,0.05)',
                 }}
               >
-                <Stack direction="row" alignItems="flex-start" gap={1.25}>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="subtitle2" fontWeight={800} sx={{ fontSize: 14 }}>
-                      {r.name || '—'}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
-                      {r.email || '—'}
-                      {r.createdAt ? ` • ${String(r.createdAt)}` : ''}
-                    </Typography>
-                    <Typography variant="body2" color="text.primary" sx={{ mt: 1.25, whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
-                      {r.message || '—'}
-                    </Typography>
-                  </Box>
-                  <Tooltip title={t('inquiries.delete')}>
-                    <span>
-                      <IconButton size="small" onClick={() => del(r.id)} disabled={saving}>
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </span>
-                  </Tooltip>
-                </Stack>
-              </Paper>
-            ))}
-          </Stack>
-        )}
-      </Box>
-    </Box>
+                {r.message || '—'}
+              </Typography>
+            </AdminSection>
+          ))}
+        </Stack>
+      )}
+    </AdminPanelLayout>
   );
 }

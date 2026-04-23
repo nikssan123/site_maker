@@ -1,5 +1,4 @@
 import { Box, Button, Paper, Stack, Typography, alpha } from '@mui/material';
-import CloudDoneIcon from '@mui/icons-material/CloudDone';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import StorefrontIcon from '@mui/icons-material/Storefront';
@@ -16,9 +15,13 @@ import BookingSlotsPanel from './BookingSlotsPanel';
 import InquiriesPanel from './InquiriesPanel';
 import BlogPanel from './BlogPanel';
 import DashboardPanel from './DashboardPanel';
-import HostingPanel from './HostingPanel';
 import AnalyticsPanel from './AnalyticsPanel';
 import EmailPanel from './EmailPanel';
+import {
+  AdminPageHeader,
+  AdminPanelLayout,
+  AdminSection,
+} from './AdminUI';
 
 export type AdminWorkspaceMode =
   | 'catalog'
@@ -27,7 +30,6 @@ export type AdminWorkspaceMode =
   | 'blog'
   | 'dashboard'
   | 'branding'
-  | 'hosting'
   | 'analytics'
   | 'email';
 
@@ -121,13 +123,11 @@ interface Props {
   planAppType: string | null;
   planHasContactForm: boolean;
   projectPaid: boolean;
-  projectHosted: boolean;
   runPort: number | null;
   adminApiToken?: string | null;
   onModeChange: (mode: AdminWorkspaceMode) => void;
   onBackToPreview: () => void;
   onRefreshPreview: () => void;
-  onHostingUpdated: () => void;
   onOpenLogoUpload: () => void;
   onOpenHeroUpload: () => void;
 }
@@ -141,104 +141,43 @@ function BrandingPanel({
 }) {
   const { t } = useTranslation();
   return (
-    <Box sx={{ p: { xs: 1.25, md: 2 }, display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Paper
-        variant="outlined"
-        sx={{
-          p: 2,
-          borderRadius: 3,
-          bgcolor: 'rgba(255,255,255,0.02)',
-          borderColor: 'rgba(255,255,255,0.08)',
-        }}
-      >
-        <Typography variant="subtitle1" sx={{ fontWeight: 800, color: 'text.primary' }}>
-          {t('adminWorkspace.branding.heading')}
-        </Typography>
-        <Typography variant="body2" sx={{ mt: 0.75, color: 'text.secondary', lineHeight: 1.7 }}>
-          {t('adminWorkspace.branding.body')}
-        </Typography>
-      </Paper>
+    <AdminPanelLayout>
+      <AdminPageHeader
+        icon={<ImageIcon fontSize="small" />}
+        title={t('adminWorkspace.branding.heading')}
+        subtitle={t('adminWorkspace.branding.body')}
+      />
 
       <Stack direction={{ xs: 'column', md: 'row' }} gap={2}>
-        <Paper
-          variant="outlined"
-          sx={{
-            flex: 1,
-            p: 2,
-            borderRadius: 3,
-            bgcolor: 'rgba(255,255,255,0.02)',
-            borderColor: 'rgba(255,255,255,0.08)',
-          }}
-        >
-          <Stack direction="row" spacing={1.25} alignItems="center">
-            <Box
-              sx={{
-                width: 44,
-                height: 44,
-                borderRadius: 2.5,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                bgcolor: (theme) => alpha(theme.palette.primary.main, 0.14),
-                color: 'primary.main',
-              }}
-            >
-              <ImageIcon fontSize="small" />
-            </Box>
-            <Box>
-              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: 'text.primary' }}>
-                {t('adminWorkspace.branding.logoTitle')}
-              </Typography>
-              <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.6 }}>
-                {t('adminWorkspace.branding.logoBody')}
-              </Typography>
-            </Box>
-          </Stack>
-          <Button variant="contained" sx={{ mt: 2 }} onClick={onOpenLogoUpload}>
-            {t('adminWorkspace.branding.logoCta')}
-          </Button>
-        </Paper>
+        <Box sx={{ flex: 1 }}>
+          <AdminSection
+            icon={<ImageIcon sx={{ fontSize: 16 }} />}
+            title={t('adminWorkspace.branding.logoTitle')}
+          >
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2, lineHeight: 1.6 }}>
+              {t('adminWorkspace.branding.logoBody')}
+            </Typography>
+            <Button variant="contained" onClick={onOpenLogoUpload} fullWidth>
+              {t('adminWorkspace.branding.logoCta')}
+            </Button>
+          </AdminSection>
+        </Box>
 
-        <Paper
-          variant="outlined"
-          sx={{
-            flex: 1,
-            p: 2,
-            borderRadius: 3,
-            bgcolor: 'rgba(255,255,255,0.02)',
-            borderColor: 'rgba(255,255,255,0.08)',
-          }}
-        >
-          <Stack direction="row" spacing={1.25} alignItems="center">
-            <Box
-              sx={{
-                width: 44,
-                height: 44,
-                borderRadius: 2.5,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                bgcolor: (theme) => alpha(theme.palette.secondary.main, 0.12),
-                color: 'secondary.main',
-              }}
-            >
-              <WallpaperIcon fontSize="small" />
-            </Box>
-            <Box>
-              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: 'text.primary' }}>
-                {t('adminWorkspace.branding.heroTitle')}
-              </Typography>
-              <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.6 }}>
-                {t('adminWorkspace.branding.heroBody')}
-              </Typography>
-            </Box>
-          </Stack>
-          <Button variant="contained" sx={{ mt: 2 }} onClick={onOpenHeroUpload}>
-            {t('adminWorkspace.branding.heroCta')}
-          </Button>
-        </Paper>
+        <Box sx={{ flex: 1 }}>
+          <AdminSection
+            icon={<WallpaperIcon sx={{ fontSize: 16 }} />}
+            title={t('adminWorkspace.branding.heroTitle')}
+          >
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2, lineHeight: 1.6 }}>
+              {t('adminWorkspace.branding.heroBody')}
+            </Typography>
+            <Button variant="contained" onClick={onOpenHeroUpload} fullWidth>
+              {t('adminWorkspace.branding.heroCta')}
+            </Button>
+          </AdminSection>
+        </Box>
       </Stack>
-    </Box>
+    </AdminPanelLayout>
   );
 }
 
@@ -248,13 +187,11 @@ export default function AdminWorkspace({
   planAppType,
   planHasContactForm,
   projectPaid,
-  projectHosted,
   runPort,
   adminApiToken,
   onModeChange,
   onBackToPreview,
   onRefreshPreview,
-  onHostingUpdated,
   onOpenLogoUpload,
   onOpenHeroUpload,
 }: Props) {
@@ -361,15 +298,6 @@ export default function AdminWorkspace({
               onClick={() => onModeChange('inquiries')}
             />
           )}
-          {projectPaid && projectHosted && (
-            <WorkspaceNavButton
-              icon={<CloudDoneIcon fontSize="small" />}
-              title={t('adminWorkspace.nav.hostingTitle')}
-              subtitle={t('adminWorkspace.nav.hostingSubtitle')}
-              active={mode === 'hosting'}
-              onClick={() => onModeChange('hosting')}
-            />
-          )}
           <WorkspaceNavButton
             icon={<BarChartIcon fontSize="small" />}
             title={t('adminWorkspace.nav.analyticsTitle')}
@@ -424,34 +352,7 @@ export default function AdminWorkspace({
             flexDirection: 'column',
           }}
         >
-          <Box
-            sx={{
-              px: { xs: 1.5, md: 2.5 },
-              py: 1.75,
-              borderBottom: '1px solid rgba(255,255,255,0.08)',
-              background: (theme) =>
-                `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.16)}, ${alpha(theme.palette.secondary.main, 0.08)})`,
-            }}
-          >
-            <Typography variant="h6" sx={{ fontWeight: 800, color: 'text.primary' }}>
-              {t(`adminWorkspace.titles.${mode}`)}
-            </Typography>
-            <Typography variant="body2" sx={{ mt: 0.35, color: 'text.secondary' }}>
-              {t(`adminWorkspace.subtitles.${mode}`)}
-            </Typography>
-          </Box>
-
-          <Box
-            sx={{
-              flex: 1,
-              minHeight: 0,
-              overflow: 'auto',
-              WebkitOverflowScrolling: 'touch',
-              p: mode === 'hosting' || mode === 'booking_slots' || mode === 'inquiries'
-                ? { xs: 1, md: 1.5 }
-                : 0,
-            }}
-          >
+          <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             {mode === 'catalog' && (
               <CatalogPanel
                 projectId={projectId}
@@ -470,14 +371,6 @@ export default function AdminWorkspace({
               <BrandingPanel
                 onOpenLogoUpload={onOpenLogoUpload}
                 onOpenHeroUpload={onOpenHeroUpload}
-              />
-            )}
-            {mode === 'hosting' && (
-              <HostingPanel
-                projectId={projectId}
-                hosted={projectHosted}
-                paid={projectPaid}
-                onUpdated={onHostingUpdated}
               />
             )}
             {mode === 'analytics' && <AnalyticsPanel projectId={projectId} />}

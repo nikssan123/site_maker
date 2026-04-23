@@ -47,6 +47,10 @@ interface ProjectState {
   /** Backend ALLOW_UNPAID_PROJECT_DOWNLOAD — download ZIP without Stripe (testing). */
   allowUnpaidDownload: boolean;
   projectHosted: boolean;
+  /** Derived hosting subscription status: not yet bought, free trial, paid sub, or cancelled. */
+  hostingStatus: 'not_activated' | 'trial' | 'active' | 'expired';
+  /** End of the included free month (ISO string), if any. */
+  hostingFreeUntil: string | null;
   iterationsTotal: number;
   paidIterationCredits: number;
   freeIterationLimit: number;
@@ -67,6 +71,7 @@ interface ProjectState {
   setProjectPaid: (paid: boolean) => void;
   setAllowUnpaidDownload: (v: boolean) => void;
   setProjectHosted: (hosted: boolean) => void;
+  setHostingStatus: (status: ProjectState['hostingStatus'], freeUntil: string | null) => void;
   setIterationInfo: (total: number, paidCredits: number, freeLimit: number) => void;
   setPhase: (phase: ProjectState['phase']) => void;
   setIsStreaming: (v: boolean) => void;
@@ -95,6 +100,8 @@ export const useProjectStore = create<ProjectState>((set) => ({
   projectPaid: false,
   allowUnpaidDownload: false,
   projectHosted: false,
+  hostingStatus: 'not_activated',
+  hostingFreeUntil: null,
   iterationsTotal: 0,
   paidIterationCredits: 0,
   freeIterationLimit: 2,
@@ -114,6 +121,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
   setProjectPaid: (paid) => set({ projectPaid: paid }),
   setAllowUnpaidDownload: (allowUnpaidDownload) => set({ allowUnpaidDownload }),
   setProjectHosted: (hosted) => set({ projectHosted: hosted }),
+  setHostingStatus: (hostingStatus, hostingFreeUntil) => set({ hostingStatus, hostingFreeUntil }),
   setIterationInfo: (total, paidCredits, freeLimit) => set({ iterationsTotal: total, paidIterationCredits: paidCredits, freeIterationLimit: freeLimit }),
   setPhase: (phase) => set({ phase }),
   setIsStreaming: (v) => set({ isStreaming: v }),
@@ -139,6 +147,8 @@ export const useProjectStore = create<ProjectState>((set) => ({
       projectPaid: false,
       allowUnpaidDownload: false,
       projectHosted: false,
+      hostingStatus: 'not_activated',
+      hostingFreeUntil: null,
       iterationsTotal: 0,
       paidIterationCredits: 0,
       freeIterationLimit: 2,

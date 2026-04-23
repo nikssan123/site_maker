@@ -27,6 +27,7 @@ import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ImportantDevicesIcon from '@mui/icons-material/ImportantDevices';
+import CloudIcon from '@mui/icons-material/Cloud';
 
 import AppLogo from '../components/AppLogo';
 import PreviewFrame, { type PreviewFrameHandle } from '../components/PreviewFrame';
@@ -38,6 +39,7 @@ import PaymentsSetupDialog from '../components/PaymentsSetupDialog';
 import SupportDialog from '../components/SupportDialog';
 import MessageBubble from '../components/MessageBubble';
 import EditDialog, { type EditTarget, type EditEvent } from '../components/EditDialog';
+import HostingDialog from '../components/HostingDialog';
 import type { TextStylePatch } from '../components/EditDialog';
 
 import { useTranslation } from 'react-i18next';
@@ -226,6 +228,7 @@ export default function PreviewPage() {
   const [heroBgPreview, setHeroBgPreview] = useState<string | null>(null);
   const [heroBgFile, setHeroBgFile] = useState<{ dataUrl: string; name: string } | null>(null);
   const [snackMsg, setSnackMsg] = useState<string | null>(null);
+  const [hostingDialogOpen, setHostingDialogOpen] = useState(false);
   /** For catalog/booking panels: X-Admin-Token on writes to generated /api (app-runner enforces PUT/DELETE). */
   const [adminApiToken, setAdminApiToken] = useState<string | null>(null);
 
@@ -238,6 +241,7 @@ export default function PreviewPage() {
     store.setProjectPaid(p.paid);
     store.setAllowUnpaidDownload(p.allowUnpaidDownload === true);
     store.setProjectHosted(p.hosted);
+    store.setHostingStatus(p.hostingStatus ?? (p.paid ? (p.hosted ? 'active' : 'expired') : 'not_activated'), p.hostingFreeUntil ?? null);
     store.setIterationInfo(p.iterationsTotal ?? 0, p.paidIterationCredits ?? 0, p.freeIterationLimit ?? 2);
     setPaymentsConfigured(p.paymentsEnabled ?? false);
     setPlanNeedsPayments(p.planNeedsPayments ?? false);
@@ -800,7 +804,7 @@ export default function PreviewPage() {
 
   if (!projectId) return null;
 
-  const { projectPaid, allowUnpaidDownload, projectHosted } = store;
+  const { projectPaid, allowUnpaidDownload, projectHosted, hostingStatus, hostingFreeUntil } = store;
 
   return (
     <Box sx={{ height: ['100vh', '100dvh'], display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
@@ -1038,6 +1042,28 @@ export default function PreviewPage() {
 
 
 
+          <Tooltip
+            title={t(`hostingPanel.status.${hostingStatus === 'not_activated' ? 'notActivatedTitle' : hostingStatus === 'trial' ? 'trialTitle' : hostingStatus === 'active' ? 'activeTitle' : 'expiredTitle'}`)}
+            placement="right"
+          >
+            <Box data-tour="action-hosting">
+              <ActionButton
+                icon={<CloudIcon fontSize="inherit" />}
+                label={t('hostingPanel.actionLabel')}
+                onClick={() => setHostingDialogOpen(true)}
+                color={
+                  hostingStatus === 'active'
+                    ? '#10b981'
+                    : hostingStatus === 'trial'
+                    ? '#f59e0b'
+                    : hostingStatus === 'expired'
+                    ? '#ef4444'
+                    : '#94a3b8'
+                }
+              />
+            </Box>
+          </Tooltip>
+
           <Tooltip title={t('payments.setupTooltip')} placement="right">
             <Box data-tour="action-payments">
               <ActionButton
@@ -1107,13 +1133,11 @@ export default function PreviewPage() {
               planAppType={planAppType}
               planHasContactForm={planHasContactForm}
               projectPaid={projectPaid}
-              projectHosted={projectHosted}
               runPort={store.runPort ?? null}
               adminApiToken={adminApiToken}
               onModeChange={setDrawerMode}
               onBackToPreview={() => setDrawerMode('improvements')}
               onRefreshPreview={() => setRefreshKey((k) => k + 1)}
-              onHostingUpdated={() => loadProject().catch(() => { })}
               onOpenLogoUpload={() => setLogoDialogOpen(true)}
               onOpenHeroUpload={() => setHeroBgDialogOpen(true)}
             />
@@ -1634,6 +1658,17 @@ export default function PreviewPage() {
         projectId={projectId}
         oauthResult={paymentsOauthResult}
         oauthError={paymentsOauthError}
+      />
+
+      <HostingDialog
+        open={hostingDialogOpen}
+        onClose={() => setHostingDialogOpen(false)}
+        projectId={projectId}
+        status={hostingStatus}
+        hostingFreeUntil={hostingFreeUntil}
+        hosted={projectHosted}
+        paid={projectPaid}
+        onUpdated={loadProject}
       />
 
       <SupportDialog open={supportOpen} onClose={() => setSupportOpen(false)} />

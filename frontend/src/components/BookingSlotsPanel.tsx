@@ -3,18 +3,18 @@ import {
   Box,
   Typography,
   Stack,
-  Paper,
   Alert,
   Button,
-  Chip,
   TextField,
-  Divider,
   CircularProgress,
   IconButton,
   Tooltip,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DateCalendar } from '@mui/x-date-pickers/DateCalendar';
@@ -22,6 +22,12 @@ import { TimePicker } from '@mui/x-date-pickers/TimePicker';
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/bg';
 import { useTranslation } from 'react-i18next';
+import {
+  AdminPageHeader,
+  AdminPanelLayout,
+  AdminSection,
+  AdminStatusChip,
+} from './AdminUI';
 
 type TakenSlot = {
   id: number;
@@ -69,12 +75,9 @@ export default function BookingSlotsPanel({
   async function readJsonOrExplain<T>(res: Response): Promise<T> {
     const contentType = (res.headers.get('content-type') ?? '').toLowerCase();
     const text = await res.text();
-
-    // If we got the SPA HTML fallback, Vite/Express likely served index.html instead of an API.
     if (contentType.includes('text/html') || /^\s*</.test(text)) {
       throw new Error(t('bookingSlots.errors.noApi'));
     }
-
     try {
       return JSON.parse(text) as T;
     } catch {
@@ -115,7 +118,6 @@ export default function BookingSlotsPanel({
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error((await res.text()).slice(0, 300));
-      // Some implementations return the created row; others return ok:true. Either way, re-load.
       await load();
       setNote('');
     } catch (e: any) {
@@ -142,46 +144,39 @@ export default function BookingSlotsPanel({
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, borderColor: 'rgba(99,102,241,0.2)' }}>
-        <Stack direction="row" alignItems="center" gap={1}>
-          <CalendarMonthIcon sx={{ fontSize: 16, color: 'primary.main' }} />
-          <Typography variant="subtitle2" fontWeight={800} sx={{ fontSize: 13 }}>
-            {t('bookingSlots.heading')}
-          </Typography>
-          <Chip
-            size="small"
-            label={t('bookingSlots.chip')}
-            sx={{ ml: 'auto', height: 22, fontSize: 11, bgcolor: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)' }}
-          />
-        </Stack>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75, lineHeight: 1.5 }}>
-          <span dangerouslySetInnerHTML={{ __html: t('bookingSlots.intro') }} />
-        </Typography>
-      </Paper>
+    <AdminPanelLayout>
+      <AdminPageHeader
+        icon={<CalendarMonthIcon fontSize="small" />}
+        title={t('bookingSlots.heading')}
+        subtitle={t('bookingSlots.chip')}
+      />
 
-      <Box sx={{ flex: 1, overflow: 'auto', mt: 1.5 }}>
-        {error && (
-          <Alert severity="error" sx={{ mb: 1.5 }}>
-            {error}
-          </Alert>
-        )}
+      <Alert severity="info" icon={<CalendarMonthIcon fontSize="small" />}>
+        <span dangerouslySetInnerHTML={{ __html: t('bookingSlots.intro') }} />
+      </Alert>
 
-        <Stack gap={1.5}>
-          <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
+      {error && <Alert severity="error">{error}</Alert>}
+
+      <Stack direction={{ xs: 'column', md: 'row' }} gap={2} alignItems="stretch">
+        <Box sx={{ flex: { md: '0 0 320px' }, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <AdminSection
+            icon={<CalendarMonthIcon sx={{ fontSize: 16 }} />}
+            title={t('bookingSlots.heading')}
+            dense
+            bodyPadding={0.5}
+          >
             <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale={locale}>
               <DateCalendar
                 value={selectedDate}
                 onChange={(v) => { if (v) setSelectedDate(v); }}
               />
             </LocalizationProvider>
-          </Paper>
+          </AdminSection>
 
-          <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
-            <Typography variant="subtitle2" fontWeight={800} sx={{ fontSize: 13, mb: 1 }}>
-              {t('bookingSlots.markHeading')}
-            </Typography>
-
+          <AdminSection
+            icon={<EventAvailableIcon sx={{ fontSize: 16 }} />}
+            title={t('bookingSlots.markHeading')}
+          >
             <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale={locale}>
               <Stack gap={1.25}>
                 <TimePicker
@@ -203,45 +198,90 @@ export default function BookingSlotsPanel({
                   variant="contained"
                   onClick={addSlot}
                   disabled={saving}
-                  sx={{ fontWeight: 800 }}
+                  sx={{ fontWeight: 700 }}
                 >
                   {saving ? t('bookingSlots.saving') : t('bookingSlots.markCta')}
                 </Button>
               </Stack>
             </LocalizationProvider>
-          </Paper>
+          </AdminSection>
+        </Box>
 
-          <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
-              <Typography variant="subtitle2" fontWeight={800} sx={{ fontSize: 13 }}>
-                {t('bookingSlots.listHeading', { date: selectedDate.locale(locale).format('D MMM YYYY') })}
-              </Typography>
-              <Button size="small" variant="outlined" onClick={load} disabled={loading || saving}>
-                {t('bookingSlots.refresh')}
-              </Button>
-            </Stack>
-            <Divider sx={{ mb: 1.25 }} />
-
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <AdminSection
+            icon={<AccessTimeIcon sx={{ fontSize: 16 }} />}
+            title={t('bookingSlots.listHeading', { date: selectedDate.locale(locale).format('D MMM YYYY') })}
+            actions={
+              <>
+                <AdminStatusChip tone="primary" label={daySlots.length} />
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<RefreshIcon sx={{ fontSize: 16 }} />}
+                  onClick={load}
+                  disabled={loading || saving}
+                >
+                  {t('bookingSlots.refresh')}
+                </Button>
+              </>
+            }
+            bodyPadding={1.5}
+          >
             {loading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-                <CircularProgress size={18} />
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+                <CircularProgress size={20} />
               </Box>
             ) : daySlots.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                {t('bookingSlots.none')}
-              </Typography>
+              <Box sx={{ py: 4, textAlign: 'center' }}>
+                <AccessTimeIcon sx={{ fontSize: 32, color: 'text.disabled', mb: 1 }} />
+                <Typography variant="body2" color="text.secondary">
+                  {t('bookingSlots.none')}
+                </Typography>
+              </Box>
             ) : (
               <Stack gap={0.75}>
                 {daySlots.map((s) => (
-                  <Stack key={s.id} direction="row" alignItems="center" gap={1} sx={{ p: 1, borderRadius: 1.5, bgcolor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <Chip size="small" label={s.time} sx={{ fontWeight: 800 }} />
-                    <Typography variant="body2" color="text.secondary" sx={{ flex: 1, fontSize: 12 }}>
+                  <Stack
+                    key={s.id}
+                    direction="row"
+                    alignItems="center"
+                    gap={1.25}
+                    sx={{
+                      px: 1.5,
+                      py: 1,
+                      borderRadius: 2,
+                      bgcolor: 'rgba(255,255,255,0.025)',
+                      border: '1px solid rgba(255,255,255,0.06)',
+                      transition: 'background 0.15s ease',
+                      '&:hover': { bgcolor: 'rgba(99,102,241,0.06)' },
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        minWidth: 56,
+                        textAlign: 'center',
+                        py: 0.5,
+                        px: 1,
+                        borderRadius: 1.5,
+                        bgcolor: 'rgba(99,102,241,0.14)',
+                        color: 'primary.main',
+                        fontWeight: 800,
+                        fontSize: 13,
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
+                      {s.time}
+                    </Box>
+                    <Typography
+                      variant="body2"
+                      sx={{ flex: 1, color: s.note ? 'text.primary' : 'text.disabled', fontSize: 13 }}
+                    >
                       {s.note ?? '—'}
                     </Typography>
                     <Tooltip title={t('bookingSlots.remove')}>
                       <span>
-                        <IconButton size="small" onClick={() => deleteSlot(s.id)} disabled={saving}>
-                          <DeleteIcon fontSize="small" />
+                        <IconButton size="small" color="error" onClick={() => deleteSlot(s.id)} disabled={saving}>
+                          <DeleteIcon sx={{ fontSize: 16 }} />
                         </IconButton>
                       </span>
                     </Tooltip>
@@ -249,9 +289,9 @@ export default function BookingSlotsPanel({
                 ))}
               </Stack>
             )}
-          </Paper>
-        </Stack>
-      </Box>
-    </Box>
+          </AdminSection>
+        </Box>
+      </Stack>
+    </AdminPanelLayout>
   );
 }

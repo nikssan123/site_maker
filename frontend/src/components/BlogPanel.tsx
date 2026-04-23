@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Button, IconButton, Dialog, DialogTitle, DialogContent,
-  DialogActions, List, ListItem, ListItemText, Divider, CircularProgress,
-  Alert, Stack, Tooltip, Select, MenuItem, FormControl, InputLabel,
+  DialogActions, CircularProgress, Alert, Stack, Tooltip, Select, MenuItem,
+  FormControl, InputLabel,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -11,6 +11,15 @@ import ArticleIcon from '@mui/icons-material/Article';
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 import { AdminField, inferFieldType, renderField } from '../lib/adminFields';
+import {
+  AdminPageHeader,
+  AdminPanelLayout,
+  AdminSection,
+  AdminEmptyState,
+  AdminStatusChip,
+  AdminDataTable,
+  type AdminTableColumn,
+} from './AdminUI';
 
 const MAX_FILE_BYTES = 7 * 1024 * 1024;
 
@@ -184,129 +193,193 @@ export default function BlogPanel({ projectId, runPort }: Props) {
   };
 
   if (!runPort) {
-    return <Alert severity="info" sx={{ m: 2 }}>{t('catalog.notRunning')}</Alert>;
+    return (
+      <AdminPanelLayout>
+        <Alert severity="info">{t('catalog.notRunning')}</Alert>
+      </AdminPanelLayout>
+    );
   }
 
   if (modelsError || (models !== null && models.length === 0)) {
-    return <Alert severity="warning" sx={{ m: 2 }}>{t('catalog.notAvailable')}</Alert>;
+    return (
+      <AdminPanelLayout>
+        <Alert severity="warning">{t('catalog.notAvailable')}</Alert>
+      </AdminPanelLayout>
+    );
   }
 
   if (models === null) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
         <CircularProgress size={28} />
       </Box>
     );
   }
 
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-
-      {models.length > 1 && (
-        <Box sx={{ px: 2, pt: 1.5, pb: 1, flexShrink: 0 }}>
-          <FormControl size="small" fullWidth>
-            <InputLabel>{t('catalog.modelLabel')}</InputLabel>
-            <Select
-              label={t('catalog.modelLabel')}
-              value={activeModel ?? ''}
-              onChange={(e) => { setActiveModel(e.target.value); setRows(null); }}
-            >
-              {models.map((m) => (
-                <MenuItem key={m.name} value={m.name}>{m.name}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Box>
-      )}
-
-      <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
-        <Typography variant="body2" color="text.secondary" sx={{ flex: 1, fontWeight: 600 }}>
-          {loading ? '…' : `${rows?.length ?? 0} ${activeModel ?? ''}`}
-        </Typography>
-        <Button
-          size="small" variant="contained" startIcon={<AddIcon />} onClick={openAdd}
-          disabled={loading || fields.length === 0}
-          sx={{ fontSize: 11, py: 0.4 }}
-        >
-          {t('blog.addPost')}
-        </Button>
-      </Box>
-      <Divider />
-
-      {loading && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-          <CircularProgress size={28} />
-        </Box>
-      )}
-
-      {!loading && fetchError && (
-        <Stack spacing={1.5} sx={{ m: 2 }}>
-          <Alert severity="warning">{t('catalog.fetchError')}</Alert>
-          <Button size="small" onClick={() => activeModel && fetchRows(activeModel)}>
-            {t('common.retry')}
-          </Button>
-        </Stack>
-      )}
-
-      {!loading && !fetchError && rows?.length === 0 && (
-        <Box sx={{
-          flex: 1, display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', gap: 2, p: 3,
-        }}>
-          <ArticleIcon sx={{ fontSize: 48, color: 'text.disabled' }} />
-          <Typography variant="body2" color="text.secondary" textAlign="center">
-            {t('blog.empty')}
+  const columns: AdminTableColumn<Row>[] = [
+    {
+      key: titleField,
+      header: titleField,
+      minWidth: 220,
+      cell: (row) => (
+        <Stack direction="row" alignItems="center" gap={1.25}>
+          <Box
+            sx={{
+              width: 32,
+              height: 32,
+              borderRadius: 1.5,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              bgcolor: 'rgba(99,102,241,0.12)',
+              color: 'primary.main',
+              flexShrink: 0,
+            }}
+          >
+            <ArticleIcon sx={{ fontSize: 16 }} />
+          </Box>
+          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+            {String(row[titleField] ?? '—')}
           </Typography>
-          <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={openAdd}
-            disabled={fields.length === 0}>
-            {t('blog.addFirst')}
-          </Button>
-        </Box>
-      )}
+        </Stack>
+      ),
+    },
+  ];
+  if (authorField) {
+    columns.push({
+      key: authorField,
+      header: authorField,
+      truncate: 180,
+      cell: (row) => (
+        <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12 }}>
+          {String(row[authorField] ?? '—')}
+        </Typography>
+      ),
+    });
+  }
+  if (dateField) {
+    columns.push({
+      key: dateField,
+      header: dateField,
+      align: 'right',
+      width: 130,
+      cell: (row) => (
+        <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
+          {String(row[dateField] ?? '').slice(0, 10) || '—'}
+        </Typography>
+      ),
+    });
+  }
 
-      {!loading && !fetchError && rows && rows.length > 0 && (
-        <List dense disablePadding sx={{ flex: 1, overflow: 'auto' }}>
-          {rows.map((row, i) => (
-            <Box key={String(row.id ?? i)}>
-              <ListItem
-                sx={{ py: 1, pr: 10 }}
-                secondaryAction={
-                  <Stack direction="row" gap={0.5}>
-                    <Tooltip title={t('catalog.edit')}>
-                      <IconButton size="small" onClick={() => openEdit(row)}>
-                        <EditIcon sx={{ fontSize: 16 }} />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title={t('catalog.delete')}>
-                      <IconButton size="small" color="error" onClick={() => setDeleteTarget(row)}>
-                        <DeleteIcon sx={{ fontSize: 16 }} />
-                      </IconButton>
-                    </Tooltip>
-                  </Stack>
-                }
+  return (
+    <>
+      <AdminPanelLayout>
+        <AdminPageHeader
+          icon={<ArticleIcon fontSize="small" />}
+          title={t(`adminWorkspace.titles.blog`)}
+          subtitle={t(`adminWorkspace.subtitles.blog`)}
+          actions={
+            <>
+              <AdminStatusChip
+                tone="primary"
+                label={loading ? '…' : `${rows?.length ?? 0} ${activeModel ?? ''}`}
+              />
+              <Button
+                size="small"
+                variant="contained"
+                startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+                onClick={openAdd}
+                disabled={loading || fields.length === 0}
               >
-                <ListItemText
-                  primary={String(row[titleField] ?? '—')}
-                  secondary={
-                    [
-                      dateField ? String(row[dateField] ?? '').slice(0, 10) : null,
-                      authorField ? String(row[authorField] ?? '') : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ') || undefined
-                  }
-                  primaryTypographyProps={{ variant: 'body2', fontWeight: 600, noWrap: true }}
-                  secondaryTypographyProps={{ variant: 'caption' }}
-                />
-              </ListItem>
-              {i < rows.length - 1 && <Divider component="li" />}
-            </Box>
-          ))}
-        </List>
-      )}
+                {t('blog.addPost')}
+              </Button>
+            </>
+          }
+        />
+
+        {models.length > 1 && (
+          <AdminSection dense>
+            <FormControl size="small" fullWidth>
+              <InputLabel>{t('catalog.modelLabel')}</InputLabel>
+              <Select
+                label={t('catalog.modelLabel')}
+                value={activeModel ?? ''}
+                onChange={(e) => { setActiveModel(e.target.value); setRows(null); }}
+              >
+                {models.map((m) => (
+                  <MenuItem key={m.name} value={m.name}>{m.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </AdminSection>
+        )}
+
+        {loading && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+            <CircularProgress size={28} />
+          </Box>
+        )}
+
+        {!loading && fetchError && (
+          <AdminSection>
+            <Stack spacing={1.5}>
+              <Alert severity="warning">{t('catalog.fetchError')}</Alert>
+              <Box>
+                <Button size="small" variant="outlined" onClick={() => activeModel && fetchRows(activeModel)}>
+                  {t('common.retry')}
+                </Button>
+              </Box>
+            </Stack>
+          </AdminSection>
+        )}
+
+        {!loading && !fetchError && rows?.length === 0 && (
+          <AdminSection>
+            <AdminEmptyState
+              icon={<ArticleIcon sx={{ fontSize: 32 }} />}
+              title={t('blog.empty')}
+              action={
+                <Button
+                  variant="contained"
+                  size="small"
+                  startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+                  onClick={openAdd}
+                  disabled={fields.length === 0}
+                >
+                  {t('blog.addFirst')}
+                </Button>
+              }
+            />
+          </AdminSection>
+        )}
+
+        {!loading && !fetchError && rows && rows.length > 0 && (
+          <AdminSection bodyPadding={0}>
+            <AdminDataTable
+              columns={columns}
+              rows={rows}
+              rowKey={(row, i) => String(row.id ?? i)}
+              actions={(row) => (
+                <>
+                  <Tooltip title={t('catalog.edit')}>
+                    <IconButton size="small" onClick={() => openEdit(row)}>
+                      <EditIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title={t('catalog.delete')}>
+                    <IconButton size="small" color="error" onClick={() => setDeleteTarget(row)}>
+                      <DeleteIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
+                </>
+              )}
+            />
+          </AdminSection>
+        )}
+      </AdminPanelLayout>
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth
-        PaperProps={{ sx: { borderRadius: 2 } }}>
+        PaperProps={{ sx: { borderRadius: 3 } }}>
         <DialogTitle fontWeight={700} sx={{ fontSize: 16 }}>
           {editing ? t('blog.editPost') : t('blog.addPost')}
         </DialogTitle>
@@ -339,7 +412,7 @@ export default function BlogPanel({ projectId, runPort }: Props) {
       </Dialog>
 
       <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)}
-        PaperProps={{ sx: { borderRadius: 2 } }}>
+        PaperProps={{ sx: { borderRadius: 3 } }}>
         <DialogTitle fontWeight={700} sx={{ fontSize: 16 }}>{t('catalog.confirmDelete')}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary">
@@ -355,6 +428,6 @@ export default function BlogPanel({ projectId, runPort }: Props) {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </>
   );
 }

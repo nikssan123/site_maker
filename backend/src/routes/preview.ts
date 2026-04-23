@@ -1254,6 +1254,20 @@ router.get('/:projectId', requireAuth, async (req, res, next) => {
       return /(contact|inquiry|inquiries|message|messages|контакт|запит|запитван)/i.test(hay);
     })();
 
+    // Derive hosting status for the UI (free trial / active / expired / not activated).
+    const now = new Date();
+    const trialActive = !!project.hostingFreeUntil && project.hostingFreeUntil > now;
+    let hostingStatus: 'not_activated' | 'trial' | 'active' | 'expired';
+    if (!project.paid) {
+      hostingStatus = 'not_activated';
+    } else if (project.hostingSubscriptionId) {
+      hostingStatus = 'active';
+    } else if (trialActive) {
+      hostingStatus = 'trial';
+    } else {
+      hostingStatus = 'expired';
+    }
+
     return res.json({
       id: project.id,
       sessionId: project.sessionId,
@@ -1262,6 +1276,9 @@ router.get('/:projectId', requireAuth, async (req, res, next) => {
       fixAttempts: project.fixAttempts,
       paid: project.paid,
       hosted: isHostingActive(project),
+      hostingStatus,
+      hostingFreeUntil: project.hostingFreeUntil?.toISOString() ?? null,
+      hostingSubscriptionId: project.hostingSubscriptionId,
       customDomain: project.customDomain,
       customDomainVerifiedAt: project.customDomainVerifiedAt?.toISOString() ?? null,
       /** Server allows ZIP download without payment (ALLOW_UNPAID_PROJECT_DOWNLOAD=true). */

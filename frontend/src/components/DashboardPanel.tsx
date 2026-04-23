@@ -3,24 +3,25 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
   CircularProgress,
-  Paper,
   Pagination,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   Typography,
-  alpha,
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import BarChartIcon from '@mui/icons-material/BarChart';
+import StorageIcon from '@mui/icons-material/Storage';
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 import { AdminField, inferFieldType } from '../lib/adminFields';
+import {
+  AdminPageHeader,
+  AdminPanelLayout,
+  AdminSection,
+  AdminEmptyState,
+  AdminStatusChip,
+  AdminDataTable,
+  type AdminTableColumn,
+} from './AdminUI';
 
 interface Props {
   projectId: string;
@@ -82,16 +83,24 @@ export default function DashboardPanel({ projectId, runPort }: Props) {
   }, [models, runPort, fetchAll]);
 
   if (!runPort) {
-    return <Alert severity="info" sx={{ m: 2 }}>{t('catalog.notRunning')}</Alert>;
+    return (
+      <AdminPanelLayout>
+        <Alert severity="info">{t('catalog.notRunning')}</Alert>
+      </AdminPanelLayout>
+    );
   }
 
   if (modelsError || (models !== null && models.length === 0)) {
-    return <Alert severity="warning" sx={{ m: 2 }}>{t('catalog.notAvailable')}</Alert>;
+    return (
+      <AdminPanelLayout>
+        <Alert severity="warning">{t('catalog.notAvailable')}</Alert>
+      </AdminPanelLayout>
+    );
   }
 
   if (models === null || loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
         <CircularProgress size={28} />
       </Box>
     );
@@ -100,188 +109,114 @@ export default function DashboardPanel({ projectId, runPort }: Props) {
   const totalRecords = Object.values(modelData).reduce((sum, rows) => sum + rows.length, 0);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      <Paper
-        variant="outlined"
-        sx={{
-          mx: 1.5,
-          mt: 1.5,
-          p: 2,
-          borderRadius: 3,
-          borderColor: (theme) => alpha(theme.palette.primary.main, 0.22),
-          background: (theme) =>
-            `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.14)}, ${alpha(theme.palette.secondary.main, 0.08)})`,
-        }}
-      >
-        <Stack direction={{ xs: 'column', md: 'row' }} gap={1.5} alignItems={{ xs: 'flex-start', md: 'center' }}>
-          <Stack direction="row" alignItems="center" gap={1}>
-            <Box
-              sx={{
-                width: 40,
-                height: 40,
-                borderRadius: 2.5,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                bgcolor: (theme) => alpha(theme.palette.primary.main, 0.18),
-                color: 'primary.main',
-              }}
-            >
-              <BarChartIcon sx={{ fontSize: 20 }} />
-            </Box>
-            <Box>
-              <Typography variant="subtitle1" fontWeight={800}>
-                {t('dashboard.heading')}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {t('dashboard.subtitle')}
-              </Typography>
-            </Box>
-          </Stack>
-
-          <Stack direction="row" gap={1} sx={{ ml: { md: 'auto' }, flexWrap: 'wrap' }}>
-            <Chip label={`${models.length} ${t('dashboard.models')}`} size="small" />
-            <Chip label={`${totalRecords} ${t('dashboard.records')}`} size="small" />
+    <AdminPanelLayout>
+      <AdminPageHeader
+        icon={<BarChartIcon fontSize="small" />}
+        title={t('dashboard.heading')}
+        subtitle={t('dashboard.subtitle')}
+        actions={
+          <>
+            <AdminStatusChip tone="primary" label={`${models.length} ${t('dashboard.models')}`} />
+            <AdminStatusChip tone="secondary" label={`${totalRecords} ${t('dashboard.records')}`} />
             <Button
               size="small"
               variant="outlined"
-              startIcon={<RefreshIcon sx={{ fontSize: 14 }} />}
+              startIcon={<RefreshIcon sx={{ fontSize: 16 }} />}
               onClick={() => fetchAll(models)}
             >
               {t('dashboard.refresh')}
             </Button>
-          </Stack>
-        </Stack>
-      </Paper>
+          </>
+        }
+      />
 
-      <Box sx={{ flex: 1, overflow: 'auto', p: 1.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {models.map((m) => {
-          const rows = modelData[m.name] ?? [];
-          const totalPages = Math.max(1, Math.ceil(rows.length / MAX_ROWS));
-          const currentPage = Math.min(modelPages[m.name] ?? 1, totalPages);
-          const visibleRows = rows.slice((currentPage - 1) * MAX_ROWS, currentPage * MAX_ROWS);
-          const allKeys = m.fields
-            ? m.fields.map((f) => f.name)
-            : rows.length > 0
-            ? Object.keys(rows[0]).filter((k) => k !== 'id')
-            : [];
-          const displayCols = allKeys.slice(0, 4);
+      {models.map((m) => {
+        const rows = modelData[m.name] ?? [];
+        const totalPages = Math.max(1, Math.ceil(rows.length / MAX_ROWS));
+        const currentPage = Math.min(modelPages[m.name] ?? 1, totalPages);
+        const visibleRows = rows.slice((currentPage - 1) * MAX_ROWS, currentPage * MAX_ROWS);
+        const allKeys = m.fields
+          ? m.fields.map((f) => f.name)
+          : rows.length > 0
+          ? Object.keys(rows[0]).filter((k) => k !== 'id')
+          : [];
+        const displayCols = allKeys.slice(0, 4);
 
-          return (
-            <Paper
-              key={m.name}
-              variant="outlined"
-              sx={{
-                borderRadius: 3,
-                overflow: 'hidden',
-                borderColor: 'rgba(255,255,255,0.08)',
-                bgcolor: 'rgba(255,255,255,0.02)',
-                boxShadow: 'none',
-              }}
-            >
-              <Box
-                sx={{
-                  px: 2,
-                  py: 1.25,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1,
-                  bgcolor: (theme) => alpha(theme.palette.common.white, 0.03),
-                }}
-              >
-                <BarChartIcon sx={{ fontSize: 15, color: 'text.secondary' }} />
-                <Typography variant="subtitle2" fontWeight={800} sx={{ flex: 1 }}>
-                  {m.name}
+        const columns: AdminTableColumn<Row>[] = displayCols.map((col) => {
+          const fieldDef = m.fields?.find((f) => f.name === col);
+          const type = fieldDef?.type ?? inferFieldType(col);
+          return {
+            key: col,
+            header: col,
+            align: type === 'number' ? 'right' : 'left',
+            truncate: 220,
+            cell: (row) => formatCell(row[col], type),
+          };
+        });
+
+        return (
+          <AdminSection
+            key={m.name}
+            icon={<StorageIcon sx={{ fontSize: 16 }} />}
+            title={m.name}
+            actions={
+              <AdminStatusChip tone="neutral" label={`${rows.length} ${t('dashboard.records')}`} />
+            }
+            bodyPadding={0}
+          >
+            {rows.length === 0 ? (
+              <Box sx={{ px: 2, py: 3 }}>
+                <Typography variant="body2" color="text.secondary">
+                  {t('dashboard.noData')}
                 </Typography>
-                <Chip
-                  label={`${rows.length} ${t('dashboard.records')}`}
-                  size="small"
-                  sx={{ height: 22, fontSize: 11, '& .MuiChip-label': { px: 0.9 } }}
-                />
               </Box>
+            ) : displayCols.length === 0 ? null : (
+              <>
+                <AdminDataTable
+                  columns={columns}
+                  rows={visibleRows}
+                  rowKey={(row, i) => String(row.id ?? i)}
+                  size="small"
+                />
+                {rows.length > MAX_ROWS && (
+                  <Box
+                    sx={{
+                      px: 2,
+                      py: 1.25,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 1,
+                      flexWrap: 'wrap',
+                      borderTop: '1px solid rgba(255,255,255,0.05)',
+                    }}
+                  >
+                    <Typography variant="caption" color="text.disabled">
+                      {`${(currentPage - 1) * MAX_ROWS + 1}-${Math.min(currentPage * MAX_ROWS, rows.length)} / ${rows.length}`}
+                    </Typography>
+                    <Pagination
+                      count={totalPages}
+                      page={currentPage}
+                      onChange={(_, value) => setModelPages((prev) => ({ ...prev, [m.name]: value }))}
+                      size="small"
+                      color="primary"
+                    />
+                  </Box>
+                )}
+              </>
+            )}
+          </AdminSection>
+        );
+      })}
 
-              {rows.length === 0 ? (
-                <Box sx={{ px: 2, py: 2 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    {t('dashboard.noData')}
-                  </Typography>
-                </Box>
-              ) : displayCols.length === 0 ? null : (
-                <Box sx={{ overflowX: 'auto' }}>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        {displayCols.map((col) => (
-                          <TableCell key={col} sx={{ py: 1, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap' }}>
-                            {col}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {visibleRows.map((row, i) => (
-                        <TableRow key={String(row.id ?? i)}>
-                          {displayCols.map((col) => {
-                            const fieldDef = m.fields?.find((f) => f.name === col);
-                            const type = fieldDef?.type ?? inferFieldType(col);
-                            return (
-                              <TableCell
-                                key={col}
-                                sx={{
-                                  py: 1,
-                                  fontSize: 12,
-                                  maxWidth: 180,
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                }}
-                                align={type === 'number' ? 'right' : 'left'}
-                              >
-                                {formatCell(row[col], type)}
-                              </TableCell>
-                            );
-                          })}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  {rows.length > MAX_ROWS && (
-                    <Box
-                      sx={{
-                        px: 2,
-                        py: 1,
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: 1,
-                        flexWrap: 'wrap',
-                      }}
-                    >
-                      <Typography variant="caption" color="text.disabled">
-                        {`${(currentPage - 1) * MAX_ROWS + 1}-${Math.min(currentPage * MAX_ROWS, rows.length)} / ${rows.length}`}
-                      </Typography>
-                      <Pagination
-                        count={totalPages}
-                        page={currentPage}
-                        onChange={(_, value) => setModelPages((prev) => ({ ...prev, [m.name]: value }))}
-                        size="small"
-                        color="primary"
-                      />
-                    </Box>
-                  )}
-                </Box>
-              )}
-            </Paper>
-          );
-        })}
-
-        {models.length === 0 && (
-          <Stack alignItems="center" spacing={1.5} sx={{ py: 4 }}>
-            <BarChartIcon sx={{ fontSize: 48, color: 'text.disabled' }} />
-            <Typography variant="body2" color="text.secondary">{t('dashboard.noData')}</Typography>
-          </Stack>
-        )}
-      </Box>
-    </Box>
+      {models.length === 0 && (
+        <AdminSection>
+          <AdminEmptyState
+            icon={<BarChartIcon sx={{ fontSize: 32 }} />}
+            title={t('dashboard.noData')}
+          />
+        </AdminSection>
+      )}
+    </AdminPanelLayout>
   );
 }

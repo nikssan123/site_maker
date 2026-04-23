@@ -1,10 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Button, IconButton, Dialog, DialogTitle, DialogContent,
-  DialogActions, List, ListItem, ListItemText, ListItemAvatar,
-  Avatar, Divider, CircularProgress, Alert, Stack, Tooltip, Select,
-  MenuItem, FormControl, InputLabel,
-  Pagination,
+  DialogActions, Avatar, CircularProgress, Alert, Stack, Tooltip, Select,
+  MenuItem, FormControl, InputLabel, Pagination,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -14,6 +12,15 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 import { AdminField, inferFieldType, renderField } from '../lib/adminFields';
 import { fixMojibake } from '../lib/textEncoding';
+import {
+  AdminPageHeader,
+  AdminPanelLayout,
+  AdminSection,
+  AdminEmptyState,
+  AdminStatusChip,
+  AdminDataTable,
+  type AdminTableColumn,
+} from './AdminUI';
 
 const MAX_FILE_BYTES = 7 * 1024 * 1024; // 7 MB
 const ROWS_PER_PAGE = 25;
@@ -43,25 +50,21 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken, onData
   const { t } = useTranslation();
   const modelLabel = (name: string | null | undefined): string => fixMojibake(name ?? '');
 
-  // Step 1: discover models
   const [models, setModels] = useState<TypedModel[] | null>(null);
   const [modelsError, setModelsError] = useState(false);
   const [activeModel, setActiveModel] = useState<string | null>(null);
 
-  // Step 2: fetch rows for the active model
   const [rows, setRows] = useState<Row[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
 
-  // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Row | null>(null);
   const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
   const [saving, setSaving] = useState(false);
-  // Per-field upload state
   const [fieldUploading, setFieldUploading] = useState<Record<string, boolean>>({});
 
   const runtimeImageUrl = (raw: unknown): string => {
@@ -74,8 +77,6 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken, onData
   const displayImageUrl = (raw: unknown): string => {
     const url = runtimeImageUrl(raw);
     if (!url) return '';
-    // Avoid browser caching a 404 while the upload is being written / served.
-    // Only apply to our own uploaded assets so external URLs stay untouched.
     const prefix = `/preview-app/${projectId}/uploads/`;
     if (url.startsWith(prefix) && !url.includes('?')) {
       return `${url}?v=${Date.now()}`;
@@ -83,7 +84,6 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken, onData
     return url;
   };
 
-  // ── Discover models ──────────────────────────────────────────────
   useEffect(() => {
     api.getCatalogModels(projectId)
       .then(({ models: m }) => {
@@ -93,7 +93,6 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken, onData
       .catch(() => setModelsError(true));
   }, [projectId]);
 
-  // ── Fetch rows whenever active model or port changes ─────────────
   const fetchRows = useCallback(async (model: string) => {
     if (!runPort) return;
     setLoading(true);
@@ -118,10 +117,8 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken, onData
     else if (!runPort) { setRows([]); setLoading(false); }
   }, [activeModel, runPort, fetchRows]);
 
-  // ── Field inference ──────────────────────────────────────────────
   const activeTypedModel = models?.find((m) => m.name === activeModel) ?? null;
 
-  // Typed fields from config; fall back to keys from first data row
   const typedFields: AdminField[] = activeTypedModel?.fields
     ?? (rows && rows.length > 0
       ? Object.keys(rows[0]).filter((k) => k !== 'id').map((k) => ({ name: k, type: inferFieldType(k) }))
@@ -140,10 +137,13 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken, onData
   const imgField = typedFields.find((f) => f.type === 'image' || f.type === 'photo')?.name
     ?? fields.find((f) => /url|image|img|photo|pic|avatar|thumbnail/.test(f.toLowerCase()));
 
-  // ── Dialog helpers ───────────────────────────────────────────────
+  // A small set of additional preview columns (skip the ones already shown)
+  const detailColumns = fields
+    .filter((f) => f !== nameField && f !== priceField && f !== imgField)
+    .slice(0, 2);
+
   const openAdd = () => {
     setEditing(null);
-    // Use discovered fields if available, otherwise empty form with just one text field
     const f = fields.length > 0 ? fields : [];
     setFormValues(Object.fromEntries(f.map((k) => [k, ''])));
     setFormError(null);
@@ -230,178 +230,228 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken, onData
     }
   };
 
-  // ── Render ───────────────────────────────────────────────────────
-
   if (!runPort) {
-    return <Alert severity="info" sx={{ m: 2 }}>{t('catalog.notRunning')}</Alert>;
+    return (
+      <AdminPanelLayout>
+        <Alert severity="info">{t('catalog.notRunning')}</Alert>
+      </AdminPanelLayout>
+    );
   }
 
   if (modelsError || (models !== null && (models as TypedModel[]).length === 0)) {
-    return <Alert severity="warning" sx={{ m: 2 }}>{t('catalog.notAvailable')}</Alert>;
+    return (
+      <AdminPanelLayout>
+        <Alert severity="warning">{t('catalog.notAvailable')}</Alert>
+      </AdminPanelLayout>
+    );
   }
 
   if (models === null) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
         <CircularProgress size={28} />
       </Box>
     );
   }
 
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+  const formatCellText = (v: unknown): string => {
+    if (v === null || v === undefined || v === '') return '—';
+    return String(v).slice(0, 80);
+  };
 
-      {/* Model selector (only when more than one model detected) */}
-      {models.length > 1 && (
-        <Box sx={{ px: 2, pt: 1.5, pb: 1, flexShrink: 0 }}>
-          <FormControl size="small" fullWidth>
-            <InputLabel>{t('catalog.modelLabel')}</InputLabel>
-            <Select
-              label={t('catalog.modelLabel')}
-              value={activeModel ?? ''}
-              onChange={(e) => {
-                setActiveModel(e.target.value);
-                setRows(null);
-                setPage(1);
-              }}
-            >
-              {models.map((m) => (
-                <MenuItem key={m.name} value={m.name}>{modelLabel(m.name)}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Box>
-      )}
-
-      {/* Toolbar */}
-      <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
-        <Typography variant="body2" color="text.secondary" sx={{ flex: 1, fontWeight: 600 }}>
-          {loading ? '…' : `${rows?.length ?? 0} ${modelLabel(activeModel)}`}
+  const columns: AdminTableColumn<Row>[] = [];
+  if (imgField) {
+    columns.push({
+      key: '__image',
+      header: '',
+      width: 64,
+      cell: (row) => (
+        <Avatar
+          src={displayImageUrl(row[imgField])}
+          variant="rounded"
+          sx={{ width: 40, height: 40, bgcolor: 'rgba(255,255,255,0.04)' }}
+        >
+          <StorefrontIcon sx={{ fontSize: 20 }} />
+        </Avatar>
+      ),
+    });
+  }
+  columns.push({
+    key: nameField,
+    header: nameField,
+    minWidth: 180,
+    cell: (row) => (
+      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+        {String(row[nameField] ?? '—')}
+      </Typography>
+    ),
+  });
+  detailColumns.forEach((col) => {
+    columns.push({
+      key: col,
+      header: col,
+      truncate: 200,
+      cell: (row) => (
+        <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12 }}>
+          {formatCellText(row[col])}
         </Typography>
-        <Button
-          size="small"
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={openAdd}
-          disabled={loading || fields.length === 0}
-          sx={{ fontSize: 11, py: 0.4 }}
-        >
-          {t('catalog.addProduct')}
-        </Button>
-      </Box>
-      <Divider />
+      ),
+    });
+  });
+  if (priceField) {
+    columns.push({
+      key: priceField,
+      header: priceField,
+      align: 'right',
+      width: 110,
+      cell: (row) => (
+        <Typography variant="body2" sx={{ fontWeight: 700, color: 'secondary.main' }}>
+          {formatCellText(row[priceField])}
+        </Typography>
+      ),
+    });
+  }
 
-      {/* Loading */}
-      {loading && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-          <CircularProgress size={28} />
-        </Box>
-      )}
-
-      {/* Fetch error */}
-      {!loading && fetchError && (
-        <Stack spacing={1.5} sx={{ m: 2 }}>
-          <Alert severity="warning">{t('catalog.fetchError')}</Alert>
-          <Button size="small" onClick={() => activeModel && fetchRows(activeModel)}>
-            {t('common.retry')}
-          </Button>
-        </Stack>
-      )}
-
-      {/* Empty state */}
-      {!loading && !fetchError && rows?.length === 0 && (
-        <Box sx={{
-          flex: 1, display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', gap: 2, p: 3,
-        }}>
-          <StorefrontIcon sx={{ fontSize: 48, color: 'text.disabled' }} />
-          <Typography variant="body2" color="text.secondary" textAlign="center">
-            {t('catalog.empty')}
-          </Typography>
-          <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={openAdd}
-            disabled={fields.length === 0}>
-            {t('catalog.addFirst')}
-          </Button>
-          {fields.length === 0 && (
-            <Typography variant="caption" color="text.disabled" textAlign="center">
-              {t('catalog.noFieldsHint')}
-            </Typography>
-          )}
-        </Box>
-      )}
-
-      {/* Product list */}
-      {!loading && !fetchError && rows && rows.length > 0 && (
-        <List dense disablePadding sx={{ flex: 1, overflow: 'auto' }}>
-          {pagedRows.map((row, i) => (
-            <Box key={String(row.id ?? i)}>
-              <ListItem
-                sx={{ py: 1, pr: 10 }}
-                secondaryAction={
-                  <Stack direction="row" gap={0.5}>
-                    <Tooltip title={t('catalog.edit')}>
-                      <IconButton size="small" onClick={() => openEdit(row)}>
-                        <EditIcon sx={{ fontSize: 16 }} />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title={t('catalog.delete')}>
-                      <IconButton size="small" color="error" onClick={() => setDeleteTarget(row)}>
-                        <DeleteIcon sx={{ fontSize: 16 }} />
-                      </IconButton>
-                    </Tooltip>
-                  </Stack>
-                }
+  return (
+    <>
+      <AdminPanelLayout>
+        <AdminPageHeader
+          icon={<StorefrontIcon fontSize="small" />}
+          title={t(`adminWorkspace.titles.catalog`) || modelLabel(activeModel)}
+          subtitle={t(`adminWorkspace.subtitles.catalog`)}
+          actions={
+            <>
+              <AdminStatusChip
+                tone="primary"
+                label={loading ? '…' : `${rows?.length ?? 0} ${modelLabel(activeModel)}`}
+              />
+              <Button
+                size="small"
+                variant="contained"
+                startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+                onClick={openAdd}
+                disabled={loading || fields.length === 0}
               >
-                {imgField && (
-                  <ListItemAvatar sx={{ minWidth: 48 }}>
-                    <Avatar src={displayImageUrl(row[imgField])} variant="rounded"
-                      sx={{ width: 36, height: 36 }}>
-                      <StorefrontIcon sx={{ fontSize: 18 }} />
-                    </Avatar>
-                  </ListItemAvatar>
-                )}
-                <ListItemText
-                  primary={String(row[nameField] ?? '—')}
-                  secondary={priceField != null ? String(row[priceField]) : undefined}
-                  primaryTypographyProps={{ variant: 'body2', fontWeight: 600, noWrap: true }}
-                  secondaryTypographyProps={{ variant: 'caption' }}
+                {t('catalog.addProduct')}
+              </Button>
+            </>
+          }
+        />
+
+        {models.length > 1 && (
+          <AdminSection dense>
+            <FormControl size="small" fullWidth>
+              <InputLabel>{t('catalog.modelLabel')}</InputLabel>
+              <Select
+                label={t('catalog.modelLabel')}
+                value={activeModel ?? ''}
+                onChange={(e) => {
+                  setActiveModel(e.target.value);
+                  setRows(null);
+                  setPage(1);
+                }}
+              >
+                {models.map((m) => (
+                  <MenuItem key={m.name} value={m.name}>{modelLabel(m.name)}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </AdminSection>
+        )}
+
+        {loading && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+            <CircularProgress size={28} />
+          </Box>
+        )}
+
+        {!loading && fetchError && (
+          <AdminSection>
+            <Stack spacing={1.5}>
+              <Alert severity="warning">{t('catalog.fetchError')}</Alert>
+              <Box>
+                <Button size="small" variant="outlined" onClick={() => activeModel && fetchRows(activeModel)}>
+                  {t('common.retry')}
+                </Button>
+              </Box>
+            </Stack>
+          </AdminSection>
+        )}
+
+        {!loading && !fetchError && rows?.length === 0 && (
+          <AdminSection>
+            <AdminEmptyState
+              icon={<StorefrontIcon sx={{ fontSize: 32 }} />}
+              title={t('catalog.empty')}
+              action={
+                <Button
+                  variant="contained"
+                  size="small"
+                  startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+                  onClick={openAdd}
+                  disabled={fields.length === 0}
+                >
+                  {t('catalog.addFirst')}
+                </Button>
+              }
+              hint={fields.length === 0 ? t('catalog.noFieldsHint') : undefined}
+            />
+          </AdminSection>
+        )}
+
+        {!loading && !fetchError && rows && rows.length > 0 && (
+          <AdminSection bodyPadding={0}>
+            <AdminDataTable
+              columns={columns}
+              rows={pagedRows}
+              rowKey={(row, i) => String(row.id ?? i)}
+              actions={(row) => (
+                <>
+                  <Tooltip title={t('catalog.edit')}>
+                    <IconButton size="small" onClick={() => openEdit(row)}>
+                      <EditIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title={t('catalog.delete')}>
+                    <IconButton size="small" color="error" onClick={() => setDeleteTarget(row)}>
+                      <DeleteIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
+                </>
+              )}
+            />
+            {totalPages > 1 && (
+              <Box
+                sx={{
+                  px: 2,
+                  py: 1.25,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 1,
+                  flexWrap: 'wrap',
+                  borderTop: '1px solid rgba(255,255,255,0.05)',
+                }}
+              >
+                <Typography variant="caption" color="text.disabled">
+                  {`${(currentPage - 1) * ROWS_PER_PAGE + 1}-${Math.min(currentPage * ROWS_PER_PAGE, rows.length)} / ${rows.length}`}
+                </Typography>
+                <Pagination
+                  count={totalPages}
+                  page={currentPage}
+                  onChange={(_, value) => setPage(value)}
+                  size="small"
+                  color="primary"
                 />
-              </ListItem>
-              {i < pagedRows.length - 1 && <Divider component="li" />}
-            </Box>
-          ))}
-        </List>
-      )}
-      {!loading && !fetchError && rows && rows.length > 0 && totalPages > 1 && (
-        <Box
-          sx={{
-            px: 2,
-            py: 1.25,
-            borderTop: '1px solid',
-            borderColor: 'divider',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: 1,
-            flexWrap: 'wrap',
-          }}
-        >
-          <Typography variant="caption" color="text.secondary">
-            {`${(currentPage - 1) * ROWS_PER_PAGE + 1}-${Math.min(currentPage * ROWS_PER_PAGE, rows.length)} / ${rows.length}`}
-          </Typography>
-          <Pagination
-            count={totalPages}
-            page={currentPage}
-            onChange={(_, value) => setPage(value)}
-            size="small"
-            color="primary"
-          />
-        </Box>
-      )}
+              </Box>
+            )}
+          </AdminSection>
+        )}
+      </AdminPanelLayout>
 
       {/* Add / Edit dialog */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth
-        PaperProps={{ sx: { borderRadius: 2 } }}>
+        PaperProps={{ sx: { borderRadius: 3 } }}>
         <DialogTitle fontWeight={700} sx={{ fontSize: 16 }}>
           {editing ? t('catalog.editProduct') : t('catalog.addProduct')}
         </DialogTitle>
@@ -435,7 +485,7 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken, onData
 
       {/* Delete confirmation */}
       <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)}
-        PaperProps={{ sx: { borderRadius: 2 } }}>
+        PaperProps={{ sx: { borderRadius: 3 } }}>
         <DialogTitle fontWeight={700} sx={{ fontSize: 16 }}>{t('catalog.confirmDelete')}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary">
@@ -451,6 +501,6 @@ export default function CatalogPanel({ projectId, runPort, adminApiToken, onData
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </>
   );
 }
