@@ -1,13 +1,6 @@
-import { extractFilesFromCodegenResponse } from '../lib/extractCodegenJson';
-import { getChatClient, getCodeClient, ChatMessage } from './aiClient';
+import { getChatClient, getCodeClient, type ToolSchema } from './aiClient';
 import { logTokens } from './tokenAccountingService';
-import {
-  ITERATOR_SYSTEM,
-  buildIteratorPrompt,
-  CODE_GEN_JSON_REPAIR_SYSTEM,
-  CODE_GEN_JSON_REPAIR_USER,
-} from '../lib/prompts';
-import { BG_CODEGEN_RETRY } from '../lib/localePrompt';
+import { ITERATOR_SYSTEM, buildIteratorPrompt } from '../lib/prompts';
 import { writeProjectFiles } from '../lib/fileWriter';
 import { writeAdminTokenFile } from '../lib/adminToken';
 import { installDeps, buildProject, runProject, stopProject } from './appRunner';
@@ -25,8 +18,36 @@ import {
   ITERATE_READING_REQUEST,
   ITERATE_SAVING_BUILD,
   ITERATE_VERIFY_BUILD,
-  GEN_JSON_REPAIR_INITIAL,
 } from '../lib/generationFriendly';
+
+/** Forced tool — model emits only the files that need to change for the requested improvement. */
+const ITERATE_TOOL: ToolSchema<{ files: Record<string, string> }> = {
+  name: 'emit_changed_files',
+  description:
+    'Emit ONLY the files that need to change to apply the requested improvement. Each key is a project-relative path, each value is the full new file contents.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      files: {
+        type: 'object',
+        description: 'Map from project-relative file path to full new file contents.',
+        additionalProperties: { type: 'string' },
+      },
+    },
+    required: ['files'],
+  },
+};
+
+function normalizeFilesPayload(input: unknown): Record<string, string> | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  const raw = (input as { files?: unknown }).files;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === 'string') out[k] = v;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
 
 function isSafeFrontendExtraFile(p: string): boolean {
   return (
@@ -258,86 +279,60 @@ Rules:
     idx++;
   }, 12000);
 
-  let raw: string;
-  let rawRetry = '';
+  let changedFiles: Record<string, string> | null = null;
+  let lastIterError: string | undefined;
   try {
-    const codegenResult = await ai.completeWithUsage(
-      [{ role: 'user', content: prompt }],
-      ITERATOR_SYSTEM,
-      { maxTokens: iterMaxTokens },
-    );
-    raw = codegenResult.text;
-    await logTokens({
-      userId,
-      projectId: project.id,
-      provider: codegenResult.provider,
-      model: codegenResult.model,
-      endpoint: 'iterate.codegen',
-      usage: codegenResult.usage,
-    });
+    try {
+      const codegenResult = await ai.completeStructured(
+        [{ role: 'user', content: prompt }],
+        ITERATOR_SYSTEM,
+        ITERATE_TOOL,
+        { maxTokens: iterMaxTokens },
+      );
+      changedFiles = normalizeFilesPayload(codegenResult.input);
+      await logTokens({
+        userId,
+        projectId: project.id,
+        provider: codegenResult.provider,
+        model: codegenResult.model,
+        endpoint: 'iterate.codegen',
+        usage: codegenResult.usage,
+      });
+    } catch (e) {
+      lastIterError = e instanceof Error ? e.message : String(e);
+    }
+
+    // One soft retry on hard failure (timeout / empty tool input)
+    if (!changedFiles) {
+      try {
+        const retryResult = await ai.completeStructured(
+          [{ role: 'user', content: prompt }],
+          ITERATOR_SYSTEM,
+          ITERATE_TOOL,
+          { maxTokens: iterMaxTokens },
+        );
+        changedFiles = normalizeFilesPayload(retryResult.input);
+        await logTokens({
+          userId,
+          projectId: project.id,
+          provider: retryResult.provider,
+          model: retryResult.model,
+          endpoint: 'iterate.codegen',
+          usage: retryResult.usage,
+        });
+      } catch (e) {
+        lastIterError = e instanceof Error ? e.message : String(e);
+      }
+    }
   } finally {
     clearInterval(hintTimer);
   }
 
-  let changedFiles = extractFilesFromCodegenResponse(raw);
-
-  // One retry: tell Claude its output was rejected and ask for pure JSON
   if (!changedFiles) {
-    try {
-      const retryMessages: ChatMessage[] = [
-        { role: 'user', content: prompt },
-        { role: 'assistant', content: raw },
-        { role: 'user', content: BG_CODEGEN_RETRY },
-      ];
-      const retryResult = await ai.completeWithUsage(retryMessages, ITERATOR_SYSTEM, { maxTokens: iterMaxTokens });
-      rawRetry = retryResult.text;
-      await logTokens({
-        userId,
-        projectId: project.id,
-        provider: retryResult.provider,
-        model: retryResult.model,
-        endpoint: 'iterate.codegen',
-        usage: retryResult.usage,
-      });
-      changedFiles = extractFilesFromCodegenResponse(rawRetry);
-      if (!changedFiles) raw = rawRetry;
-    } catch {
-      /* ignore retry failure */
-    }
-  }
-
-  // Third pass: strict JSON repair (same pipeline as initial codegen) — fixes fences, prose, minor escaping issues
-  if (!changedFiles || Object.keys(changedFiles).length === 0) {
-    const repairCap = parseInt(process.env.CODE_GEN_REPAIR_INPUT_CHARS ?? '120000', 10);
-    const repairBody = `# First model output\n${raw.slice(0, repairCap)}\n\n---\n\n# Second model output\n${rawRetry.slice(0, repairCap)}`;
-    const repairUser = `${CODE_GEN_JSON_REPAIR_USER}\n\n${repairBody}`;
-    const repairMaxTokens = Math.max(
-      iterMaxTokens,
-      parseInt(process.env.CODE_GEN_MAX_TOKENS ?? '16384', 10),
+    await failIteration(
+      'ИИ върна невалиден отговор. Моля, опитайте пак.',
+      lastIterError,
     );
-    try {
-      await publishEvent(sessionId, { type: 'user_progress', message: GEN_JSON_REPAIR_INITIAL });
-      const repairResult = await ai.completeWithUsage(
-        [{ role: 'user', content: repairUser }],
-        CODE_GEN_JSON_REPAIR_SYSTEM,
-        { maxTokens: repairMaxTokens },
-      );
-      await logTokens({
-        userId,
-        projectId: project.id,
-        provider: repairResult.provider,
-        model: repairResult.model,
-        endpoint: 'iterate.repair',
-        usage: repairResult.usage,
-      });
-      changedFiles = extractFilesFromCodegenResponse(repairResult.text);
-    } catch {
-      /* ignore */
-    }
-  }
-
-  if (!changedFiles || Object.keys(changedFiles).length === 0) {
-    await failIteration('ИИ върна невалиден отговор (очаква се JSON {"files":{...}})');
     return;
   }
 

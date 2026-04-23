@@ -1,5 +1,4 @@
-import { getCodeClient } from './aiClient';
-import { extractFilesFromCodegenResponse } from '../lib/extractCodegenJson';
+import { getCodeClient, type ToolSchema } from './aiClient';
 import { FIX_SYSTEM, buildFixPrompt } from '../lib/prompts';
 import { writeProjectFiles } from '../lib/fileWriter';
 import { installDeps, buildProject, runProject, RunnerResult } from './appRunner';
@@ -10,6 +9,35 @@ const FIX_MAX_OUTPUT_TOKENS_BUILD = parseInt(process.env.FIX_MAX_OUTPUT_TOKENS ?
 const FIX_MAX_OUTPUT_TOKENS_RUN = parseInt(process.env.FIX_MAX_OUTPUT_TOKENS_RUN ?? '8192', 10);
 const FIX_ERROR_LOG_MAX = 3000;
 const FIX_FILE_CONTENT_MAX = 6000;
+
+/** Same shape as the codegen tool — emits only the files that need to change. */
+const FIX_TOOL: ToolSchema<{ files: Record<string, string> }> = {
+  name: 'emit_fixed_files',
+  description:
+    'Emit the files that need to change to fix the build/run failure. Each key is a project-relative path, each value is the full new file contents.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      files: {
+        type: 'object',
+        description: 'Map from project-relative file path to full new file contents.',
+        additionalProperties: { type: 'string' },
+      },
+    },
+    required: ['files'],
+  },
+};
+
+function normalizeFilesPayload(input: unknown): Record<string, string> | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  const raw = (input as { files?: unknown }).files;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === 'string') out[k] = v;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
 
 function isImportResolutionError(log: string): boolean {
   return /failed to resolve import|could not resolve|module not found/i.test(log);
@@ -59,29 +87,22 @@ export async function autoFix(ctx: FixContext): Promise<RunnerResult> {
       : ctx.errorLog;
 
     const prompt = buildFixPrompt(truncatedLog, truncatedFiles, ctx.failedStep);
-    const raw = await ai.complete(
-      [{ role: 'user', content: prompt }],
-      FIX_SYSTEM,
-      { maxTokens: ctx.failedStep === 'run' ? FIX_MAX_OUTPUT_TOKENS_RUN : FIX_MAX_OUTPUT_TOKENS_BUILD },
-    );
 
-    let fixedFiles = extractFilesFromCodegenResponse(raw);
-    if (!fixedFiles) {
-      try {
-        const parsed = JSON.parse(raw.trim()) as { files?: Record<string, unknown> };
-        if (parsed.files && typeof parsed.files === 'object' && !Array.isArray(parsed.files)) {
-          const out: Record<string, string> = {};
-          for (const [k, v] of Object.entries(parsed.files)) {
-            if (typeof v === 'string') out[k] = v;
-          }
-          fixedFiles = Object.keys(out).length > 0 ? out : null;
-        }
-      } catch {
-        /* ignore */
-      }
+    let fixedFiles: Record<string, string> | null;
+    try {
+      const result = await ai.completeStructured(
+        [{ role: 'user', content: prompt }],
+        FIX_SYSTEM,
+        FIX_TOOL,
+        { maxTokens: ctx.failedStep === 'run' ? FIX_MAX_OUTPUT_TOKENS_RUN : FIX_MAX_OUTPUT_TOKENS_BUILD },
+      );
+      fixedFiles = normalizeFilesPayload(result.input);
+    } catch (e) {
+      console.log(`[autofix] project=${ctx.projectId} attempt=${attempt} — tool call failed: ${e instanceof Error ? e.message : String(e)}`);
+      continue;
     }
 
-    if (!fixedFiles || Object.keys(fixedFiles).length === 0) {
+    if (!fixedFiles) {
       console.log(`[autofix] project=${ctx.projectId} attempt=${attempt} — Claude returned no files, skipping`);
       continue;
     }

@@ -25,6 +25,30 @@ export interface CompletionWithUsage {
   model: string;
 }
 
+/** Schema description for a single tool the model is forced to call. */
+export interface ToolSchema<_T> {
+  name: string;
+  description: string;
+  inputSchema: {
+    type: 'object';
+    properties: Record<string, unknown>;
+    required?: string[];
+    [k: string]: unknown;
+  };
+}
+
+export interface CompleteStructuredOptions extends CompleteOptions {
+  /** Cache the system prompt for reuse (5 min TTL). Default true. */
+  cacheSystem?: boolean;
+}
+
+export interface StructuredResult<T> {
+  input: T;
+  usage: TokenUsage;
+  provider: 'anthropic' | 'openai';
+  model: string;
+}
+
 interface AIProvider {
   complete(messages: ChatMessage[], system: string, options?: CompleteOptions): Promise<string>;
   /** Same as complete() but also returns token usage + provider/model for accounting. */
@@ -33,6 +57,16 @@ interface AIProvider {
     system: string,
     options?: CompleteOptions,
   ): Promise<CompletionWithUsage>;
+  /**
+   * Force the model to emit a single tool call matching the given schema and return
+   * its parsed input. Eliminates JSON-extraction failures from preamble/markdown.
+   */
+  completeStructured<T>(
+    messages: ChatMessage[],
+    system: string,
+    tool: ToolSchema<T>,
+    options?: CompleteStructuredOptions,
+  ): Promise<StructuredResult<T>>;
   stream(
     messages: ChatMessage[],
     system: string,
@@ -102,6 +136,54 @@ class ClaudeProvider implements AIProvider {
     }
     return full;
   }
+
+  async completeStructured<T>(
+    messages: ChatMessage[],
+    system: string,
+    tool: ToolSchema<T>,
+    options?: CompleteStructuredOptions,
+  ): Promise<StructuredResult<T>> {
+    const maxTokens = options?.maxTokens ?? parseInt(process.env.CLAUDE_MAX_OUTPUT_TOKENS ?? '8192', 10);
+    const cacheSystem = options?.cacheSystem !== false;
+
+    // System block array form is required to attach cache_control. Tool definition
+    // is also cached so the schema doesn't recount toward input tokens on each call.
+    const systemParam = cacheSystem
+      ? [{ type: 'text' as const, text: system, cache_control: { type: 'ephemeral' as const } }]
+      : system;
+
+    const stream = this.client.messages.stream({
+      model: this.model,
+      max_tokens: maxTokens,
+      system: systemParam,
+      messages,
+      tools: [{
+        name: tool.name,
+        description: tool.description,
+        input_schema: tool.inputSchema,
+        ...(cacheSystem ? { cache_control: { type: 'ephemeral' as const } } : {}),
+      }],
+      tool_choice: { type: 'tool', name: tool.name, disable_parallel_tool_use: true },
+    });
+
+    const final = await stream.finalMessage();
+    const toolBlock = final.content.find((b) => b.type === 'tool_use');
+    if (!toolBlock || toolBlock.type !== 'tool_use') {
+      throw new Error(
+        `Claude did not emit a tool_use block (stop_reason=${final.stop_reason ?? 'unknown'})`,
+      );
+    }
+
+    return {
+      input: toolBlock.input as T,
+      usage: {
+        inputTokens: final.usage?.input_tokens ?? 0,
+        outputTokens: final.usage?.output_tokens ?? 0,
+      },
+      provider: 'anthropic',
+      model: this.model,
+    };
+  }
 }
 
 class OpenAIProvider implements AIProvider {
@@ -140,6 +222,17 @@ class OpenAIProvider implements AIProvider {
       provider: 'openai',
       model: this.model,
     };
+  }
+
+  async completeStructured<T>(
+    _messages: ChatMessage[],
+    _system: string,
+    _tool: ToolSchema<T>,
+    _options?: CompleteStructuredOptions,
+  ): Promise<StructuredResult<T>> {
+    // Codegen / fixer / iterator are Claude-only paths today; if you wire OpenAI
+    // into one of those, implement this with `tools` + `tool_choice` on chat.completions.
+    throw new Error('completeStructured is not implemented for the OpenAI provider');
   }
 
   async stream(

@@ -1,12 +1,5 @@
-import { getCodeClient } from './aiClient';
-import {
-  CODE_GEN_JSON_REPAIR_SYSTEM,
-  CODE_GEN_JSON_REPAIR_USER,
-  CODE_GEN_RETRY_USER,
-  CODE_GEN_SYSTEM,
-  buildCodeGenPrompt,
-} from '../lib/prompts';
-import { extractFilesFromCodegenResponse } from '../lib/extractCodegenJson';
+import { getCodeClient, type ToolSchema } from './aiClient';
+import { CODE_GEN_SYSTEM, buildCodeGenPrompt } from '../lib/prompts';
 import { writeProjectFiles } from '../lib/fileWriter';
 import { writeAdminTokenFile } from '../lib/adminToken';
 import { installDeps, buildProject, runProject } from './appRunner';
@@ -26,13 +19,8 @@ import {
   GEN_FIXING_FRIENDLY,
   GEN_INITIAL_CODEGEN,
   GEN_INITIAL_RETRY,
-  GEN_JSON_REPAIR_INITIAL,
-  GEN_JSON_REPAIR_ROTATING,
   GEN_RESUME_CONTINUING,
-  GEN_INVALID_JSON_DETAIL,
-  GEN_INVALID_JSON_USER_MSG,
   GEN_SSE_CODEGEN_FAIL,
-  GEN_SSE_CODEGEN_RETRY_FAIL,
   GEN_SSE_FIX_BUILD_FAIL,
   GEN_SSE_FIX_RUN_FAIL,
   GEN_SSE_INSTALL_FAIL,
@@ -43,17 +31,43 @@ import {
   GEN_WRAP_UP_STEP,
   genUserMsgBuildFailAfterFix,
   genUserMsgBuildStopped,
-  genUserMsgBuildStoppedRetry,
   genUserMsgGenerationFailed,
   genUserMsgInstallFail,
   genUserMsgRunFailAfterFix,
 } from '../lib/generationFriendly';
 
-/** Full-stack JSON blobs need a large budget; 8k often truncates mid-object and breaks JSON.parse. */
 const CODE_GEN_MAX_TOKENS = parseInt(process.env.CODE_GEN_MAX_TOKENS ?? '32768', 10);
 const CODE_GEN_AI_TIMEOUT_MS = parseInt(process.env.CODE_GEN_AI_TIMEOUT_MS ?? '600000', 10);
-const CODE_GEN_REPAIR_INPUT_CHARS = parseInt(process.env.CODE_GEN_REPAIR_INPUT_CHARS ?? '120000', 10);
 const MAX_MSG = 12_000;
+
+/** Forced tool — guarantees the model returns a structured files map instead of free-form text. */
+const FILES_TOOL: ToolSchema<{ files: Record<string, string> }> = {
+  name: 'emit_project_files',
+  description:
+    'Emit the complete set of files for the generated project. Each key in `files` is a project-relative path (e.g. "src/App.tsx") and each value is the full file contents as a string.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      files: {
+        type: 'object',
+        description: 'Map from project-relative file path to full file contents.',
+        additionalProperties: { type: 'string' },
+      },
+    },
+    required: ['files'],
+  },
+};
+
+function normalizeFilesPayload(input: unknown): Record<string, string> | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  const raw = (input as { files?: unknown }).files;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === 'string') out[k] = v;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
 const LOCAL_IMPORT_RE = /import\s+(?:[\s\S]*?\s+from\s+)?['"](\.{1,2}\/[^'"]+)['"]|import\(\s*['"](\.{1,2}\/[^'"]+)['"]\s*\)/g;
 const LOCAL_IMPORT_EXTENSIONS = ['', '.ts', '.tsx', '.js', '.jsx', '.json', '.css'];
 
@@ -137,29 +151,31 @@ async function repairMissingLocalImports(
   if (missing.length === 0) return files;
   const currentFiles = Object.entries(files)
     .map(([filePath, content]) => `--- ${filePath} ---\n${content.slice(0, 80_000)}`)
-    .join('\n\n')
-    .slice(0, CODE_GEN_REPAIR_INPUT_CHARS);
+    .join('\n\n');
 
   const repairPrompt = `${userContent}
 
 ---
 
-The generated JSON has missing local relative imports and must be repaired before build.
+The previously emitted file set has unresolved local imports and must be repaired before build.
 Missing imports:
 ${missing.map((m) => `- ${m}`).join('\n')}
 
 Current generated files:
 ${currentFiles}
 
-Return one complete JSON object {"files":{...}} for the entire app.
+Re-emit the COMPLETE app via the emit_project_files tool.
 Every ./ or ../ import must resolve to an emitted file path exactly, including Linux case.
 If many src/App.tsx component imports are missing, rewrite src/App.tsx to inline those components instead of importing absent files.
 Preserve the app's visible design and behavior as much as possible. Do not drop major pages, data models, routes, payment/email hooks, or admin markers.`;
 
-  const rawRepair = await ai.complete([{ role: 'user', content: repairPrompt }], CODE_GEN_SYSTEM, {
-    maxTokens: CODE_GEN_MAX_TOKENS,
-  });
-  const repaired = extractFilesFromCodegenResponse(rawRepair);
+  const result = await ai.completeStructured(
+    [{ role: 'user', content: repairPrompt }],
+    CODE_GEN_SYSTEM,
+    FILES_TOOL,
+    { maxTokens: CODE_GEN_MAX_TOKENS },
+  );
+  const repaired = normalizeFilesPayload(result.input);
   if (!repaired) return null;
   return findMissingLocalImports(repaired).length === 0 ? repaired : null;
 }
@@ -455,98 +471,50 @@ async function runGenerationPipelineBody(sessionId: string, paid: boolean): Prom
   await publishEvent(sessionId, { type: 'codegen_prompt', prompt: userContent });
   assertNotCancelled(sessionId);
 
-  let raw: string;
-  try {
-    raw = await runWithRotatingUserProgress(
+  // Tool-forced output: model emits files via emit_project_files. One soft retry on
+  // hard failure (timeout, empty tool input). No JSON-extraction fallbacks needed.
+  const callCodegen = (initialMsg: string, rotatingMsg: readonly string[], label: string) =>
+    runWithRotatingUserProgress(
       sessionId,
       withTimeout(
-        ai.complete([{ role: 'user', content: userContent }], CODE_GEN_SYSTEM, {
-          maxTokens: CODE_GEN_MAX_TOKENS,
-        }),
+        ai.completeStructured(
+          [{ role: 'user', content: userContent }],
+          CODE_GEN_SYSTEM,
+          FILES_TOOL,
+          { maxTokens: CODE_GEN_MAX_TOKENS },
+        ),
         CODE_GEN_AI_TIMEOUT_MS,
-        'AI code generation (attempt 1)',
+        label,
       ),
-      GEN_INITIAL_CODEGEN,
-      GEN_WORKING_ON_AI_FIRST,
+      initialMsg,
+      rotatingMsg,
     );
-  } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e);
-    await publishEvent(sessionId, { step: 1, label: GEN_STEP_LABELS[1], status: 'error', detail });
-    await failGeneration(sessionId, genUserMsgBuildStopped(detail), {
-      sseMessage: GEN_SSE_CODEGEN_FAIL,
-    });
-    return;
-  }
 
-  let files = extractFilesFromCodegenResponse(raw);
+  let files: Record<string, string> | null = null;
+  let lastError: string | undefined;
+
+  try {
+    const result = await callCodegen(GEN_INITIAL_CODEGEN, GEN_WORKING_ON_AI_FIRST, 'AI code generation (attempt 1)');
+    files = normalizeFilesPayload(result.input);
+  } catch (e) {
+    lastError = e instanceof Error ? e.message : String(e);
+  }
   assertNotCancelled(sessionId);
-  let rawRetry = '';
 
   if (!files) {
     try {
-      rawRetry = await runWithRotatingUserProgress(
-        sessionId,
-        withTimeout(
-          ai.complete(
-            [{ role: 'user', content: `${userContent}\n\n---\n${CODE_GEN_RETRY_USER}` }],
-            CODE_GEN_SYSTEM,
-            { maxTokens: CODE_GEN_MAX_TOKENS },
-          ),
-          CODE_GEN_AI_TIMEOUT_MS,
-          'AI code generation (retry)',
-        ),
-        GEN_INITIAL_RETRY,
-        GEN_WORKING_ON_AI_RETRY,
-      );
+      const result = await callCodegen(GEN_INITIAL_RETRY, GEN_WORKING_ON_AI_RETRY, 'AI code generation (attempt 2)');
+      files = normalizeFilesPayload(result.input);
     } catch (e) {
-      const detail = e instanceof Error ? e.message : String(e);
-      await publishEvent(sessionId, { step: 1, label: GEN_STEP_LABELS[1], status: 'error', detail });
-      await failGeneration(sessionId, genUserMsgBuildStoppedRetry(detail), {
-        sseMessage: GEN_SSE_CODEGEN_RETRY_FAIL,
-      });
-      return;
+      lastError = e instanceof Error ? e.message : String(e);
     }
-    files = extractFilesFromCodegenResponse(rawRetry);
     assertNotCancelled(sessionId);
   }
 
   if (!files) {
-    const cap = CODE_GEN_REPAIR_INPUT_CHARS;
-    const repairBody = `# First model output\n${raw.slice(0, cap)}\n\n---\n\n# Second model output\n${rawRetry.slice(0, cap)}`;
-    const repairUser = `${CODE_GEN_JSON_REPAIR_USER}\n\n${repairBody}`;
-    try {
-      const rawRepair = await runWithRotatingUserProgress(
-        sessionId,
-        withTimeout(
-          ai.complete([{ role: 'user', content: repairUser }], CODE_GEN_JSON_REPAIR_SYSTEM, {
-            maxTokens: CODE_GEN_MAX_TOKENS,
-          }),
-          CODE_GEN_AI_TIMEOUT_MS,
-          'AI code generation (json repair)',
-        ),
-        GEN_JSON_REPAIR_INITIAL,
-        GEN_JSON_REPAIR_ROTATING,
-      );
-      files = extractFilesFromCodegenResponse(rawRepair);
-      assertNotCancelled(sessionId);
-    } catch (e) {
-      const detail = e instanceof Error ? e.message : String(e);
-      await publishEvent(sessionId, { step: 1, label: GEN_STEP_LABELS[1], status: 'error', detail });
-      await failGeneration(sessionId, genUserMsgBuildStoppedRetry(detail), {
-        sseMessage: GEN_SSE_CODEGEN_RETRY_FAIL,
-      });
-      return;
-    }
-  }
-
-  if (!files) {
-    await publishEvent(sessionId, {
-      step: 1,
-      label: GEN_STEP_LABELS[1],
-      status: 'error',
-      detail: GEN_INVALID_JSON_DETAIL,
-    });
-    await failGeneration(sessionId, GEN_INVALID_JSON_USER_MSG, {
+    const detail = lastError ?? 'Code generation tool returned no files';
+    await publishEvent(sessionId, { step: 1, label: GEN_STEP_LABELS[1], status: 'error', detail });
+    await failGeneration(sessionId, genUserMsgBuildStopped(detail), {
       sseMessage: GEN_SSE_CODEGEN_FAIL,
     });
     return;

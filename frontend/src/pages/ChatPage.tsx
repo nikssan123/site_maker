@@ -392,6 +392,11 @@ export default function ChatPage() {
     buildStartedInTabRef.current = true;
     enterGeneratingUi(t('chat.buildStarted'));
 
+    // Strip ?generate=true so a refresh can never re-POST /generate after kickoff.
+    if (searchParams.get('generate') === 'true') {
+      navigate(`/chat/${sessionId}`, { replace: true });
+    }
+
     api.streamEvents(
       '/generate',
       { sessionId },
