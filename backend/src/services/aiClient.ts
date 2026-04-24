@@ -81,8 +81,12 @@ class ClaudeProvider implements AIProvider {
     apiKey: process.env.ANTHROPIC_API_KEY,
     timeout: ANTHROPIC_TIMEOUT_MS,
   });
-  /** Override with `CLAUDE_CODE_MODEL` if your account uses a different id. Default: Opus (see Anthropic models docs). */
-  private model = process.env.CLAUDE_CODE_MODEL ?? 'claude-opus-4-7';
+  private model: string;
+
+  constructor(model?: string) {
+    /** Override with `CLAUDE_CODE_MODEL` if your account uses a different id. Default: Opus (see Anthropic models docs). */
+    this.model = model ?? process.env.CLAUDE_CODE_MODEL ?? 'claude-opus-4-7';
+  }
 
   async complete(messages: ChatMessage[], system: string, options?: CompleteOptions): Promise<string> {
     return (await this.completeWithUsage(messages, system, options)).text;
@@ -268,8 +272,18 @@ const iterateAssistClient = new OpenAIProvider(
   process.env.OPENAI_ITERATE_MODEL?.trim() || 'gpt-4.1',
 );
 
-// Claude Opus for code generation, fixing, and iteration — higher quality by default
+// Claude Opus for initial code generation and fixing — highest quality by default
 const codeClient = new ClaudeProvider();
+
+/**
+ * Faster Claude (Sonnet 4.6 by default) for the iteration codegen.
+ * Iterations are small targeted edits; Sonnet is ~2-3x faster than Opus and easily good
+ * enough. The iterator falls back to the Opus `codeClient` on retry when this fails.
+ * Override with CLAUDE_ITERATE_MODEL.
+ */
+const iterateCodeClient = new ClaudeProvider(
+  process.env.CLAUDE_ITERATE_MODEL?.trim() || 'claude-sonnet-4-6',
+);
 
 export function getChatClient(): AIProvider {
   return chatClient;
@@ -282,4 +296,9 @@ export function getIterateAssistClient(): AIProvider {
 
 export function getCodeClient(): AIProvider {
   return codeClient;
+}
+
+/** Faster Claude for the iterator's structured codegen. Falls back to getCodeClient() on retry. */
+export function getIterateCodeClient(): AIProvider {
+  return iterateCodeClient;
 }

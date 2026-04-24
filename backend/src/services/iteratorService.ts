@@ -1,4 +1,4 @@
-import { getChatClient, getCodeClient, type ToolSchema } from './aiClient';
+import { getChatClient, getCodeClient, getIterateCodeClient, type ToolSchema } from './aiClient';
 import { logTokens } from './tokenAccountingService';
 import { ITERATOR_SYSTEM, buildIteratorPrompt } from '../lib/prompts';
 import { writeProjectFiles } from '../lib/fileWriter';
@@ -231,7 +231,7 @@ Rules:
   let scopedFiles: string[] | null = null;
   if (opts?.targetFiles && Array.isArray(opts.targetFiles) && opts.targetFiles.length > 0) {
     const allowed = new Set(allFilePaths);
-    scopedFiles = Array.from(new Set(opts.targetFiles)).filter((p) => allowed.has(p)).slice(0, 8);
+    scopedFiles = Array.from(new Set(opts.targetFiles)).filter((p) => allowed.has(p)).slice(0, 12);
   }
 
   if (!scopedFiles || scopedFiles.length === 0) {
@@ -257,16 +257,31 @@ Rules:
       const content = currentFiles[path];
       return typeof content === 'string' && fileContentLooksLocalizationEntry(content);
     });
-    scopedFiles = Array.from(new Set([...(scopedFiles ?? []), ...localizationFiles])).slice(0, 12);
+    scopedFiles = Array.from(new Set([...(scopedFiles ?? []), ...localizationFiles])).slice(0, 16);
   }
+
+  // Always include core wiring files as read-only context so the model doesn't break
+  // imports/routes/themes it can't see. They become part of the allowed-edit set too,
+  // which is fine — touching them is sometimes required (e.g. registering a new route).
+  const CORE_CONTEXT_FILES = ['src/App.tsx', 'src/main.tsx', 'src/theme.ts', 'package.json'];
+  const allowedSet = new Set(allFilePaths);
+  for (const corePath of CORE_CONTEXT_FILES) {
+    if (allowedSet.has(corePath) && !scopedFiles.includes(corePath)) {
+      scopedFiles.push(corePath);
+    }
+  }
+  scopedFiles = scopedFiles.slice(0, 18);
 
   const subsetFiles: Record<string, string> = {};
   for (const p of scopedFiles) {
     if (typeof currentFiles[p] === 'string') subsetFiles[p] = currentFiles[p]!;
   }
 
-  // Phase 2: Claude executes the refined spec
-  const ai = getCodeClient();
+  // Phase 2: Claude executes the refined spec.
+  // Primary: Sonnet (fast, cheap, plenty good for targeted edits).
+  // Retry on failure: Opus (higher quality, slower) — last-ditch attempt before rolling back.
+  const fastAi = getIterateCodeClient();
+  const slowAi = getCodeClient();
   const extra = (opts?.explorerContextNotes ?? '').trim();
   const prompt = buildIteratorPrompt(planData, subsetFiles, refinedSpec, extra ? { explorerContextNotes: extra } : undefined);
   const iterMaxTokens = parseInt(process.env.CLAUDE_MAX_OUTPUT_TOKENS ?? '8192', 10);
@@ -283,7 +298,7 @@ Rules:
   let lastIterError: string | undefined;
   try {
     try {
-      const codegenResult = await ai.completeStructured(
+      const codegenResult = await fastAi.completeStructured(
         [{ role: 'user', content: prompt }],
         ITERATOR_SYSTEM,
         ITERATE_TOOL,
@@ -302,10 +317,10 @@ Rules:
       lastIterError = e instanceof Error ? e.message : String(e);
     }
 
-    // One soft retry on hard failure (timeout / empty tool input)
+    // Retry once on failure with the higher-quality Opus model.
     if (!changedFiles) {
       try {
-        const retryResult = await ai.completeStructured(
+        const retryResult = await slowAi.completeStructured(
           [{ role: 'user', content: prompt }],
           ITERATOR_SYSTEM,
           ITERATE_TOOL,
@@ -337,33 +352,60 @@ Rules:
   }
 
   // Safety: prevent broad/unscoped changes to reduce layout/copy regressions.
-  const changedPaths = Object.keys(changedFiles).sort();
+  // We FILTER illegal paths instead of rejecting the whole change — the model often emits
+  // one or two stray files alongside legitimate edits, and rejecting the whole batch wastes
+  // a full turn. Risky-global edits that weren't in scope are still filtered.
+  const allChangedPaths = Object.keys(changedFiles).sort();
   const allowed = new Set(scopedFiles);
-  const illegal = changedPaths.filter(
-    (p) =>
-      !allowed.has(p) &&
-      !isSafeFrontendExtraFile(p) &&
-      !isAllowedGuardedExtraFile(p, refinedSpec, scopedFiles),
-  );
-  const MAX_CHANGED = shouldAugmentWithLocalizationFiles(planData, `${changeRequest}\n${refinedSpec}`) ? 16 : 10;
-  if (changedPaths.length > MAX_CHANGED || illegal.length > 0) {
+  const illegalPaths: string[] = [];
+  const droppedRiskyPaths: string[] = [];
+  const acceptedFiles: Record<string, string> = {};
+  for (const p of allChangedPaths) {
+    const inScope = allowed.has(p);
+    if (!inScope && isHighRiskGlobalFile(p)) {
+      droppedRiskyPaths.push(p);
+      continue;
+    }
+    const allowedExtra =
+      inScope ||
+      isSafeFrontendExtraFile(p) ||
+      isAllowedGuardedExtraFile(p, refinedSpec, scopedFiles);
+    if (!allowedExtra) {
+      illegalPaths.push(p);
+      continue;
+    }
+    acceptedFiles[p] = changedFiles[p]!;
+  }
+
+  const acceptedPaths = Object.keys(acceptedFiles).sort();
+  const MAX_CHANGED = shouldAugmentWithLocalizationFiles(planData, `${changeRequest}\n${refinedSpec}`) ? 22 : 15;
+  if (acceptedPaths.length === 0) {
     await failIteration(
-      'Промяната изглежда твърде широка или засяга неподходящи файлове. Моля, уточнете по-точно какво да се промени и къде, за да го приложим без да развалим дизайна.',
-      `Changed paths: ${changedPaths.join(', ')}\nIllegal paths: ${illegal.join(', ')}`,
+      'Промяната засяга само неподходящи файлове и беше блокирана. Моля, уточнете заявката.',
+      `Illegal paths: ${illegalPaths.join(', ')}\nDropped risky: ${droppedRiskyPaths.join(', ')}`,
+    );
+    return;
+  }
+  if (acceptedPaths.length > MAX_CHANGED) {
+    await failIteration(
+      'Промяната изглежда твърде широка. Моля, уточнете заявката, за да я приложим без да развалим дизайна.',
+      `Accepted paths: ${acceptedPaths.join(', ')}`,
     );
     return;
   }
 
-  // Extra guardrail: block edits to high-risk global files unless they were explicitly in the scoped set.
-  const riskyTouched = changedPaths.filter((p) => isHighRiskGlobalFile(p) && !allowed.has(p));
-  if (riskyTouched.length > 0) {
-    await failIteration(
-      'Промяната засяга глобални файлове (тема/основен вход), което е рисково и често разваля дизайна. Моля, уточнете какво точно трябва да се промени глобално, или ограничете промяната до конкретен екран.',
-      `Risky paths: ${riskyTouched.join(', ')}`,
+  if (illegalPaths.length > 0 || droppedRiskyPaths.length > 0) {
+    console.warn(
+      `[iterate] dropped ${illegalPaths.length + droppedRiskyPaths.length} unsafe paths: ` +
+        `illegal=${illegalPaths.join(',')} risky=${droppedRiskyPaths.join(',')}`,
     );
-    return;
+    await publishEvent(sessionId, {
+      type: 'user_progress',
+      message: `Пропуснах ${illegalPaths.length + droppedRiskyPaths.length} файл(а), които не са свързани с промяната.`,
+    });
   }
 
+  changedFiles = acceptedFiles;
   const mergedFiles = { ...currentFiles, ...changedFiles };
   await writeProjectFiles(project.id, changedFiles);
   try {

@@ -1,4 +1,4 @@
-import { Box, Typography, Button, Stack, Divider, alpha } from '@mui/material';
+import { Box, Typography, Button, Stack, alpha } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import EditIcon from '@mui/icons-material/Edit';
 import { useTranslation } from 'react-i18next';
@@ -23,7 +23,10 @@ export default function IterationPlanCard({
   showUnlockHint,
 }: Props) {
   const { t } = useTranslation();
-  const bullets = planBulletsBg.filter((s) => s.trim().length > 0);
+  const cleanedBullets = planBulletsBg.map((s) => s.trim()).filter(Boolean);
+  const fallbackLine =
+    summary.trim() || t('preview.iterationPlanFallbackSummary');
+  const lines = cleanedBullets.length > 0 ? cleanedBullets : [fallbackLine];
 
   return (
     <Box
@@ -73,41 +76,18 @@ export default function IterationPlanCard({
       </Box>
 
       <Box sx={{ p: 2 }}>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, lineHeight: 1.55 }}>
-          {t('preview.iterationPlanReview')}
-        </Typography>
-
-        <Typography variant="body2" sx={{ lineHeight: 1.6, fontWeight: 500, whiteSpace: 'pre-wrap' }}>
-          {summary.trim() || t('preview.iterationPlanFallbackSummary')}
-        </Typography>
-
-        {bullets.length > 0 && (
-          <Box sx={{ mt: 2 }}>
+        <Stack component="ul" gap={0.75} sx={{ m: 0, mb: 1.75, pl: 2.25 }}>
+          {lines.map((b, i) => (
             <Typography
-              variant="caption"
-              sx={{
-                color: 'text.secondary',
-                textTransform: 'uppercase',
-                letterSpacing: 0.5,
-                fontSize: 10,
-                fontWeight: 600,
-                display: 'block',
-                mb: 0.75,
-              }}
+              key={i}
+              component="li"
+              variant="body2"
+              sx={{ lineHeight: 1.55, color: 'text.primary', fontWeight: 500 }}
             >
-              {t('preview.iterationWhatChanges')}
+              {b}
             </Typography>
-            <Stack component="ul" gap={0.5} sx={{ m: 0, pl: 2.25 }}>
-              {bullets.map((b, i) => (
-                <Typography key={i} component="li" variant="body2" color="text.secondary" sx={{ lineHeight: 1.5 }}>
-                  {b}
-                </Typography>
-              ))}
-            </Stack>
-          </Box>
-        )}
-
-        <Divider sx={{ my: 1.75, borderColor: (theme) => alpha(theme.palette.divider, 0.9) }} />
+          ))}
+        </Stack>
 
         {showUnlockHint && (
           <Typography variant="caption" color="warning.main" display="block" sx={{ mb: 1 }}>
