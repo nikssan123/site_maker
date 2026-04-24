@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  AppBar, Alert, Box, Button, Container, Dialog, DialogActions,
-  DialogContent, DialogTitle, Paper, Stack, TextField, Toolbar, Typography,
+  AppBar, Alert, Box, Button, Chip, Container, Dialog, DialogActions,
+  DialogContent, DialogTitle, IconButton, Link, Paper, Skeleton, Stack,
+  TextField, Toolbar, Tooltip, Typography, alpha,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import LockResetIcon from '@mui/icons-material/LockReset';
@@ -11,6 +12,13 @@ import CreditCardIcon from '@mui/icons-material/CreditCard';
 import LanguageIcon from '@mui/icons-material/Language';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import CloudIcon from '@mui/icons-material/Cloud';
+import SubscriptionsIcon from '@mui/icons-material/Subscriptions';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
@@ -58,6 +66,345 @@ function SectionCard({
       )}
       {children}
     </Paper>
+  );
+}
+
+type Invoice = {
+  id: string;
+  number: string | null;
+  status: string;
+  amount: number;
+  currency: string;
+  date: number;
+  description: string | null;
+  hostedInvoiceUrl: string | null;
+  invoicePdf: string | null;
+};
+
+type Subscription = {
+  id: string;
+  kind: 'improvement_plan' | 'hosting' | 'other';
+  label: string;
+  status: string;
+  cancelAtPeriodEnd: boolean;
+  currentPeriodStart: number | null;
+  currentPeriodEnd: number | null;
+  amount: number | null;
+  currency: string | null;
+  interval: 'day' | 'week' | 'month' | 'year' | null;
+  projectId: string | null;
+};
+
+function formatMoney(cents: number, currency: string | null | undefined, locale: string): string {
+  const code = (currency ?? 'eur').toUpperCase();
+  const value = (cents / 100).toFixed(2);
+  if (code === 'EUR') return `${value} €`;
+  try {
+    return new Intl.NumberFormat(locale, { style: 'currency', currency: code }).format(cents / 100);
+  } catch {
+    return `${value} ${code}`;
+  }
+}
+
+function formatDate(unixSeconds: number, locale: string): string {
+  try {
+    return new Date(unixSeconds * 1000).toLocaleDateString(locale, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  } catch {
+    return new Date(unixSeconds * 1000).toISOString().slice(0, 10);
+  }
+}
+
+function subscriptionStatusTone(status: string): 'success' | 'warning' | 'error' | 'default' {
+  if (status === 'active' || status === 'trialing') return 'success';
+  if (status === 'past_due' || status === 'incomplete') return 'warning';
+  if (status === 'canceled' || status === 'unpaid' || status === 'incomplete_expired') return 'error';
+  return 'default';
+}
+
+function invoiceStatusTone(status: string): 'success' | 'warning' | 'error' | 'default' {
+  if (status === 'paid') return 'success';
+  if (status === 'open' || status === 'draft') return 'warning';
+  if (status === 'uncollectible' || status === 'void') return 'error';
+  return 'default';
+}
+
+function BillingSection({
+  onOpenPortal,
+  portalBusy,
+  portalError,
+  onGoToBilling,
+}: {
+  onOpenPortal: () => void;
+  portalBusy: boolean;
+  portalError: string;
+  onGoToBilling: () => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language || 'en';
+  const [subs, setSubs] = useState<Subscription[] | null>(null);
+  const [invoices, setInvoices] = useState<Invoice[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [subsRes, invRes] = await Promise.all([api.listSubscriptions(), api.listInvoices()]);
+      setSubs(subsRes.subscriptions);
+      setInvoices(invRes.invoices);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t('settings.billingLoadError'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const subIcon = (kind: Subscription['kind']) => {
+    if (kind === 'improvement_plan') return <AutoFixHighIcon sx={{ fontSize: 18 }} />;
+    if (kind === 'hosting') return <CloudIcon sx={{ fontSize: 18 }} />;
+    return <SubscriptionsIcon sx={{ fontSize: 18 }} />;
+  };
+
+  const subAccent = (kind: Subscription['kind']) => {
+    if (kind === 'improvement_plan') return '#a855f7';
+    if (kind === 'hosting') return '#10b981';
+    return '#94a3b8';
+  };
+
+  const renderSubscription = (s: Subscription) => {
+    const accent = subAccent(s.kind);
+    const intervalLabel =
+      s.interval === 'year'
+        ? t('settings.billingSubscriptionPerYear', {
+            amount: s.amount != null ? formatMoney(s.amount, s.currency, locale) : '—',
+          })
+        : s.interval === 'month'
+          ? t('settings.billingSubscriptionPerMonth', {
+              amount: s.amount != null ? formatMoney(s.amount, s.currency, locale) : '—',
+            })
+          : null;
+    const statusKey = `settings.billingSubscriptionStatus.${s.status}`;
+    const statusLabel = t(statusKey, { defaultValue: s.status });
+    const statusTone = subscriptionStatusTone(s.status);
+    const renewalText =
+      s.currentPeriodEnd != null
+        ? s.cancelAtPeriodEnd
+          ? t('settings.billingSubscriptionCancelsOn', { date: formatDate(s.currentPeriodEnd, locale) })
+          : t('settings.billingSubscriptionRenewsOn', { date: formatDate(s.currentPeriodEnd, locale) })
+        : null;
+
+    return (
+      <Box
+        key={s.id}
+        sx={{
+          p: 1.5,
+          borderRadius: 2,
+          border: '1px solid',
+          borderColor: alpha(accent, 0.28),
+          bgcolor: alpha(accent, 0.06),
+          display: 'flex',
+          alignItems: { xs: 'flex-start', sm: 'center' },
+          flexDirection: { xs: 'column', sm: 'row' },
+          gap: 1.5,
+        }}
+      >
+        <Box
+          sx={{
+            width: 36,
+            height: 36,
+            borderRadius: 1.75,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            bgcolor: alpha(accent, 0.18),
+            color: accent,
+            flexShrink: 0,
+          }}
+        >
+          {subIcon(s.kind)}
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
+            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+              {s.label}
+            </Typography>
+            <Chip
+              label={statusLabel}
+              size="small"
+              color={statusTone === 'default' ? undefined : statusTone}
+              variant={statusTone === 'default' ? 'outlined' : 'filled'}
+              sx={{ height: 20, fontSize: 11, fontWeight: 700, '& .MuiChip-label': { px: 1 } }}
+            />
+            {s.cancelAtPeriodEnd && (
+              <Chip
+                label={t('settings.billingSubscriptionStatus.canceled')}
+                size="small"
+                color="warning"
+                variant="outlined"
+                sx={{ height: 20, fontSize: 11, '& .MuiChip-label': { px: 1 } }}
+              />
+            )}
+          </Stack>
+          {(intervalLabel || renewalText) && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+              {[intervalLabel, renewalText].filter(Boolean).join(' · ')}
+            </Typography>
+          )}
+        </Box>
+      </Box>
+    );
+  };
+
+  const renderInvoice = (inv: Invoice) => {
+    const tone = invoiceStatusTone(inv.status);
+    const statusKey = `settings.billingInvoiceStatus.${inv.status}`;
+    const statusLabel = t(statusKey, { defaultValue: inv.status });
+
+    return (
+      <Box
+        key={inv.id}
+        sx={{
+          p: 1.25,
+          borderRadius: 2,
+          border: '1px solid rgba(255,255,255,0.07)',
+          bgcolor: 'rgba(255,255,255,0.02)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.5,
+        }}
+      >
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
+            <Typography variant="body2" sx={{ fontWeight: 700, fontFamily: 'monospace' }}>
+              {inv.number ?? inv.id.slice(-8).toUpperCase()}
+            </Typography>
+            <Chip
+              label={statusLabel}
+              size="small"
+              color={tone === 'default' ? undefined : tone}
+              variant={tone === 'default' ? 'outlined' : 'filled'}
+              sx={{ height: 20, fontSize: 11, fontWeight: 700, '& .MuiChip-label': { px: 1 } }}
+            />
+          </Stack>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+            {formatDate(inv.date, locale)}
+            {inv.description ? ` · ${inv.description}` : ''}
+          </Typography>
+        </Box>
+        <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+          {formatMoney(inv.amount, inv.currency, locale)}
+        </Typography>
+        <Stack direction="row" gap={0.25} sx={{ flexShrink: 0 }}>
+          {inv.hostedInvoiceUrl && (
+            <Tooltip title={t('settings.billingInvoiceView')}>
+              <IconButton
+                size="small"
+                component={Link}
+                href={inv.hostedInvoiceUrl}
+                target="_blank"
+                rel="noreferrer"
+                sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}
+              >
+                <OpenInNewIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+          {inv.invoicePdf && (
+            <Tooltip title={t('settings.billingInvoicePdf')}>
+              <IconButton
+                size="small"
+                component={Link}
+                href={inv.invoicePdf}
+                target="_blank"
+                rel="noreferrer"
+                sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}
+              >
+                <PictureAsPdfIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Stack>
+      </Box>
+    );
+  };
+
+  return (
+    <>
+      {/* Action row + refresh */}
+      {portalError && <Alert severity="error" sx={{ mb: 2 }}>{portalError}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+      {/* Subscriptions */}
+      <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 1 }}>
+        <Typography variant="caption" sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.7, fontSize: 11, fontWeight: 700 }}>
+          {t('settings.billingSubscriptionsHeading')}
+        </Typography>
+        <Box sx={{ flex: 1 }} />
+        <Tooltip title={t('settings.billingRefresh')}>
+          <span>
+            <IconButton size="small" onClick={load} disabled={loading} sx={{ color: 'text.secondary' }}>
+              <RefreshIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </span>
+        </Tooltip>
+      </Stack>
+      <Stack gap={1} sx={{ mb: 2.5 }}>
+        {loading && !subs && (
+          <>
+            <Skeleton variant="rounded" height={62} sx={{ bgcolor: 'rgba(255,255,255,0.04)' }} />
+            <Skeleton variant="rounded" height={62} sx={{ bgcolor: 'rgba(255,255,255,0.04)' }} />
+          </>
+        )}
+        {!loading && subs && subs.length === 0 && (
+          <Typography variant="body2" color="text.secondary">
+            {t('settings.billingSubscriptionsEmpty')}
+          </Typography>
+        )}
+        {subs && subs.map(renderSubscription)}
+      </Stack>
+
+      {/* Invoices */}
+      <Typography
+        variant="caption"
+        sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.7, fontSize: 11, fontWeight: 700, display: 'block', mb: 1 }}
+      >
+        {t('settings.billingInvoicesHeading')}
+      </Typography>
+      <Stack gap={0.75} sx={{ mb: 2 }}>
+        {loading && !invoices && (
+          <>
+            <Skeleton variant="rounded" height={56} sx={{ bgcolor: 'rgba(255,255,255,0.04)' }} />
+            <Skeleton variant="rounded" height={56} sx={{ bgcolor: 'rgba(255,255,255,0.04)' }} />
+          </>
+        )}
+        {!loading && invoices && invoices.length === 0 && (
+          <Typography variant="body2" color="text.secondary">
+            {t('settings.billingInvoicesEmpty')}
+          </Typography>
+        )}
+        {invoices && invoices.map(renderInvoice)}
+      </Stack>
+
+      {/* Action buttons (preserved from old design) */}
+      <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5}>
+        <Button variant="contained" onClick={onOpenPortal} disabled={portalBusy} startIcon={<CreditCardIcon fontSize="small" />}>
+          {portalBusy ? t('settings.openingPortal') : t('settings.openPortal')}
+        </Button>
+        <Button variant="outlined" onClick={onGoToBilling} startIcon={<ReceiptLongIcon fontSize="small" />}>
+          {t('settings.goToBilling')}
+        </Button>
+      </Stack>
+    </>
   );
 }
 
@@ -409,15 +756,12 @@ export default function SettingsPage() {
           title={t('settings.sectionBilling')}
           hint={t('settings.sectionBillingHint')}
         >
-          {portalError && <Alert severity="error" sx={{ mb: 2 }}>{portalError}</Alert>}
-          <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5}>
-            <Button variant="contained" onClick={handleOpenPortal} disabled={portalBusy}>
-              {portalBusy ? t('settings.openingPortal') : t('settings.openPortal')}
-            </Button>
-            <Button variant="outlined" onClick={() => navigate('/billing')}>
-              {t('settings.goToBilling')}
-            </Button>
-          </Stack>
+          <BillingSection
+            onOpenPortal={handleOpenPortal}
+            portalBusy={portalBusy}
+            portalError={portalError}
+            onGoToBilling={() => navigate('/billing')}
+          />
         </SectionCard>
 
         <SectionCard

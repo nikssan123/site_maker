@@ -317,6 +317,38 @@ export const api = {
       }>;
     }>('GET', '/billing/iteration-plan'),
 
+  listInvoices: () =>
+    request<{
+      invoices: Array<{
+        id: string;
+        number: string | null;
+        status: string;
+        amount: number;
+        currency: string;
+        date: number;
+        description: string | null;
+        hostedInvoiceUrl: string | null;
+        invoicePdf: string | null;
+      }>;
+    }>('GET', '/billing/invoices'),
+
+  listSubscriptions: () =>
+    request<{
+      subscriptions: Array<{
+        id: string;
+        kind: 'improvement_plan' | 'hosting' | 'other';
+        label: string;
+        status: string;
+        cancelAtPeriodEnd: boolean;
+        currentPeriodStart: number | null;
+        currentPeriodEnd: number | null;
+        amount: number | null;
+        currency: string | null;
+        interval: 'day' | 'week' | 'month' | 'year' | null;
+        projectId: string | null;
+      }>;
+    }>('GET', '/billing/subscriptions'),
+
   adminGrantTokens: (
     userId: string,
     body: { tokens: number; reason?: 'admin_grant' | 'topup_purchase' | 'migration'; note?: string; expiresAt?: string | null },

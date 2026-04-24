@@ -11,6 +11,106 @@ import {
 } from '../lib/hostingActive';
 import { reserveRandomSubdomain } from '../lib/randomSubdomain';
 import { grantTokens } from './tokenAccountingService';
+import { EmailService } from './emailService';
+import { buildInvoiceEmail, type InvoiceLineItem } from '../lib/invoiceEmail';
+
+/** Lazily-instantiated; never throws at import time so missing email config doesn't break checkout. */
+let invoiceMailer: EmailService | null = null;
+function getInvoiceMailer(): EmailService | null {
+  try {
+    if (!invoiceMailer) invoiceMailer = new EmailService();
+    return invoiceMailer;
+  } catch (e) {
+    console.warn('[billing] invoice mailer disabled:', e instanceof Error ? e.message : String(e));
+    return null;
+  }
+}
+
+async function sendInvoiceEmailFromStripeInvoice(invoice: Stripe.Invoice): Promise<void> {
+  const customerEmail =
+    invoice.customer_email ?? (typeof invoice.customer === 'string' ? null : (invoice.customer as Stripe.Customer | null)?.email ?? null);
+  if (!customerEmail) {
+    // Fall back to the user record by stripeCustomerId.
+    const cid = typeof invoice.customer === 'string' ? invoice.customer : (invoice.customer as Stripe.Customer | null)?.id ?? null;
+    if (!cid) return;
+    const user = await prisma.user.findFirst({ where: { stripeCustomerId: cid }, select: { email: true } });
+    if (!user?.email) return;
+    await sendInvoiceEmailRaw(user.email, invoice);
+    return;
+  }
+  await sendInvoiceEmailRaw(customerEmail, invoice);
+}
+
+async function sendInvoiceEmailRaw(to: string, invoice: Stripe.Invoice): Promise<void> {
+  const mailer = getInvoiceMailer();
+  if (!mailer) return;
+  const lineItems: InvoiceLineItem[] = (invoice.lines?.data ?? []).map((line) => ({
+    description: line.description ?? line.price?.product
+      ? (typeof line.price?.product === 'string' ? null : (line.price?.product as { name?: string } | null)?.name ?? null) ?? 'Покупка'
+      : 'Покупка',
+    amountCents: line.amount,
+    currency: (line.currency ?? invoice.currency ?? 'eur').toLowerCase(),
+  }));
+  const { subject, html } = buildInvoiceEmail({
+    invoiceNumber: invoice.number ?? null,
+    paidAt: new Date(((invoice.status_transitions?.paid_at ?? invoice.created) ?? Math.floor(Date.now() / 1000)) * 1000),
+    totalCents: invoice.amount_paid > 0 ? invoice.amount_paid : invoice.amount_due,
+    currency: (invoice.currency ?? 'eur').toLowerCase(),
+    lineItems,
+    hostedInvoiceUrl: invoice.hosted_invoice_url ?? null,
+    invoicePdfUrl: invoice.invoice_pdf ?? null,
+  });
+  try {
+    await mailer.sendEmail({ from: mailer.platformFrom, to, subject, html });
+  } catch (e) {
+    console.warn('[billing] invoice email send failed:', e instanceof Error ? e.message : String(e));
+  }
+}
+
+/**
+ * One-off `payment` Checkout sessions don't create invoices by default. Build a synthetic
+ * invoice-shaped receipt from the session and send it so the user has a record either way.
+ */
+async function sendReceiptForCheckoutSession(session: Stripe.Checkout.Session, fallbackEmail?: string | null): Promise<void> {
+  const mailer = getInvoiceMailer();
+  if (!mailer) return;
+  // Don't double-send when Stripe has already (or will) generate an invoice for the session.
+  if (session.invoice) return;
+
+  const to = session.customer_details?.email ?? fallbackEmail ?? null;
+  if (!to) return;
+
+  // Pull line items so we have a friendly description + amount.
+  let lineItems: InvoiceLineItem[] = [];
+  try {
+    const items = await stripe.checkout.sessions.listLineItems(session.id, { limit: 25 });
+    lineItems = items.data.map((li) => ({
+      description: li.description ?? 'Покупка',
+      amountCents: li.amount_total ?? 0,
+      currency: (li.currency ?? session.currency ?? 'eur').toLowerCase(),
+    }));
+  } catch (e) {
+    console.warn('[billing] could not load checkout line items for receipt:', e instanceof Error ? e.message : String(e));
+  }
+
+  const totalCents = session.amount_total ?? lineItems.reduce((sum, l) => sum + l.amountCents, 0);
+  if (totalCents <= 0) return;
+
+  const { subject, html } = buildInvoiceEmail({
+    invoiceNumber: null,
+    paidAt: new Date(((session.created ?? Math.floor(Date.now() / 1000))) * 1000),
+    totalCents,
+    currency: (session.currency ?? 'eur').toLowerCase(),
+    lineItems,
+    hostedInvoiceUrl: null,
+    invoicePdfUrl: null,
+  });
+  try {
+    await mailer.sendEmail({ from: mailer.platformFrom, to, subject, html });
+  } catch (e) {
+    console.warn('[billing] receipt email send failed:', e instanceof Error ? e.message : String(e));
+  }
+}
 
 function firstPartyRootDomain(): string | null {
   const raw = (process.env.FIRST_PARTY_ROOT_DOMAIN ?? '').trim().toLowerCase();
@@ -354,6 +454,19 @@ export async function handleWebhook(rawBody: Buffer, signature: string) {
       const session = event.data.object as Stripe.Checkout.Session;
       const { type, projectId } = session.metadata ?? {};
 
+      // Look up the user's email for receipt fallback (subscriptions usually email via invoice.paid).
+      let userEmail: string | null = null;
+      const userIdMeta = session.metadata?.userId;
+      if (userIdMeta) {
+        const u = await prisma.user.findUnique({ where: { id: userIdMeta }, select: { email: true } });
+        userEmail = u?.email ?? null;
+      }
+
+      // Send a receipt for one-off `payment` purchases — Stripe doesn't auto-issue an invoice.
+      if (session.mode === 'payment') {
+        sendReceiptForCheckoutSession(session, userEmail).catch(() => {});
+      }
+
       if (type === 'generation' && session.metadata?.sessionId) {
         await prisma.session.update({
           where: { id: session.metadata.sessionId },
@@ -483,9 +596,14 @@ export async function handleWebhook(rawBody: Buffer, signature: string) {
     }
 
     case 'invoice.paid': {
+      const invoice = event.data.object as Stripe.Invoice;
+
+      // Always email a receipt for paid invoices (covers subscription renewals and any
+      // payment-mode session where invoice_creation is enabled).
+      sendInvoiceEmailFromStripeInvoice(invoice).catch(() => {});
+
       // On renewal, Stripe emits `customer.subscription.updated` as well, so this is mostly
       // belt-and-braces for subs whose period window moved.
-      const invoice = event.data.object as Stripe.Invoice;
       const subId = typeof invoice.subscription === 'string' ? invoice.subscription : null;
       if (!subId) break;
       const sub = await stripe.subscriptions.retrieve(subId);
@@ -503,6 +621,132 @@ export async function handleWebhook(rawBody: Buffer, signature: string) {
  */
 function isIterationPlanSubscription(sub: Stripe.Subscription): boolean {
   return sub.metadata?.type === 'iteration_plan';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Listing helpers for the Settings billing card
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface InvoiceSummary {
+  id: string;
+  number: string | null;
+  status: string;
+  /** Amount in euro cents (Stripe's smallest unit). */
+  amount: number;
+  currency: string;
+  /** Unix seconds when the invoice was paid (or created if pending). */
+  date: number;
+  description: string | null;
+  hostedInvoiceUrl: string | null;
+  invoicePdf: string | null;
+}
+
+export interface SubscriptionSummary {
+  id: string;
+  /** "improvement_plan" | "hosting" | "other" */
+  kind: 'improvement_plan' | 'hosting' | 'other';
+  /** Human label for the UI (e.g. "Improvement plan", "Hosting — myproject.example.com"). */
+  label: string;
+  status: string;
+  cancelAtPeriodEnd: boolean;
+  currentPeriodStart: number | null;
+  currentPeriodEnd: number | null;
+  /** Per-cycle amount in cents (taken from the first item). */
+  amount: number | null;
+  currency: string | null;
+  interval: 'day' | 'week' | 'month' | 'year' | null;
+  /** Project this subscription is tied to, when it's a per-project hosting sub. */
+  projectId: string | null;
+}
+
+/** List the user's Stripe invoices (most recent first). Empty array when no Stripe customer yet. */
+export async function listInvoicesForUser(userId: string, limit = 20): Promise<InvoiceSummary[]> {
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  if (!user.stripeCustomerId) return [];
+
+  const result = await stripe.invoices.list({
+    customer: user.stripeCustomerId,
+    limit: Math.max(1, Math.min(100, limit)),
+  });
+
+  return result.data.map((inv) => ({
+    id: inv.id,
+    number: inv.number ?? null,
+    status: inv.status ?? 'unknown',
+    amount: typeof inv.amount_paid === 'number' && inv.amount_paid > 0 ? inv.amount_paid : (inv.amount_due ?? 0),
+    currency: (inv.currency ?? 'eur').toLowerCase(),
+    date: (inv.status_transitions?.paid_at ?? inv.status_transitions?.finalized_at ?? inv.created) ?? inv.created,
+    description: inv.lines?.data?.[0]?.description ?? null,
+    hostedInvoiceUrl: inv.hosted_invoice_url ?? null,
+    invoicePdf: inv.invoice_pdf ?? null,
+  }));
+}
+
+/**
+ * List the user's active/recent subscriptions. Returns the improvement plan (when present)
+ * and per-project hosting subscriptions (joined to the project for a friendly label).
+ */
+export async function listSubscriptionsForUser(userId: string): Promise<SubscriptionSummary[]> {
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  if (!user.stripeCustomerId) return [];
+
+  const stripeSubs = await stripe.subscriptions.list({
+    customer: user.stripeCustomerId,
+    status: 'all',
+    limit: 30,
+  });
+
+  // Map any per-project hosting subs by stripe sub id so we can label them.
+  const hostingSubIds = stripeSubs.data
+    .filter((s) => s.metadata?.type !== 'iteration_plan')
+    .map((s) => s.id);
+  const hostedProjects = hostingSubIds.length > 0
+    ? await prisma.project.findMany({
+        where: { hostingSubscriptionId: { in: hostingSubIds } },
+        select: { id: true, hostingSubscriptionId: true, customDomain: true },
+      })
+    : [];
+  const byHostingSub = new Map(hostedProjects.map((p) => [p.hostingSubscriptionId!, p]));
+
+  return stripeSubs.data
+    // Skip very old fully-canceled subs to keep the UI clean.
+    .filter((s) => s.status !== 'incomplete_expired')
+    .map((s) => {
+      const isImprovement = s.metadata?.type === 'iteration_plan';
+      const item = s.items.data[0];
+      const price = item?.price;
+      const project = byHostingSub.get(s.id) ?? null;
+
+      let label: string;
+      let kind: SubscriptionSummary['kind'];
+      if (isImprovement) {
+        kind = 'improvement_plan';
+        label = 'Improvement plan';
+      } else if (project) {
+        kind = 'hosting';
+        label = project.customDomain
+          ? `Hosting — ${project.customDomain}`
+          : `Hosting — project ${project.id.slice(0, 8)}`;
+      } else {
+        kind = 'other';
+        label = (item?.price?.product as { name?: string } | null)?.name ?? 'Subscription';
+      }
+
+      return {
+        id: s.id,
+        kind,
+        label,
+        status: s.status,
+        cancelAtPeriodEnd: !!s.cancel_at_period_end,
+        currentPeriodStart: s.current_period_start ?? null,
+        currentPeriodEnd: s.current_period_end ?? null,
+        amount: price?.unit_amount ?? null,
+        currency: price?.currency ?? null,
+        interval: (price?.recurring?.interval as SubscriptionSummary['interval']) ?? null,
+        projectId: project?.id ?? null,
+      };
+    })
+    .sort((a, b) => (b.currentPeriodEnd ?? 0) - (a.currentPeriodEnd ?? 0));
 }
 
 async function upsertIterationSubscription(sub: Stripe.Subscription): Promise<void> {

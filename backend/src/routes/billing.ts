@@ -11,6 +11,8 @@ import {
   createTokenTopupCheckout,
   createPortalSession,
   handleWebhook,
+  listInvoicesForUser,
+  listSubscriptionsForUser,
 } from '../services/billingService';
 import { getAllowanceSummary } from '../services/tokenAccountingService';
 import { AppError } from '../middleware/errorHandler';
@@ -129,6 +131,26 @@ router.get('/iteration-plan', requireAuth, async (req, res, next) => {
       pct: summary.pct,
       grants,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// List user's Stripe invoices (most recent first) — for Settings billing card.
+router.get('/invoices', requireAuth, async (req, res, next) => {
+  try {
+    const invoices = await listInvoicesForUser(req.user.userId, 20);
+    res.json({ invoices });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// List user's active/recent subscriptions — for Settings billing card.
+router.get('/subscriptions', requireAuth, async (req, res, next) => {
+  try {
+    const subscriptions = await listSubscriptionsForUser(req.user.userId);
+    res.json({ subscriptions });
   } catch (err) {
     next(err);
   }
