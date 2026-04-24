@@ -51,6 +51,8 @@ interface ProjectState {
   hostingStatus: 'not_activated' | 'trial' | 'active' | 'expired';
   /** End of the included free month (ISO string), if any. */
   hostingFreeUntil: string | null;
+  /** First-party subdomain or BYO custom domain, if assigned. */
+  customDomain: string | null;
   iterationsTotal: number;
   paidIterationCredits: number;
   freeIterationLimit: number;
@@ -72,6 +74,7 @@ interface ProjectState {
   setAllowUnpaidDownload: (v: boolean) => void;
   setProjectHosted: (hosted: boolean) => void;
   setHostingStatus: (status: ProjectState['hostingStatus'], freeUntil: string | null) => void;
+  setCustomDomain: (domain: string | null) => void;
   setIterationInfo: (total: number, paidCredits: number, freeLimit: number) => void;
   setPhase: (phase: ProjectState['phase']) => void;
   setIsStreaming: (v: boolean) => void;
@@ -102,6 +105,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
   projectHosted: false,
   hostingStatus: 'not_activated',
   hostingFreeUntil: null,
+  customDomain: null,
   iterationsTotal: 0,
   paidIterationCredits: 0,
   freeIterationLimit: 2,
@@ -122,6 +126,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
   setAllowUnpaidDownload: (allowUnpaidDownload) => set({ allowUnpaidDownload }),
   setProjectHosted: (hosted) => set({ projectHosted: hosted }),
   setHostingStatus: (hostingStatus, hostingFreeUntil) => set({ hostingStatus, hostingFreeUntil }),
+  setCustomDomain: (customDomain) => set({ customDomain }),
   setIterationInfo: (total, paidCredits, freeLimit) => set({ iterationsTotal: total, paidIterationCredits: paidCredits, freeIterationLimit: freeLimit }),
   setPhase: (phase) => set({ phase }),
   setIsStreaming: (v) => set({ isStreaming: v }),
@@ -149,6 +154,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
       projectHosted: false,
       hostingStatus: 'not_activated',
       hostingFreeUntil: null,
+      customDomain: null,
       iterationsTotal: 0,
       paidIterationCredits: 0,
       freeIterationLimit: 2,

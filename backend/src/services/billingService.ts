@@ -9,7 +9,38 @@ import {
   SITE_PURCHASE_BONUS_ITERATIONS,
   SITE_PURCHASE_FREE_HOSTING_DAYS,
 } from '../lib/hostingActive';
+import { reserveRandomSubdomain } from '../lib/randomSubdomain';
 import { grantTokens } from './tokenAccountingService';
+
+function firstPartyRootDomain(): string | null {
+  const raw = (process.env.FIRST_PARTY_ROOT_DOMAIN ?? '').trim().toLowerCase();
+  return raw.length > 0 ? raw : null;
+}
+
+/**
+ * Auto-assign a friendly random first-party subdomain to a paid project that doesn't
+ * already have a customDomain. No-op if the env var isn't set or the project already
+ * has a domain configured.
+ */
+async function ensureAutoSubdomain(projectId: string): Promise<void> {
+  const root = firstPartyRootDomain();
+  if (!root) return;
+  const existing = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { customDomain: true },
+  });
+  if (!existing || existing.customDomain) return;
+  const slug = await reserveRandomSubdomain(projectId, root);
+  if (!slug) return;
+  await prisma.project.update({
+    where: { id: projectId },
+    data: {
+      customDomain: `${slug}.${root}`,
+      customDomainVerifiedAt: new Date(),
+      domainVerificationToken: null,
+    },
+  });
+}
 
 function tokenTopupPackTokens(): number {
   const raw = parseInt(process.env.TOKEN_TOPUP_PACK_TOKENS ?? '', 10);
@@ -350,6 +381,7 @@ export async function handleWebhook(rawBody: Buffer, signature: string) {
             where: { id: session.metadata.sessionId },
             data: { sitePurchaseExtrasPending: false },
           });
+          await ensureAutoSubdomain(existing.id);
         }
       }
 
@@ -368,6 +400,7 @@ export async function handleWebhook(rawBody: Buffer, signature: string) {
             hosted: true,
           },
         });
+        await ensureAutoSubdomain(projectId);
       }
 
       if (type === 'iteration_credits' && projectId) {

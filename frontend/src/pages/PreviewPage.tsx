@@ -28,6 +28,8 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ImportantDevicesIcon from '@mui/icons-material/ImportantDevices';
 import CloudIcon from '@mui/icons-material/Cloud';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
 import AppLogo from '../components/AppLogo';
 import PreviewFrame, { type PreviewFrameHandle } from '../components/PreviewFrame';
@@ -242,6 +244,7 @@ export default function PreviewPage() {
     store.setAllowUnpaidDownload(p.allowUnpaidDownload === true);
     store.setProjectHosted(p.hosted);
     store.setHostingStatus(p.hostingStatus ?? (p.paid ? (p.hosted ? 'active' : 'expired') : 'not_activated'), p.hostingFreeUntil ?? null);
+    store.setCustomDomain(p.customDomain ?? null);
     store.setIterationInfo(p.iterationsTotal ?? 0, p.paidIterationCredits ?? 0, p.freeIterationLimit ?? 2);
     setPaymentsConfigured(p.paymentsEnabled ?? false);
     setPlanNeedsPayments(p.planNeedsPayments ?? false);
@@ -804,7 +807,7 @@ export default function PreviewPage() {
 
   if (!projectId) return null;
 
-  const { projectPaid, allowUnpaidDownload, projectHosted, hostingStatus, hostingFreeUntil } = store;
+  const { projectPaid, allowUnpaidDownload, projectHosted, hostingStatus, hostingFreeUntil, customDomain } = store;
 
   return (
     <Box sx={{ height: ['100vh', '100dvh'], display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
@@ -1143,6 +1146,85 @@ export default function PreviewPage() {
             />
           ) : (
             <>
+              {projectHosted && customDomain && (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    px: { xs: 1.5, md: 2 },
+                    py: 0.85,
+                    borderBottom: '1px solid',
+                    borderColor: 'rgba(16,185,129,0.25)',
+                    background: 'linear-gradient(90deg, rgba(16,185,129,0.14), rgba(16,185,129,0.04))',
+                    flexShrink: 0,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <CloudIcon sx={{ fontSize: 16, color: '#34d399', flexShrink: 0 }} />
+                  <Typography variant="caption" sx={{ color: '#a7f3d0', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 0 }}>
+                    {t('hostingPanel.liveAt')}
+                  </Typography>
+                  <Box
+                    component="a"
+                    href={`https://${customDomain}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    sx={{
+                      fontFamily: 'monospace',
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: '#fff',
+                      textDecoration: 'none',
+                      px: 1,
+                      py: 0.25,
+                      borderRadius: 1,
+                      bgcolor: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(16,185,129,0.25)',
+                      minWidth: 0,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      maxWidth: { xs: '100%', sm: 360 },
+                      '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', borderColor: 'rgba(16,185,129,0.45)' },
+                    }}
+                  >
+                    {customDomain}
+                  </Box>
+                  <Box sx={{ flex: 1 }} />
+                  <Tooltip title={t('hostingPanel.copy')}>
+                    <IconButton
+                      size="small"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(`https://${customDomain}`);
+                        setSnackMsg(t('hostingPanel.copied'));
+                      }}
+                      sx={{ color: '#a7f3d0' }}
+                    >
+                      <ContentCopyIcon sx={{ fontSize: 14 }} />
+                    </IconButton>
+                  </Tooltip>
+                  <Button
+                    size="small"
+                    href={`https://${customDomain}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    startIcon={<OpenInNewIcon sx={{ fontSize: 14 }} />}
+                    sx={{
+                      color: '#0f172a',
+                      bgcolor: '#34d399',
+                      fontWeight: 700,
+                      textTransform: 'none',
+                      px: 1.25,
+                      py: 0.25,
+                      minHeight: 0,
+                      '&:hover': { bgcolor: '#10b981' },
+                    }}
+                  >
+                    {t('hostingPanel.openSite')}
+                  </Button>
+                </Box>
+              )}
               {planNeedsPayments && !paymentsConfigured && (
                 <Alert
                   severity="warning"

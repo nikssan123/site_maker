@@ -12,6 +12,7 @@ import {
   SITE_PURCHASE_BONUS_ITERATIONS,
   SITE_PURCHASE_FREE_HOSTING_DAYS,
 } from '../lib/hostingActive';
+import { reserveRandomSubdomain } from '../lib/randomSubdomain';
 import { withTimeout } from '../lib/withTimeout';
 import { publishEvent, clearSessionEvents } from './eventBus';
 import {
@@ -601,6 +602,21 @@ async function runGenerationPipelineBody(sessionId: string, paid: boolean): Prom
           data: { sitePurchaseExtrasPending: false },
         }),
       ]);
+      // Auto-assign a random first-party subdomain so the user has a live URL right away.
+      const root = (process.env.FIRST_PARTY_ROOT_DOMAIN ?? '').trim().toLowerCase();
+      if (root && !project.customDomain) {
+        const slug = await reserveRandomSubdomain(project.id, root);
+        if (slug) {
+          await prisma.project.update({
+            where: { id: project.id },
+            data: {
+              customDomain: `${slug}.${root}`,
+              customDomainVerifiedAt: new Date(),
+              domainVerificationToken: null,
+            },
+          });
+        }
+      }
       project = await prisma.project.findUniqueOrThrow({ where: { id: project.id } });
     } else if (sess?.sitePurchaseExtrasPending && project.includesSitePurchaseBundle) {
       await prisma.session.update({
