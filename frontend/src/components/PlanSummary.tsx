@@ -1,13 +1,19 @@
-import { Box, Typography, Chip, Button, Stack, Tooltip, Divider, InputBase, FormControl, Select, MenuItem, Checkbox, ListItemText } from '@mui/material';
+import { Box, Typography, Chip, Button, Stack, Tooltip, InputBase, FormControl, Select, MenuItem, Checkbox, ListItemText, Paper, alpha } from '@mui/material';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import EditIcon from '@mui/icons-material/Edit';
 import StorageIcon from '@mui/icons-material/Storage';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import LanguageIcon from '@mui/icons-material/Language';
+import ShareIcon from '@mui/icons-material/Share';
+import PaletteIcon from '@mui/icons-material/Palette';
 import FacebookIcon from '@mui/icons-material/Facebook';
 import InstagramIcon from '@mui/icons-material/Instagram';
 import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import YouTubeIcon from '@mui/icons-material/YouTube';
 import XIcon from '@mui/icons-material/X';
 import { SvgIcon } from '@mui/material';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PlanData } from '../store/project';
 import ColorThemePicker, { ColorTheme } from './ColorThemePicker';
@@ -187,6 +193,71 @@ const LANGUAGE_OPTIONS = [
   { code: 'lt', label: 'Lietuvių' },
 ] as const;
 
+function SectionHeader({
+  icon,
+  title,
+  count,
+  accent = '#94a3b8',
+}: {
+  icon: ReactNode;
+  title: string;
+  count?: number | null;
+  accent?: string;
+}) {
+  return (
+    <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 1 }}>
+      <Box
+        sx={{
+          width: 22,
+          height: 22,
+          borderRadius: 1.25,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          bgcolor: alpha(accent, 0.16),
+          color: accent,
+          flexShrink: 0,
+        }}
+      >
+        {icon}
+      </Box>
+      <Typography
+        variant="caption"
+        sx={{
+          color: accent,
+          textTransform: 'uppercase',
+          letterSpacing: 0.8,
+          fontSize: 10.5,
+          fontWeight: 800,
+        }}
+      >
+        {title}
+      </Typography>
+      {typeof count === 'number' && count > 0 && (
+        <Box
+          sx={{
+            ml: 0.25,
+            minWidth: 18,
+            height: 18,
+            px: 0.6,
+            borderRadius: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            bgcolor: alpha(accent, 0.18),
+            color: accent,
+            fontSize: 10,
+            fontWeight: 800,
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {count}
+        </Box>
+      )}
+    </Stack>
+  );
+}
+
 export default function PlanSummary({ plan, onConfirm, onEdit, onLanguagesChange, onSocialLinksChange, loading, ctaLabel, colorTheme, onThemeChange, onExtractFromImage }: Props) {
   const { t, i18n } = useTranslation();
   const data = normalizePlanData(plan?.data);
@@ -250,262 +321,359 @@ export default function PlanSummary({ plan, onConfirm, onEdit, onLanguagesChange
     return t(`plan.languageNames.${code}`, { defaultValue: enLabels[code] ?? code.toUpperCase() });
   };
 
+  const filledSocialCount = Object.values(links).filter((v) => v && String(v).trim()).length;
+
   return (
-    <Box
+    <Paper
+      elevation={0}
       sx={{
         flexShrink: 0,
-        border: '1px solid rgba(99,102,241,0.3)',
-        borderRadius: 3,
-        overflow: 'visible',
+        position: 'relative',
+        overflow: 'hidden',
         mb: 3,
-        background: 'linear-gradient(135deg, rgba(99,102,241,0.06) 0%, rgba(16,185,129,0.04) 100%)',
+        borderRadius: 3,
+        border: '1px solid',
+        borderColor: 'rgba(99,102,241,0.32)',
+        background: (theme) =>
+          `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.10)} 0%, ${alpha(theme.palette.success.main, 0.06)} 100%), ${theme.palette.background.paper}`,
+        boxShadow: (theme) =>
+          `0 1px 0 ${alpha(theme.palette.common.white, 0.04)} inset, 0 12px 36px ${alpha(theme.palette.primary.main, 0.16)}`,
+        animation: 'planSummaryIn 0.36s cubic-bezier(0.22, 1, 0.36, 1)',
+        '@keyframes planSummaryIn': {
+          from: { opacity: 0, transform: 'translateY(10px)' },
+          to: { opacity: 1, transform: 'translateY(0)' },
+        },
       }}
     >
-      {/* Header strip */}
+      {/* Decorative gradient blob */}
       <Box
+        aria-hidden
         sx={{
-          px: 2.5,
-          py: 1.25,
-          borderBottom: '1px solid rgba(99,102,241,0.15)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
+          position: 'absolute',
+          top: -80,
+          right: -80,
+          width: 240,
+          height: 240,
+          borderRadius: '50%',
+          background:
+            'radial-gradient(circle, rgba(99,102,241,0.18) 0%, transparent 70%)',
+          pointerEvents: 'none',
         }}
-      >
-        <Box
-          sx={{
-            width: 6,
-            height: 6,
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #6366f1, #10b981)',
-          }}
-        />
-        <Typography
-          variant="caption"
-          fontWeight={700}
-          sx={{ color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: 1, fontSize: 10 }}
-        >
-          {t('plan.header')}
-        </Typography>
-      </Box>
+      />
 
-      <Box sx={{ p: 2.5, minHeight: 120 }}>
-        {/* Inline styles so parent theme / markdown styles cannot zero out visibility */}
-        <p style={{ margin: '0 0 12px', color: '#f1f5f9', fontSize: 14, lineHeight: 1.6 }}>
-          {hasStructured
-            ? t('plan.reviewStructured')
-            : t('plan.reviewSimple')}
-        </p>
+      <Box sx={{ position: 'relative', p: { xs: 2, sm: 2.5 } }}>
+        {/* ── Hero header ── */}
+        <Stack direction="row" alignItems="center" gap={1.5} sx={{ mb: 2 }}>
+          <Box
+            sx={{
+              width: 44,
+              height: 44,
+              borderRadius: 2.5,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              background: 'linear-gradient(135deg, #6366f1 0%, #10b981 100%)',
+              boxShadow: '0 6px 18px rgba(99,102,241,0.4)',
+              color: '#fff',
+            }}
+          >
+            <RocketLaunchIcon sx={{ fontSize: 22 }} />
+          </Box>
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: '#a5b4fc',
+                textTransform: 'uppercase',
+                letterSpacing: 1.1,
+                fontSize: 10,
+                fontWeight: 800,
+                display: 'block',
+                lineHeight: 1.2,
+              }}
+            >
+              {t('plan.header')}
+            </Typography>
+            <Typography
+              variant="subtitle1"
+              sx={{ fontWeight: 700, lineHeight: 1.35, mt: 0.25 }}
+            >
+              {hasStructured ? t('plan.reviewStructured') : t('plan.reviewSimple')}
+            </Typography>
+          </Box>
+        </Stack>
 
-        <Stack direction="row" flexWrap="wrap" gap={1} mb={hasStructured ? 2 : 1}>
-          {data.appType && (
-            <Chip
-              label={data.appType.replace(/_/g, ' ')}
-              size="small"
-              sx={{ bgcolor: 'rgba(99,102,241,0.15)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.25)', textTransform: 'capitalize' }}
-            />
-          )}
-          {data.style && (
-            <Chip
-              label={data.style}
-              size="small"
-              sx={{ bgcolor: 'rgba(16,185,129,0.1)', color: '#34d399', border: '1px solid rgba(16,185,129,0.2)' }}
-            />
-          )}
-          {data.tech && (
-            <Chip
-              label={data.tech}
-              size="small"
-              sx={{ bgcolor: 'rgba(255,255,255,0.06)', color: '#cbd5e1', border: '1px solid rgba(255,255,255,0.12)' }}
-            />
-          )}
-          {data.hasDatabase && (
-            <Tooltip title={t('plan.dataTooltip', { models: data.dataModels?.map((m) => m.name).join(', ') ?? '—' })} placement="top">
+        {/* ── Meta strip: type + style + tech + data ── */}
+        {(data.appType || data.style || data.tech || data.hasDatabase) && (
+          <Stack direction="row" flexWrap="wrap" gap={0.75} sx={{ mb: 2 }}>
+            {data.appType && (
               <Chip
-                icon={<StorageIcon sx={{ fontSize: '12px !important', color: '#fbbf24 !important' }} />}
-                label={t('plan.withData')}
+                label={data.appType.replace(/_/g, ' ')}
                 size="small"
-                sx={{ bgcolor: 'rgba(245,158,11,0.1)', color: '#fbbf24', border: '1px solid rgba(245,158,11,0.2)', cursor: 'help' }}
+                sx={{
+                  bgcolor: 'rgba(99,102,241,0.18)',
+                  color: '#c4b5fd',
+                  border: '1px solid rgba(99,102,241,0.32)',
+                  textTransform: 'capitalize',
+                  fontWeight: 700,
+                  fontSize: 12,
+                  height: 26,
+                }}
               />
-            </Tooltip>
+            )}
+            {data.style && (
+              <Chip
+                label={data.style}
+                size="small"
+                sx={{
+                  bgcolor: 'rgba(16,185,129,0.12)',
+                  color: '#34d399',
+                  border: '1px solid rgba(16,185,129,0.22)',
+                  fontSize: 12,
+                  height: 26,
+                }}
+              />
+            )}
+            {data.tech && (
+              <Chip
+                label={data.tech}
+                size="small"
+                sx={{
+                  bgcolor: 'rgba(255,255,255,0.05)',
+                  color: '#cbd5e1',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  fontSize: 12,
+                  height: 26,
+                }}
+              />
+            )}
+            {data.hasDatabase && (
+              <Tooltip
+                title={t('plan.dataTooltip', { models: data.dataModels?.map((m) => m.name).join(', ') ?? '—' })}
+                placement="top"
+              >
+                <Chip
+                  icon={<StorageIcon sx={{ fontSize: '14px !important', color: '#fbbf24 !important' }} />}
+                  label={t('plan.withData')}
+                  size="small"
+                  sx={{
+                    bgcolor: 'rgba(245,158,11,0.12)',
+                    color: '#fbbf24',
+                    border: '1px solid rgba(245,158,11,0.22)',
+                    cursor: 'help',
+                    fontSize: 12,
+                    height: 26,
+                  }}
+                />
+              </Tooltip>
+            )}
+          </Stack>
+        )}
+
+        {/* ── Sections + Features ── */}
+        <Stack direction={{ xs: 'column', md: 'row' }} gap={1.5} sx={{ mb: 2 }}>
+          {data.pages.length > 0 && (
+            <Box
+              sx={{
+                flex: 1,
+                p: 1.5,
+                borderRadius: 2,
+                border: '1px solid rgba(255,255,255,0.07)',
+                bgcolor: 'rgba(255,255,255,0.025)',
+              }}
+            >
+              <SectionHeader
+                icon={<DashboardIcon sx={{ fontSize: 14 }} />}
+                title={t('plan.sections')}
+                count={data.pages.length}
+                accent="#a5b4fc"
+              />
+              <Stack direction="row" flexWrap="wrap" gap={0.6}>
+                {data.pages.map((p) => (
+                  <Chip
+                    key={p}
+                    label={p}
+                    size="small"
+                    sx={{
+                      bgcolor: 'rgba(99,102,241,0.10)',
+                      color: '#e2e8f0',
+                      border: '1px solid rgba(99,102,241,0.22)',
+                      height: 24,
+                      fontSize: 12,
+                    }}
+                  />
+                ))}
+              </Stack>
+            </Box>
+          )}
+
+          {data.features.length > 0 && (
+            <Box
+              sx={{
+                flex: 1,
+                p: 1.5,
+                borderRadius: 2,
+                border: '1px solid rgba(255,255,255,0.07)',
+                bgcolor: 'rgba(255,255,255,0.025)',
+              }}
+            >
+              <SectionHeader
+                icon={<AutoAwesomeIcon sx={{ fontSize: 14 }} />}
+                title={t('plan.whatItDoes')}
+                count={data.features.length}
+                accent="#34d399"
+              />
+              <Stack direction="row" flexWrap="wrap" gap={0.6}>
+                {data.features.map((f) => (
+                  <Chip
+                    key={f}
+                    label={f}
+                    size="small"
+                    sx={{
+                      bgcolor: 'rgba(16,185,129,0.10)',
+                      color: '#e2e8f0',
+                      border: '1px solid rgba(16,185,129,0.22)',
+                      height: 24,
+                      fontSize: 12,
+                    }}
+                  />
+                ))}
+              </Stack>
+            </Box>
           )}
         </Stack>
 
-        {data.pages.length > 0 && (
-          <Box mb={1.5}>
-            <Typography variant="caption" sx={{ color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 10, fontWeight: 600 }}>
-              {t('plan.sections')}
-            </Typography>
-            <Stack direction="row" flexWrap="wrap" gap={0.75} mt={0.75}>
-              {data.pages.map((p) => (
-                <Chip key={p} label={p} size="small" variant="outlined" sx={{ borderColor: 'rgba(255,255,255,0.15)', color: '#e2e8f0', height: 24 }} />
-              ))}
-            </Stack>
-          </Box>
-        )}
-
-        {data.features.length > 0 && (
-          <Box mb={2}>
-            <Typography variant="caption" sx={{ color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 10, fontWeight: 600 }}>
-              {t('plan.whatItDoes')}
-            </Typography>
-            <Stack direction="row" flexWrap="wrap" gap={0.75} mt={0.75}>
-              {data.features.map((f) => (
-                <Chip key={f} label={f} size="small" variant="outlined" sx={{ borderColor: 'rgba(255,255,255,0.15)', color: '#e2e8f0', height: 24 }} />
-              ))}
-            </Stack>
-          </Box>
-        )}
-
-        <Box mb={2}>
-          <Box
-            sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'stretch',
-              gap: 1,
-              py: 1.25,
-              px: 1.25,
-              borderRadius: 2,
-              border: '1px solid',
-              borderColor: 'rgba(16,185,129,0.35)',
-              bgcolor: 'rgba(16,185,129,0.07)',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
-            }}
-          >
-            <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
-              <Typography
-                variant="caption"
-                sx={{ color: '#86efac', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11, fontWeight: 700 }}
-              >
-                {t('plan.languages', { defaultValue: 'App languages' })}
-              </Typography>
-              <Chip
-                label={selectedLanguages.length}
-                size="small"
-                sx={{ height: 18, fontSize: 10, bgcolor: 'rgba(16,185,129,0.2)', color: '#86efac', '& .MuiChip-label': { px: 0.75 } }}
-              />
-            </Stack>
-            <Typography variant="body2" sx={{ color: '#cbd5e1', fontSize: 13, lineHeight: 1.55 }}>
-              {t('plan.languagesHint', {
-                defaultValue: 'Choose the European languages the generated app should support. The app will be created with a language switcher and full UI translations for the selected locales.',
-              })}
-            </Typography>
-            <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: 11 }}>
-              {t('plan.languagesDefault', {
-                defaultValue: 'Bulgarian is preselected here by default, but the generated app does not have to start in Bulgarian.',
-              })}
-            </Typography>
-            <FormControl fullWidth size="small">
-              <Select
-                multiple
-                value={selectedLanguages}
-                onChange={(event) => onLanguagesChange(normalizeLanguages(event.target.value))}
-                renderValue={(selected) =>
-                  normalizeLanguages(selected)
-                    .map(getLanguageLabel)
-                    .join(', ')
-                }
-                sx={{
-                  mt: 0.25,
-                  color: '#e2e8f0',
-                  borderRadius: 1.5,
-                  bgcolor: 'rgba(255,255,255,0.04)',
-                  '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.12)' },
-                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(16,185,129,0.3)' },
-                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(16,185,129,0.45)' },
-                  '& .MuiSelect-icon': { color: '#94a3b8' },
-                }}
-                MenuProps={{
-                  PaperProps: {
-                    sx: {
-                      bgcolor: '#0f172a',
-                      border: '1px solid rgba(255,255,255,0.08)',
-                      mt: 0.5,
-                    },
+        {/* ── Languages section ── */}
+        <Box
+          sx={{
+            mb: 2,
+            p: 1.5,
+            borderRadius: 2,
+            border: '1px solid rgba(16,185,129,0.32)',
+            bgcolor: 'rgba(16,185,129,0.06)',
+          }}
+        >
+          <SectionHeader
+            icon={<LanguageIcon sx={{ fontSize: 14 }} />}
+            title={t('plan.languages')}
+            count={selectedLanguages.length}
+            accent="#86efac"
+          />
+          <Typography variant="body2" sx={{ color: '#cbd5e1', fontSize: 13, lineHeight: 1.55, mb: 0.5 }}>
+            {t('plan.languagesHint')}
+          </Typography>
+          <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: 11, display: 'block', mb: 1 }}>
+            {t('plan.languagesDefault')}
+          </Typography>
+          <FormControl fullWidth size="small">
+            <Select
+              multiple
+              value={selectedLanguages}
+              onChange={(event) => onLanguagesChange(normalizeLanguages(event.target.value))}
+              renderValue={(selected) =>
+                normalizeLanguages(selected).map(getLanguageLabel).join(', ')
+              }
+              sx={{
+                color: '#e2e8f0',
+                borderRadius: 1.5,
+                bgcolor: 'rgba(255,255,255,0.04)',
+                '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.12)' },
+                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(16,185,129,0.3)' },
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(16,185,129,0.45)' },
+                '& .MuiSelect-icon': { color: '#94a3b8' },
+              }}
+              MenuProps={{
+                PaperProps: {
+                  sx: {
+                    bgcolor: '#0f172a',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    mt: 0.5,
                   },
-                }}
-              >
-                {LANGUAGE_OPTIONS.map((option) => (
-                  <MenuItem key={option.code} value={option.code}>
-                    <Checkbox
-                      checked={selectedLanguages.includes(option.code)}
-                      disabled={option.code === 'bg'}
-                      sx={{ color: 'rgba(255,255,255,0.45)', '&.Mui-checked': { color: '#10b981' } }}
-                    />
-                    <ListItemText
-                      primary={getLanguageLabel(option.code)}
-                      secondary={option.code === 'bg'
-                        ? t('plan.languagesBulgarianDefault', { defaultValue: 'Preselected by default' })
-                        : undefined}
-                      primaryTypographyProps={{ fontSize: 13, color: '#e2e8f0' }}
-                      secondaryTypographyProps={{ fontSize: 11, color: '#94a3b8' }}
-                    />
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Box>
+                },
+              }}
+            >
+              {LANGUAGE_OPTIONS.map((option) => (
+                <MenuItem key={option.code} value={option.code}>
+                  <Checkbox
+                    checked={selectedLanguages.includes(option.code)}
+                    disabled={option.code === 'bg'}
+                    sx={{ color: 'rgba(255,255,255,0.45)', '&.Mui-checked': { color: '#10b981' } }}
+                  />
+                  <ListItemText
+                    primary={getLanguageLabel(option.code)}
+                    secondary={option.code === 'bg' ? t('plan.languagesBulgarianDefault') : undefined}
+                    primaryTypographyProps={{ fontSize: 13, color: '#e2e8f0' }}
+                    secondaryTypographyProps={{ fontSize: 11, color: '#94a3b8' }}
+                  />
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
         </Box>
 
-        {/* Social links */}
-        <Box mb={2}>
-          <Box
-            sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'stretch',
-              gap: 1,
-              py: 1.25,
-              px: 1.25,
-              borderRadius: 2,
-              border: '1px solid',
-              borderColor: 'rgba(99,102,241,0.35)',
-              bgcolor: 'rgba(99,102,241,0.07)',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
-            }}
-          >
-            <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
-              <Typography
-                variant="caption"
-                sx={{ color: '#c4b5fd', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11, fontWeight: 700 }}
-              >
-                {t('plan.socialLinks')}
-              </Typography>
-              <Chip
-                label={Object.values(links).filter((v) => v && String(v).trim()).length}
-                size="small"
-                sx={{ height: 18, fontSize: 10, bgcolor: 'rgba(99,102,241,0.25)', color: '#a5b4fc', '& .MuiChip-label': { px: 0.75 } }}
-              />
-            </Stack>
-            <Typography variant="body2" sx={{ color: '#cbd5e1', fontSize: 13, lineHeight: 1.55 }}>
-              {t('plan.socialLinksHint')}
-            </Typography>
-            <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: 11 }}>
-              {t('plan.socialLinksOptional')}
-            </Typography>
-            <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)' }} />
-            <Stack gap={0.75}>
-              {SOCIAL_FIELDS.map(({ key, label, icon: Icon, color }) => (
+        {/* ── Social links ── */}
+        <Box
+          sx={{
+            mb: 2,
+            p: 1.5,
+            borderRadius: 2,
+            border: '1px solid rgba(99,102,241,0.32)',
+            bgcolor: 'rgba(99,102,241,0.05)',
+          }}
+        >
+          <SectionHeader
+            icon={<ShareIcon sx={{ fontSize: 14 }} />}
+            title={t('plan.socialLinks')}
+            count={filledSocialCount}
+            accent="#c4b5fd"
+          />
+          <Typography variant="body2" sx={{ color: '#cbd5e1', fontSize: 13, lineHeight: 1.55, mb: 0.5 }}>
+            {t('plan.socialLinksHint')}
+          </Typography>
+          <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: 11, display: 'block', mb: 1 }}>
+            {t('plan.socialLinksOptional')}
+          </Typography>
+          <Stack gap={0.5}>
+            {SOCIAL_FIELDS.map(({ key, label, icon: Icon, color }) => {
+              const value = (links as Record<string, string | undefined>)[key] ?? '';
+              const filled = Boolean(value.trim());
+              return (
                 <Box
                   key={key}
                   sx={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: 1,
-                    bgcolor: 'rgba(255,255,255,0.04)',
+                    bgcolor: 'rgba(255,255,255,0.035)',
                     borderRadius: 1.5,
-                    px: 1.25,
-                    py: 0.65,
-                    border: '1px solid rgba(255,255,255,0.08)',
+                    pl: 1,
+                    pr: 1.25,
+                    py: 0.5,
+                    border: '1px solid',
+                    borderColor: filled ? alpha(color, 0.4) : 'rgba(255,255,255,0.08)',
                     transition: 'border-color 0.15s',
-                    '&:focus-within': { borderColor: 'rgba(99,102,241,0.4)' },
+                    '&:focus-within': { borderColor: 'rgba(99,102,241,0.5)' },
                   }}
                 >
-                  <Icon sx={{ fontSize: 16, color, opacity: 0.7, flexShrink: 0 }} />
+                  <Box
+                    sx={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      bgcolor: alpha(color, filled ? 0.2 : 0.1),
+                      color,
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Icon sx={{ fontSize: 13 }} />
+                  </Box>
                   <InputBase
                     placeholder={label}
-                    value={(links as Record<string, string | undefined>)[key] ?? ''}
+                    value={value}
                     onChange={(e) => onSocialLinksChange({ ...links, [key]: e.target.value })}
                     sx={{
                       flex: 1,
@@ -516,23 +684,46 @@ export default function PlanSummary({ plan, onConfirm, onEdit, onLanguagesChange
                     }}
                   />
                 </Box>
-              ))}
-            </Stack>
-          </Box>
+              );
+            })}
+          </Stack>
         </Box>
 
+        {/* ── Color picker (full-width edge-to-edge) ── */}
         <Box
           sx={{
-            mx: -2.5,
+            mx: { xs: -2, sm: -2.5 },
             mt: 2,
-            mb: 1.5,
-            px: 2.5,
+            mb: 2,
+            px: { xs: 2, sm: 2.5 },
             py: 2,
             borderTop: '1px solid rgba(99,102,241,0.18)',
             borderBottom: '1px solid rgba(99,102,241,0.18)',
-            background: 'linear-gradient(180deg, rgba(99,102,241,0.04) 0%, rgba(99,102,241,0.01) 100%)',
+            background: 'linear-gradient(180deg, rgba(99,102,241,0.05) 0%, rgba(99,102,241,0.01) 100%)',
           }}
         >
+          <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 1.25 }}>
+            <Box
+              sx={{
+                width: 22,
+                height: 22,
+                borderRadius: 1.25,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                bgcolor: 'rgba(168,85,247,0.18)',
+                color: '#c4b5fd',
+              }}
+            >
+              <PaletteIcon sx={{ fontSize: 14 }} />
+            </Box>
+            <Typography
+              variant="caption"
+              sx={{ color: '#c4b5fd', textTransform: 'uppercase', letterSpacing: 0.8, fontSize: 10.5, fontWeight: 800 }}
+            >
+              {t('theme.sectionTitle')}
+            </Typography>
+          </Stack>
           <ColorThemePicker
             value={colorTheme}
             onChange={onThemeChange}
@@ -549,31 +740,47 @@ export default function PlanSummary({ plan, onConfirm, onEdit, onLanguagesChange
             sx={{
               flex: 1,
               color: '#fff !important',
-              background: loading ? 'rgba(99,102,241,0.45)' : 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-              boxShadow: '0 4px 20px rgba(99,102,241,0.3)',
-              py: 1.25,
+              fontSize: 14.5,
               fontWeight: 700,
-              '&:hover': { boxShadow: '0 6px 28px rgba(99,102,241,0.45)', background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)' },
+              letterSpacing: 0.2,
+              borderRadius: 2,
+              py: 1.4,
+              textTransform: 'none',
+              background: loading ? 'rgba(99,102,241,0.45)' : 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+              boxShadow: '0 6px 22px rgba(99,102,241,0.35)',
+              transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+              '&:hover': {
+                transform: 'translateY(-1px)',
+                boxShadow: '0 10px 30px rgba(99,102,241,0.5)',
+                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+              },
               '&.Mui-disabled': { color: 'rgba(255,255,255,0.65) !important' },
             }}
           >
             {loading ? t('plan.buildProcessing') : (ctaLabel ?? t('plan.buildDefault'))}
           </Button>
           <Button
-            variant="outlined"
+            variant="text"
             startIcon={<EditIcon fontSize="small" />}
             onClick={onEdit}
             disabled={loading}
             sx={{
-              color: '#e2e8f0',
-              borderColor: 'rgba(255,255,255,0.2)',
-              '&:hover': { borderColor: 'rgba(255,255,255,0.35)', bgcolor: 'rgba(255,255,255,0.04)' },
+              flexShrink: 0,
+              px: 1.75,
+              borderRadius: 2,
+              color: 'text.secondary',
+              fontWeight: 600,
+              textTransform: 'none',
+              '&:hover': {
+                color: 'text.primary',
+                bgcolor: (theme) => alpha(theme.palette.common.white, 0.04),
+              },
             }}
           >
             {t('plan.edit')}
           </Button>
         </Stack>
       </Box>
-    </Box>
+    </Paper>
   );
 }

@@ -219,14 +219,7 @@ export default function ColorThemePicker({ value, onChange, onExtractFromImage }
 
   return (
     <Box>
-      <Typography
-        variant="caption"
-        sx={{ color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 10, fontWeight: 600 }}
-      >
-        {t('theme.sectionTitle')}
-      </Typography>
-
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, mt: 1 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}>
         {isExtracted && renderThemeTile(value, true, value.name, '__extracted')}
         {THEME_PRESETS.map((preset) => (
           renderThemeTile(preset, value.name === preset.name, t(`theme.presets.${preset.name}`), preset.name)
