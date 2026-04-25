@@ -16,6 +16,8 @@ model User {
   stripeCustomerId String?                @unique
   freeProjectUsed  Boolean                @default(false)
   createdAt        DateTime               @default(now())
+  /// Soft delete: row is preserved so the email cannot be reused and support can restore the account.
+  deletedAt        DateTime?
   sessions         Session[]
   emailChange      PendingEmailChange?
   passwordChange   PendingPasswordChange?

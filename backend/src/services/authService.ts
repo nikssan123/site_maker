@@ -6,6 +6,7 @@ import { AppError } from '../middleware/errorHandler';
 import { EmailService } from './emailService';
 import { buildVerificationEmail } from '../lib/verificationEmail';
 import { buildPasswordResetEmail } from '../lib/passwordResetEmail';
+import { stopProject, stopPersistentHosting } from './appRunner';
 
 const SALT_ROUNDS = 12;
 const CODE_TTL_MS = 15 * 60 * 1000;
@@ -171,8 +172,9 @@ export async function requestPasswordReset(rawEmail: string) {
   if (!email) throw new AppError(400, 'Email is required');
 
   const user = await prisma.user.findUnique({ where: { email } });
-  // Always return success to avoid leaking which emails are registered.
-  if (!user) return { ok: true as const };
+  // Always return success to avoid leaking which emails are registered
+  // (or have been soft-deleted).
+  if (!user || user.deletedAt) return { ok: true as const };
 
   // Invalidate any outstanding unused tokens for this user.
   await prisma.passwordReset.updateMany({
@@ -209,6 +211,9 @@ export async function resetPassword(rawToken: string, newPassword: string) {
     throw new AppError(400, 'Reset link has expired');
   }
 
+  const user = await prisma.user.findUnique({ where: { id: record.userId } });
+  if (!user || user.deletedAt) throw new AppError(400, 'Invalid or expired reset link');
+
   const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
 
   await prisma.$transaction([
@@ -226,7 +231,7 @@ export async function resetPassword(rawToken: string, newPassword: string) {
 
 export async function login(email: string, password: string) {
   const user = await prisma.user.findUnique({ where: { email: normalizeEmail(email) } });
-  if (!user) throw new AppError(401, 'Invalid credentials');
+  if (!user || user.deletedAt) throw new AppError(401, 'Invalid credentials');
 
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) throw new AppError(401, 'Invalid credentials');
@@ -239,6 +244,7 @@ export async function login(email: string, password: string) {
 
 export async function getMe(userId: string) {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  if (user.deletedAt) throw new AppError(401, 'Account is deleted');
   return {
     id: user.id,
     email: user.email,
@@ -429,20 +435,55 @@ export async function confirmEmailChange(userId: string, rawCode: string) {
 
 export async function deleteAccount(userId: string, password: string) {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  if (user.deletedAt) throw new AppError(410, 'Account is already deleted');
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) throw new AppError(401, 'Password is incorrect');
 
-  const sessionCount = await prisma.session.count({ where: { userId } });
-  if (sessionCount > 0) {
+  // Block on any active Stripe subscription — user must cancel first so we
+  // never silently keep billing a "deleted" account.
+  if (user.iterationSubStatus && user.iterationSubStatus !== 'canceled') {
     throw new AppError(
       409,
-      'Delete your projects first. Contact support if you need help removing hosted projects.',
+      'Cancel your improvement plan in Billing before deleting your account.',
+    );
+  }
+  const hostedProject = await prisma.project.findFirst({
+    where: { session: { userId }, hostingSubscriptionId: { not: null } },
+    select: { id: true },
+  });
+  if (hostedProject) {
+    throw new AppError(
+      409,
+      'Cancel hosting on your projects via the billing portal before deleting your account.',
     );
   }
 
+  // Stop any running/hosted projects but keep the file contents so the
+  // account can be restored later with its data intact.
+  const projects = await prisma.project.findMany({
+    where: { session: { userId } },
+    select: { id: true, hosted: true },
+  });
+  for (const p of projects) {
+    if (p.hosted) await stopPersistentHosting(p.id).catch(() => {});
+    await stopProject(p.id).catch(() => {});
+  }
+
+  // Soft delete: keep the User row so the email is not reusable and support
+  // can restore the account on request. Wipe pending verification artifacts,
+  // invalidate password-reset tokens, and park projects in 'stopped'.
   await prisma.$transaction([
-    prisma.passwordReset.deleteMany({ where: { userId } }),
-    prisma.user.delete({ where: { id: userId } }),
+    prisma.passwordReset.updateMany({
+      where: { userId, usedAt: null },
+      data: { usedAt: new Date() },
+    }),
+    prisma.pendingEmailChange.deleteMany({ where: { userId } }),
+    prisma.pendingPasswordChange.deleteMany({ where: { userId } }),
+    prisma.project.updateMany({
+      where: { session: { userId } },
+      data: { status: 'stopped', runPort: null, hosted: false },
+    }),
+    prisma.user.update({ where: { id: userId }, data: { deletedAt: new Date() } }),
   ]);
   return { ok: true as const };
 }
