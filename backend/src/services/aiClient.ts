@@ -49,6 +49,31 @@ export interface StructuredResult<T> {
   model: string;
 }
 
+export interface ToolHandler {
+  name: string;
+  description: string;
+  inputSchema: ToolSchema<unknown>['inputSchema'];
+  /** Returns a JSON-serializable value the model receives as tool_result. */
+  handler(input: unknown): Promise<unknown>;
+}
+
+export interface ToolLoopOptions extends CompleteOptions {
+  /** Cache system + tools (5min TTL). Default true. */
+  cacheSystem?: boolean;
+  /** Hard cap on assistant turns. Default 25. */
+  maxSteps?: number;
+  onStep?(step: { index: number; toolUses: { name: string; input: unknown }[] }): void;
+}
+
+export interface ToolLoopResult {
+  finalText: string;
+  usage: TokenUsage;
+  provider: 'anthropic' | 'openai';
+  model: string;
+  steps: number;
+  stopReason: string;
+}
+
 interface AIProvider {
   complete(messages: ChatMessage[], system: string, options?: CompleteOptions): Promise<string>;
   /** Same as complete() but also returns token usage + provider/model for accounting. */
@@ -67,6 +92,16 @@ interface AIProvider {
     tool: ToolSchema<T>,
     options?: CompleteStructuredOptions,
   ): Promise<StructuredResult<T>>;
+  /**
+   * Multi-turn tool-use loop. Model picks tools until end_turn or maxSteps.
+   * Anthropic-only today; OpenAI provider throws.
+   */
+  runToolLoop(
+    messages: ChatMessage[],
+    system: string,
+    tools: ToolHandler[],
+    options?: ToolLoopOptions,
+  ): Promise<ToolLoopResult>;
   stream(
     messages: ChatMessage[],
     system: string,
@@ -188,6 +223,144 @@ class ClaudeProvider implements AIProvider {
       model: this.model,
     };
   }
+
+  async runToolLoop(
+    messages: ChatMessage[],
+    system: string,
+    tools: ToolHandler[],
+    options?: ToolLoopOptions,
+  ): Promise<ToolLoopResult> {
+    const maxTokens = options?.maxTokens ?? parseInt(process.env.CLAUDE_MAX_OUTPUT_TOKENS ?? '8192', 10);
+    const maxSteps = options?.maxSteps ?? 25;
+    const cacheSystem = options?.cacheSystem !== false;
+
+    const systemParam = cacheSystem
+      ? [{ type: 'text' as const, text: system, cache_control: { type: 'ephemeral' as const } }]
+      : system;
+
+    const toolDefs = tools.map((t, i) => {
+      const def: Record<string, unknown> = {
+        name: t.name,
+        description: t.description,
+        input_schema: t.inputSchema,
+      };
+      // Cache only the last tool entry — Anthropic propagates cache_control to all earlier blocks.
+      if (cacheSystem && i === tools.length - 1) {
+        def.cache_control = { type: 'ephemeral' as const };
+      }
+      return def;
+    });
+
+    const handlers = new Map(tools.map((t) => [t.name, t.handler]));
+    type AnthropicMsg = { role: 'user' | 'assistant'; content: unknown };
+    const convo: AnthropicMsg[] = messages.map((m) => ({ role: m.role, content: m.content }));
+
+    let totalIn = 0;
+    let totalOut = 0;
+    let stopReason = 'unknown';
+    let finalText = '';
+    let step = 0;
+
+    while (step < maxSteps) {
+      step++;
+      const response = await this.client.messages.create({
+        model: this.model,
+        max_tokens: maxTokens,
+        system: systemParam,
+        messages: convo as never,
+        tools: toolDefs as never,
+        tool_choice: { type: 'auto' },
+      });
+
+      totalIn += response.usage?.input_tokens ?? 0;
+      totalOut += response.usage?.output_tokens ?? 0;
+      stopReason = response.stop_reason ?? 'unknown';
+
+      const assistantBlocks = response.content;
+      convo.push({ role: 'assistant', content: assistantBlocks });
+
+      if (response.stop_reason !== 'tool_use') {
+        finalText = assistantBlocks
+          .filter((b) => b.type === 'text')
+          .map((b) => (b as { text: string }).text)
+          .join('\n')
+          .trim();
+        break;
+      }
+
+      const toolUses = assistantBlocks.filter((b) => b.type === 'tool_use') as Array<{
+        type: 'tool_use';
+        id: string;
+        name: string;
+        input: unknown;
+      }>;
+
+      if (options?.onStep) {
+        options.onStep({
+          index: step,
+          toolUses: toolUses.map((u) => ({ name: u.name, input: u.input })),
+        });
+      }
+
+      const toolResults: Array<{ type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean }> = [];
+      for (const tu of toolUses) {
+        const handler = handlers.get(tu.name);
+        let resultPayload: unknown;
+        let isError = false;
+        if (!handler) {
+          resultPayload = { ok: false, error: `Unknown tool: ${tu.name}` };
+          isError = true;
+        } else {
+          try {
+            resultPayload = await handler(tu.input);
+          } catch (e) {
+            resultPayload = { ok: false, error: String(e instanceof Error ? e.message : e).slice(0, 800) };
+            isError = true;
+          }
+        }
+        const serialized = JSON.stringify(resultPayload).slice(0, 16_000);
+        toolResults.push({
+          type: 'tool_result',
+          tool_use_id: tu.id,
+          content: serialized,
+          ...(isError ? { is_error: true } : {}),
+        });
+      }
+
+      convo.push({ role: 'user', content: toolResults });
+    }
+
+    if (step >= maxSteps && stopReason === 'tool_use') {
+      // Step budget exhausted; ask for a final summary without tools.
+      convo.push({
+        role: 'user',
+        content: 'Step budget exhausted. Return your final summary now.',
+      });
+      const finalResponse = await this.client.messages.create({
+        model: this.model,
+        max_tokens: maxTokens,
+        system: systemParam,
+        messages: convo as never,
+      });
+      totalIn += finalResponse.usage?.input_tokens ?? 0;
+      totalOut += finalResponse.usage?.output_tokens ?? 0;
+      stopReason = finalResponse.stop_reason ?? stopReason;
+      finalText = finalResponse.content
+        .filter((b) => b.type === 'text')
+        .map((b) => (b as { text: string }).text)
+        .join('\n')
+        .trim();
+    }
+
+    return {
+      finalText,
+      usage: { inputTokens: totalIn, outputTokens: totalOut },
+      provider: 'anthropic',
+      model: this.model,
+      steps: step,
+      stopReason,
+    };
+  }
 }
 
 class OpenAIProvider implements AIProvider {
@@ -237,6 +410,15 @@ class OpenAIProvider implements AIProvider {
     // Codegen / fixer / iterator are Claude-only paths today; if you wire OpenAI
     // into one of those, implement this with `tools` + `tool_choice` on chat.completions.
     throw new Error('completeStructured is not implemented for the OpenAI provider');
+  }
+
+  async runToolLoop(
+    _messages: ChatMessage[],
+    _system: string,
+    _tools: ToolHandler[],
+    _options?: ToolLoopOptions,
+  ): Promise<ToolLoopResult> {
+    throw new Error('runToolLoop is not implemented for the OpenAI provider');
   }
 
   async stream(

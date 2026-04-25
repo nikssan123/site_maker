@@ -1,7 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-
-const BASE_DIR = process.env.GENERATED_APPS_DIR ?? '/generated-apps';
+import { BASE_DIR } from './projectSandbox';
 
 export async function writeProjectFiles(
   projectId: string,

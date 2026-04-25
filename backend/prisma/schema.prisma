@@ -195,6 +195,7 @@ model IterationPlan {
   spec                 String
   targetFiles          Json
   nonGoals             Json?
+  executionBrief       Json?
   explorerContextNotes String?
   status               String    @default("draft") // "draft" | "approved" | "applying" | "applied" | "failed" | "cancelled"
   snapshotBeforeId     String?

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth';
 import { runIteration } from '../services/iteratorService';
 import { clarifyIteration } from '../services/iterateClarifyService';
+import { runIterationAgent, type ExecutionBrief } from '../services/iterateAgent/agentOrchestrator';
 import { assertCanIterate } from '../services/tokenAccountingService';
 import { prisma } from '../index';
 import { AppError } from '../middleware/errorHandler';
@@ -43,6 +44,7 @@ router.post('/clarify', requireAuth, async (req, res, next) => {
           spec: result.spec,
           targetFiles: result.targetFiles,
           nonGoals: result.nonGoals,
+          executionBrief: result.executionBrief,
           explorerContextNotes: result.explorerContextNotes,
         },
       });
@@ -93,6 +95,7 @@ router.post('/', requireAuth, async (req, res, next) => {
     let applyTargetFiles = targetFiles;
     let applyExplorerContextNotes = explorerContextNotes;
     let approvedPlanId: string | undefined;
+    let executionBrief: ExecutionBrief | null = null;
 
     if (planId) {
       const plan = await prisma.iterationPlan.findFirst({
@@ -107,6 +110,9 @@ router.post('/', requireAuth, async (req, res, next) => {
       applyTargetFiles = Array.isArray(plan.targetFiles) ? (plan.targetFiles as string[]) : [];
       applyExplorerContextNotes = plan.explorerContextNotes ?? undefined;
       approvedPlanId = plan.id;
+      if (plan.executionBrief && typeof plan.executionBrief === 'object') {
+        executionBrief = plan.executionBrief as unknown as ExecutionBrief;
+      }
     }
 
     const snapshot = await createProjectSnapshot({
@@ -140,16 +146,30 @@ router.post('/', requireAuth, async (req, res, next) => {
       });
     }
 
-    runIteration(sessionId, userId, applyMessage, {
-      spec: applySpec,
-      targetFiles: applyTargetFiles,
-      explorerContextNotes: applyExplorerContextNotes,
-      logId: log.id,
-      planId: approvedPlanId,
-      snapshotBeforeId: snapshot.id,
-    }).catch((err) => {
-      console.error('[iterate] unhandled pipeline error', err);
-    });
+    if (approvedPlanId && executionBrief) {
+      runIterationAgent({
+        sessionId,
+        userId,
+        projectId: project.id,
+        planId: approvedPlanId,
+        snapshotBeforeId: snapshot.id,
+        executionBrief,
+        logId: log.id,
+      }).catch((err) => {
+        console.error('[iterate-agent] unhandled pipeline error', err);
+      });
+    } else {
+      runIteration(sessionId, userId, applyMessage, {
+        spec: applySpec,
+        targetFiles: applyTargetFiles,
+        explorerContextNotes: applyExplorerContextNotes,
+        logId: log.id,
+        planId: approvedPlanId,
+        snapshotBeforeId: snapshot.id,
+      }).catch((err) => {
+        console.error('[iterate] unhandled pipeline error', err);
+      });
+    }
 
     return res.json({ sessionId });
   } catch (err) {
