@@ -118,8 +118,11 @@ export async function runIteration(
     logId?: string;
     planId?: string;
     snapshotBeforeId?: string;
+    /** True when this iteration is one of the user's free credits (FREE_ITERATION_LIMIT per project). */
+    isFree?: boolean;
   },
 ): Promise<void> {
+  const isFree = opts?.isFree === true;
   await clearSessionEvents(sessionId);
 
   const session = await prisma.session.findFirst({
@@ -208,6 +211,7 @@ Rules:
         model: refineResult.model,
         endpoint: 'iterate.refine',
         usage: refineResult.usage,
+        isFree,
       });
     } catch {
       refinedSpec = changeRequest;
@@ -244,6 +248,7 @@ Rules:
         maxFiles: 12,
         userId,
         projectId: project.id,
+        isFree,
       });
       scopedFiles = scoped.targetFiles;
     } catch {
@@ -312,6 +317,7 @@ Rules:
         model: codegenResult.model,
         endpoint: 'iterate.codegen',
         usage: codegenResult.usage,
+        isFree,
       });
     } catch (e) {
       lastIterError = e instanceof Error ? e.message : String(e);
@@ -334,6 +340,7 @@ Rules:
           model: retryResult.model,
           endpoint: 'iterate.codegen',
           usage: retryResult.usage,
+          isFree,
         });
       } catch (e) {
         lastIterError = e instanceof Error ? e.message : String(e);

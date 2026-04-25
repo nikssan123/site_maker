@@ -34,6 +34,12 @@ export interface LogTokensInput {
    */
   endpoint: string;
   usage: TokenUsage;
+  /**
+   * True when this call came from one of the user's free-tier iterations (the first
+   * FREE_ITERATION_LIMIT per project). Free usage is recorded for analytics but excluded
+   * from the subscription % meter and the daily $ circuit breaker.
+   */
+  isFree?: boolean;
 }
 
 function costMicrosFor(model: string, usage: TokenUsage): number {
@@ -57,6 +63,7 @@ export async function logTokens(input: LogTokensInput): Promise<void> {
         inputTokens: input.usage.inputTokens,
         outputTokens: input.usage.outputTokens,
         costMicros,
+        isFree: input.isFree === true,
       },
     });
   } catch (err) {
@@ -96,6 +103,7 @@ export async function getUserPeriodUsage(userId: string): Promise<number> {
     where: {
       userId,
       endpoint: { startsWith: 'iterate.' },
+      isFree: false,
       createdAt: { gte: start, lte: end },
     },
     _sum: { inputTokens: true, outputTokens: true },
@@ -168,10 +176,16 @@ export async function getAllowanceSummary(userId: string): Promise<AllowanceSumm
  * Also enforces a 24h dollar circuit breaker to protect margin against adversarial output-heavy prompts.
  */
 export async function assertCanIterate(userId: string): Promise<void> {
-  // 24h $ circuit breaker — independent of subscription state.
+  // 24h $ circuit breaker — independent of subscription state. Free-tier iterations are
+  // tracked elsewhere (FREE_ITERATION_LIMIT per project) and don't count here.
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const dayAgg = await prisma.tokenUsageLog.aggregate({
-    where: { userId, endpoint: { startsWith: 'iterate.' }, createdAt: { gte: since } },
+    where: {
+      userId,
+      endpoint: { startsWith: 'iterate.' },
+      isFree: false,
+      createdAt: { gte: since },
+    },
     _sum: { costMicros: true },
   });
   const dayMicros = dayAgg._sum.costMicros ?? 0;

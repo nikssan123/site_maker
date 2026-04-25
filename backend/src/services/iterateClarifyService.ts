@@ -139,7 +139,9 @@ export async function clarifyIteration(
   userId: string,
   conversation: ChatMessage[],
   attachments: Attachment[] = [],
+  opts: { isFree?: boolean } = {},
 ): Promise<IterateClarifyResult> {
+  const isFree = opts.isFree === true;
   const session = await prisma.session.findFirst({
     where: { id: sessionId, userId },
     include: { project: true, plan: true },
@@ -241,6 +243,7 @@ ${conversationContext || '(няма)'}${attachmentsBlock}
     model: mainResult.model,
     endpoint: 'iterate.clarify',
     usage: mainResult.usage,
+    isFree,
   });
   const parsed = safeParseJson(mainResult.text);
   const data = parsed ? RESULT_SCHEMA.safeParse(parsed) : null;
@@ -273,6 +276,7 @@ ${conversationContext || '(няма)'}${attachmentsBlock}
           maxFiles: 6,
           userId,
           projectId,
+          isFree,
         });
         finalTargets = scoped.targetFiles;
         nonGoals = scoped.nonGoalsBg;

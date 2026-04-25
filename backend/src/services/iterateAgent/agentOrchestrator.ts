@@ -89,9 +89,12 @@ export async function runIterationAgent(input: {
   executionBrief: ExecutionBrief;
   attachments?: Attachment[];
   logId?: string;
+  /** True when this iteration is one of the user's free credits (FREE_ITERATION_LIMIT per project). */
+  isFree?: boolean;
 }): Promise<void> {
   const { sessionId, userId, projectId, planId, snapshotBeforeId, executionBrief, logId } = input;
   const attachments = input.attachments ?? [];
+  const isFree = input.isFree === true;
 
   await clearSessionEvents(sessionId);
 
@@ -223,6 +226,7 @@ export async function runIterationAgent(input: {
       model: loopResult.model,
       endpoint: 'iterate.agent',
       usage: loopResult.usage,
+      isFree,
     });
   }
 

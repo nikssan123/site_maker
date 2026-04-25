@@ -26,7 +26,21 @@ router.post('/clarify', requireAuth, async (req, res, next) => {
     }).parse(req.body);
 
     const userId = req.user.userId;
-    const result = await clarifyIteration(sessionId, userId, messages, attachments ?? []);
+    // Pre-iteration token logging is tagged free when the upcoming iteration would still be
+    // in the free tier — so users aren't charged a subscription %-share for clarify steps
+    // that lead into a free run.
+    const session = await prisma.session.findFirst({
+      where: { id: sessionId, userId },
+      include: { project: { select: { id: true } } },
+    });
+    let isFree = false;
+    if (session?.project) {
+      const freeUsed = await prisma.iterationLog.count({
+        where: { projectId: session.project.id },
+      });
+      isFree = freeUsed < FREE_ITERATION_LIMIT;
+    }
+    const result = await clarifyIteration(sessionId, userId, messages, attachments ?? [], { isFree });
 
     if (result.kind === 'ready') {
       const session = await prisma.session.findFirst({
@@ -91,8 +105,9 @@ router.post('/', requireAuth, async (req, res, next) => {
     const freeUsed = await prisma.iterationLog.count({
       where: { projectId: project.id },
     });
+    const isFree = freeUsed < FREE_ITERATION_LIMIT;
 
-    if (freeUsed >= FREE_ITERATION_LIMIT) {
+    if (!isFree) {
       await assertCanIterate(userId);
     }
 
@@ -169,6 +184,7 @@ router.post('/', requireAuth, async (req, res, next) => {
         executionBrief,
         attachments: applyAttachments,
         logId: log.id,
+        isFree,
       }).catch((err) => {
         console.error('[iterate-agent] unhandled pipeline error', err);
       });
@@ -180,6 +196,7 @@ router.post('/', requireAuth, async (req, res, next) => {
         logId: log.id,
         planId: approvedPlanId,
         snapshotBeforeId: snapshot.id,
+        isFree,
       }).catch((err) => {
         console.error('[iterate] unhandled pipeline error', err);
       });

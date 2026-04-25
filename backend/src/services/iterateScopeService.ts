@@ -35,6 +35,8 @@ export async function scopeIteration(params: {
   /** Accounting context — tokens are billed to this user/project when provided. */
   userId?: string;
   projectId?: string;
+  /** True when the surrounding iteration is using one of the user's free credits. */
+  isFree?: boolean;
 }): Promise<IterateScopeResult> {
   const maxFiles = params.maxFiles ?? 8;
   const system = `
@@ -81,6 +83,7 @@ Rules:
       model: scopeResult.model,
       endpoint: 'iterate.clarify.explore',
       usage: scopeResult.usage,
+      isFree: params.isFree === true,
     });
   }
   const raw = scopeResult.text;

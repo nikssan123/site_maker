@@ -728,6 +728,7 @@ export default function PreviewPage() {
           store.setRunPort(event.port);
           setRefreshKey((k) => k + 1);
           loadProject().catch(() => { });
+          useIterationPlanStore.getState().refresh().catch(() => { });
           fetchHistory();
           setIterateChat((prev) => [...prev, { role: 'assistant', content: t('preview.changesApplied') }]);
         }
