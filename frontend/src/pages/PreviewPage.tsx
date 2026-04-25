@@ -851,7 +851,7 @@ export default function PreviewPage() {
   const { projectPaid, allowUnpaidDownload, projectHosted, hostingStatus, hostingFreeUntil, customDomain } = store;
 
   return (
-    <Box sx={{ height: ['100vh', '100dvh'], display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
+    <Box sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
       <Joyride
         steps={tour.steps}
         stepIndex={tour.stepIndex}
