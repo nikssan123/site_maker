@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box, AppBar, Toolbar, Typography, Button, Tooltip,
   IconButton, Stack, CircularProgress, Paper, Alert,
-  Dialog, DialogTitle, DialogContent, Divider, Snackbar, Backdrop, Collapse, List, ListItem, ListItemText,
+  Dialog, DialogTitle, DialogContent, Divider, Snackbar, Backdrop,
   Drawer, useMediaQuery, useTheme,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -18,9 +18,6 @@ import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import EditIcon from '@mui/icons-material/Edit';
 import StorefrontIcon from '@mui/icons-material/Storefront';
-import HistoryIcon from '@mui/icons-material/History';
-import RestoreIcon from '@mui/icons-material/Restore';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import DescriptionIcon from '@mui/icons-material/Description';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
@@ -40,6 +37,7 @@ import ProjectCheckout from '../components/UpgradeGate';
 import PaymentsSetupDialog from '../components/PaymentsSetupDialog';
 import SupportDialog from '../components/SupportDialog';
 import MessageBubble from '../components/MessageBubble';
+import HistoryPanel, { type HistoryItem } from '../components/HistoryPanel';
 import EditDialog, { type EditTarget, type EditEvent } from '../components/EditDialog';
 import HostingDialog from '../components/HostingDialog';
 import type { TextStylePatch } from '../components/EditDialog';
@@ -105,6 +103,33 @@ function snapshotSourceKey(source: string): string {
   if (source === 'manual_restore') return 'preview.snapshotSourceManualRestore';
   if (source === 'repair') return 'preview.snapshotSourceRepair';
   return 'preview.snapshotSourceDefault';
+}
+
+type IterationHistoryEntry = { id: string; title: string | null; description: string | null; createdAt: string };
+type TFn = (key: string, options?: Record<string, unknown>) => string;
+
+function mapIterationHistory(entries: IterationHistoryEntry[], t: TFn): HistoryItem[] {
+  return entries.map((entry) => {
+    const titleRaw = entry.title?.trim() ?? '';
+    const descRaw = entry.description?.trim() ?? '';
+    const titleBad = titleRaw && looksLikeInternalIterationSpec(titleRaw);
+    const descBad = descRaw && looksLikeInternalIterationSpec(descRaw);
+    return {
+      id: entry.id,
+      title: titleBad || !titleRaw ? t('preview.historyUntitled') : titleRaw,
+      description: !descBad && descRaw ? descRaw : null,
+      createdAt: entry.createdAt,
+    };
+  });
+}
+
+function mapSnapshotHistory(entries: ProjectSnapshotEntry[], t: TFn): HistoryItem[] {
+  return entries.map((snapshot) => ({
+    id: snapshot.id,
+    title: t(snapshotSourceKey(snapshot.source)),
+    description: snapshot.reason?.trim() || null,
+    createdAt: snapshot.createdAt,
+  }));
 }
 
 interface ActionButtonProps {
@@ -1415,172 +1440,34 @@ export default function PreviewPage() {
 
                 {/* History section */}
                 {iterationHistory.length > 0 && (
-                  <Box sx={{ mt: 0.5 }}>
-                    <Box
-                      component="button"
-                      onClick={() => {
-                        if (!historyOpen) fetchHistory();
-                        setHistoryOpen((v) => !v);
-                      }}
-                      sx={{
-                        all: 'unset', display: 'flex', alignItems: 'center', gap: 0.75,
-                        width: '100%', cursor: 'pointer', py: 0.5, px: 0.5, borderRadius: 1,
-                        color: 'text.secondary', '&:hover': { color: 'text.primary' },
-                      }}
-                    >
-                      <HistoryIcon sx={{ fontSize: 14 }} />
-                      <Typography variant="caption" fontWeight={600} sx={{ flex: 1, fontSize: 11 }}>
-                        {t('preview.historyLabel', { n: iterationHistory.length })}
-                      </Typography>
-                      <ExpandMoreIcon sx={{ fontSize: 14, transform: historyOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-                    </Box>
-                    <Collapse in={historyOpen}>
-                      <List dense disablePadding sx={{ mt: 0.5 }}>
-                        {iterationHistory.map((entry, i) => {
-                          const titleRaw = entry.title?.trim() ?? '';
-                          const descRaw = entry.description?.trim() ?? '';
-                          const titleBad = titleRaw && looksLikeInternalIterationSpec(titleRaw);
-                          const descBad = descRaw && looksLikeInternalIterationSpec(descRaw);
-                          const displayTitle =
-                            titleBad || !titleRaw ? t('preview.historyUntitled') : titleRaw;
-                          const displayDesc = !descBad && descRaw ? descRaw : null;
-                          return (
-                            <Box key={entry.id}>
-                              <ListItem sx={{ px: 0.5, py: 0.75, alignItems: 'flex-start' }}>
-                                <ListItemText
-                                  primary={displayTitle}
-                                  secondary={(
-                                    <Box component="span" sx={{ display: 'block' }}>
-                                      <Typography
-                                        component="span"
-                                        variant="caption"
-                                        sx={{ fontSize: 10, color: 'text.disabled', display: 'block' }}
-                                      >
-                                        {new Date(entry.createdAt).toLocaleDateString('bg-BG', {
-                                          day: '2-digit',
-                                          month: 'short',
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                        })}
-                                      </Typography>
-                                      {displayDesc ? (
-                                        <Typography
-                                          component="span"
-                                          variant="caption"
-                                          sx={{
-                                            display: 'block',
-                                            mt: 0.35,
-                                            fontSize: 11,
-                                            color: 'text.secondary',
-                                            whiteSpace: 'pre-wrap',
-                                            lineHeight: 1.35,
-                                          }}
-                                        >
-                                          {displayDesc}
-                                        </Typography>
-                                      ) : null}
-                                    </Box>
-                                  )}
-                                  primaryTypographyProps={{ variant: 'caption', fontWeight: 600, sx: { lineHeight: 1.3 } }}
-                                  slotProps={{ secondary: { component: 'div' } }}
-                                />
-                              </ListItem>
-                              {i < iterationHistory.length - 1 && <Divider sx={{ opacity: 0.4 }} />}
-                            </Box>
-                          );
-                        })}
-                      </List>
-                    </Collapse>
-                  </Box>
+                  <HistoryPanel
+                    variant="improvement"
+                    label={t('preview.historyLabel', { n: iterationHistory.length })}
+                    defaultOpen={historyOpen}
+                    onToggleOpen={(next) => {
+                      if (next) fetchHistory();
+                      setHistoryOpen(next);
+                    }}
+                    items={mapIterationHistory(iterationHistory, t)}
+                  />
                 )}
 
                 {snapshotHistory.length > 0 && (
-                  <Box sx={{ mt: 0.5 }}>
-                    <Box
-                      component="button"
-                      onClick={() => {
-                        if (!snapshotsOpen) fetchSnapshots();
-                        setSnapshotsOpen((v) => !v);
-                      }}
-                      sx={{
-                        all: 'unset', display: 'flex', alignItems: 'center', gap: 0.75,
-                        width: '100%', cursor: 'pointer', py: 0.5, px: 0.5, borderRadius: 1,
-                        color: 'text.secondary', '&:hover': { color: 'text.primary' },
-                      }}
-                    >
-                      <RestoreIcon sx={{ fontSize: 14 }} />
-                      <Typography variant="caption" fontWeight={600} sx={{ flex: 1, fontSize: 11 }}>
-                        {t('preview.savedVersionsLabel', { n: snapshotHistory.length })}
-                      </Typography>
-                      <ExpandMoreIcon sx={{ fontSize: 14, transform: snapshotsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-                    </Box>
-                    <Collapse in={snapshotsOpen}>
-                      <List dense disablePadding sx={{ mt: 0.5 }}>
-                        {snapshotHistory.map((snapshot, i) => {
-                          const restoring = restoringSnapshotId === snapshot.id;
-                          const reason = snapshot.reason?.trim();
-                          return (
-                            <Box key={snapshot.id}>
-                              <ListItem
-                                sx={{ px: 0.5, py: 0.75, alignItems: 'flex-start', gap: 1 }}
-                                secondaryAction={(
-                                  <Button
-                                    size="small"
-                                    variant="outlined"
-                                    startIcon={restoring ? <CircularProgress size={12} /> : <RestoreIcon sx={{ fontSize: 14 }} />}
-                                    disabled={Boolean(restoringSnapshotId) || iterating || clarifyingIteration}
-                                    onClick={() => restoreSnapshot(snapshot.id)}
-                                    sx={{ minWidth: 88, fontSize: 11, py: 0.35 }}
-                                  >
-                                    {restoring ? t('preview.snapshotRestoring') : t('preview.snapshotRestore')}
-                                  </Button>
-                                )}
-                              >
-                                <ListItemText
-                                  primary={t(snapshotSourceKey(snapshot.source))}
-                                  secondary={(
-                                    <Box component="span" sx={{ display: 'block', pr: 11 }}>
-                                      <Typography
-                                        component="span"
-                                        variant="caption"
-                                        sx={{ fontSize: 10, color: 'text.disabled', display: 'block' }}
-                                      >
-                                        {new Date(snapshot.createdAt).toLocaleDateString('bg-BG', {
-                                          day: '2-digit',
-                                          month: 'short',
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                        })}
-                                      </Typography>
-                                      {reason ? (
-                                        <Typography
-                                          component="span"
-                                          variant="caption"
-                                          sx={{
-                                            display: 'block',
-                                            mt: 0.35,
-                                            fontSize: 11,
-                                            color: 'text.secondary',
-                                            whiteSpace: 'pre-wrap',
-                                            lineHeight: 1.35,
-                                          }}
-                                        >
-                                          {reason.length > 140 ? `${reason.slice(0, 140)}...` : reason}
-                                        </Typography>
-                                      ) : null}
-                                    </Box>
-                                  )}
-                                  primaryTypographyProps={{ variant: 'caption', fontWeight: 600, sx: { lineHeight: 1.3 } }}
-                                  slotProps={{ secondary: { component: 'div' } }}
-                                />
-                              </ListItem>
-                              {i < snapshotHistory.length - 1 && <Divider sx={{ opacity: 0.4 }} />}
-                            </Box>
-                          );
-                        })}
-                      </List>
-                    </Collapse>
-                  </Box>
+                  <HistoryPanel
+                    variant="snapshot"
+                    label={t('preview.savedVersionsLabel', { n: snapshotHistory.length })}
+                    defaultOpen={snapshotsOpen}
+                    onToggleOpen={(next) => {
+                      if (next) fetchSnapshots();
+                      setSnapshotsOpen(next);
+                    }}
+                    items={mapSnapshotHistory(snapshotHistory, t)}
+                    restoringId={restoringSnapshotId}
+                    restoreDisabled={Boolean(restoringSnapshotId) || iterating || clarifyingIteration}
+                    onRestore={restoreSnapshot}
+                    restoreLabel={t('preview.snapshotRestore')}
+                    restoringLabel={t('preview.snapshotRestoring')}
+                  />
                 )}
               </Box>
 
@@ -1648,60 +1535,35 @@ export default function PreviewPage() {
                     content={store.generationFriendlyMessage || t('preview.applyingChanges')}
                   />
                 )}
+                {iterationHistory.length > 0 && (
+                  <HistoryPanel
+                    variant="improvement"
+                    label={t('preview.historyLabel', { n: iterationHistory.length })}
+                    defaultOpen={historyOpen}
+                    onToggleOpen={(next) => {
+                      if (next) fetchHistory();
+                      setHistoryOpen(next);
+                    }}
+                    items={mapIterationHistory(iterationHistory, t)}
+                  />
+                )}
+
                 {snapshotHistory.length > 0 && (
-                  <Box sx={{ borderTop: '1px solid', borderColor: 'divider', pt: 1 }}>
-                    <Box
-                      component="button"
-                      onClick={() => {
-                        if (!snapshotsOpen) fetchSnapshots();
-                        setSnapshotsOpen((v) => !v);
-                      }}
-                      sx={{
-                        all: 'unset', display: 'flex', alignItems: 'center', gap: 0.75,
-                        width: '100%', cursor: 'pointer', py: 0.5, px: 0.5, borderRadius: 1,
-                        color: 'text.secondary', '&:hover': { color: 'text.primary' },
-                      }}
-                    >
-                      <RestoreIcon sx={{ fontSize: 14 }} />
-                      <Typography variant="caption" fontWeight={600} sx={{ flex: 1, fontSize: 11 }}>
-                        {t('preview.savedVersionsLabel', { n: snapshotHistory.length })}
-                      </Typography>
-                      <ExpandMoreIcon sx={{ fontSize: 14, transform: snapshotsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-                    </Box>
-                    <Collapse in={snapshotsOpen}>
-                      <Stack gap={0.75} sx={{ mt: 1 }}>
-                        {snapshotHistory.slice(0, 10).map((snapshot) => {
-                          const restoring = restoringSnapshotId === snapshot.id;
-                          return (
-                            <Box key={snapshot.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Box sx={{ minWidth: 0, flex: 1 }}>
-                                <Typography variant="caption" fontWeight={600} noWrap>
-                                  {t(snapshotSourceKey(snapshot.source))}
-                                </Typography>
-                                <Typography variant="caption" color="text.disabled" display="block" noWrap>
-                                  {new Date(snapshot.createdAt).toLocaleDateString('bg-BG', {
-                                    day: '2-digit',
-                                    month: 'short',
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                  })}
-                                </Typography>
-                              </Box>
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                disabled={Boolean(restoringSnapshotId) || iterating || clarifyingIteration}
-                                onClick={() => restoreSnapshot(snapshot.id)}
-                                sx={{ fontSize: 11, py: 0.35 }}
-                              >
-                                {restoring ? t('preview.snapshotRestoring') : t('preview.snapshotRestore')}
-                              </Button>
-                            </Box>
-                          );
-                        })}
-                      </Stack>
-                    </Collapse>
-                  </Box>
+                  <HistoryPanel
+                    variant="snapshot"
+                    label={t('preview.savedVersionsLabel', { n: snapshotHistory.length })}
+                    defaultOpen={snapshotsOpen}
+                    onToggleOpen={(next) => {
+                      if (next) fetchSnapshots();
+                      setSnapshotsOpen(next);
+                    }}
+                    items={mapSnapshotHistory(snapshotHistory, t)}
+                    restoringId={restoringSnapshotId}
+                    restoreDisabled={Boolean(restoringSnapshotId) || iterating || clarifyingIteration}
+                    onRestore={restoreSnapshot}
+                    restoreLabel={t('preview.snapshotRestore')}
+                    restoringLabel={t('preview.snapshotRestoring')}
+                  />
                 )}
               </Box>
               <Box sx={{ p: 1.5, borderTop: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
