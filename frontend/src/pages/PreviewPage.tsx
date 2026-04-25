@@ -17,6 +17,7 @@ import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import EditIcon from '@mui/icons-material/Edit';
+import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import StorefrontIcon from '@mui/icons-material/Storefront';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import DescriptionIcon from '@mui/icons-material/Description';
@@ -1281,7 +1282,7 @@ export default function PreviewPage() {
               )}
               {editToken && (
                 <Box sx={{
-                  display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 0.75,
+                  display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1,
                   background: 'rgba(245,169,127,0.12)', borderBottom: '1px solid rgba(245,169,127,0.3)',
                   flexShrink: 0,
                 }}>
@@ -1299,26 +1300,32 @@ export default function PreviewPage() {
                       <Button
                         size="small"
                         onClick={() => discardPendingEdits(false)}
-                        sx={{ fontSize: 11, color: '#f5a97f', py: 0.25, textTransform: 'none' }}
+                        sx={{ fontSize: 12, color: '#f5a97f', py: 0.4, px: 1, textTransform: 'none' }}
                       >
                         {t('editMode.discard')}
                       </Button>
                       <Button
                         size="small"
                         variant="contained"
+                        startIcon={<CheckCircleRoundedIcon sx={{ fontSize: '16px !important' }} />}
                         onClick={() => applyPendingEdits(false)}
                         sx={{
-                          fontSize: 11, py: 0.25, textTransform: 'none',
+                          fontSize: 12.5, py: 0.6, px: 1.75, textTransform: 'none',
+                          minHeight: 30, borderRadius: 1.5, letterSpacing: 0.2,
                           background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
                           color: '#fff', fontWeight: 700,
-                          '&:hover': { background: 'linear-gradient(135deg, #5458e5, #7c3aed)' },
+                          boxShadow: '0 4px 14px rgba(99,102,241,0.45)',
+                          '&:hover': {
+                            background: 'linear-gradient(135deg, #5458e5, #7c3aed)',
+                            boxShadow: '0 6px 18px rgba(99,102,241,0.6)',
+                          },
                         }}
                       >
                         {t('editMode.applyAll')}
                       </Button>
                     </>
                   )}
-                  <Button size="small" sx={{ fontSize: 11, color: '#f5a97f', py: 0.25 }} onClick={exitEditMode}>
+                  <Button size="small" sx={{ fontSize: 12, color: '#f5a97f', py: 0.4, px: 1 }} onClick={exitEditMode}>
                     {t('editMode.exit')}
                   </Button>
                 </Box>
