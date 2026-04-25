@@ -11,6 +11,7 @@ import {
   build,
   buildHostedDist,
   run,
+  runScript,
   stop,
   startPersistent,
   stopPersistent,
@@ -215,6 +216,20 @@ app.post('/stop', (req, res) => {
   const { projectId } = req.body as { projectId: string };
   stop(projectId);
   res.json({ stopped: true });
+});
+
+app.post('/run-script', (req, res) => {
+  const { projectId, code, timeoutMs } = req.body as {
+    projectId: string;
+    code: string;
+    timeoutMs?: number;
+  };
+  if (!projectId || typeof code !== 'string' || code.length === 0 || code.length > 32_000) {
+    res.status(400).json({ success: false, log: 'invalid input', truncated: false });
+    return;
+  }
+  const result = runScript(projectId, code, Math.min(Math.max(timeoutMs ?? 20_000, 1_000), 60_000));
+  res.json(result);
 });
 
 /** Serve a file from the project's dist directory, with SPA fallback for non-asset routes. */

@@ -30,6 +30,7 @@ import {
 } from '../../lib/generationFriendly';
 import { createAgentContext } from './context';
 import { buildAgentTools } from './tools';
+import type { Attachment } from './attachments';
 
 export interface ExecutionBrief {
   userRequest: string;
@@ -51,6 +52,13 @@ You have a sandboxed file workspace under the project root and the following too
 - run_build({}) — runs the project build; returns success and a build log.
 - get_build_errors({}) — re-reads the last build result.
 - rollback_last_change({}) — restores the project to the pre-iteration snapshot.
+- run_node_script({ code }) — execute a small Node.js script inside the project root. Use ONLY for live DB mutations (e.g. updating a Prisma row's imageUrl). The script has access to the project's installed packages (including @prisma/client). Output is captured (stdout + stderr) and truncated.
+
+Photo attachments:
+- The execution brief may include "attachments" — images the user uploaded in chat. Each has { url, filename, mimeType }. The url is already publicly served by the preview runtime.
+- For static-image edits (logo, hero, header, banner, etc.), use patch_file/write_file to swap the relevant <img src=...> or background-image to the attachment url.
+- For DB-backed images (catalog products, blog posts, etc.), prefer run_node_script to UPDATE the right row(s) via prisma — do not just edit the seed file, since the live DB is already populated.
+- Match attachments to the user's request. If unclear, pick the most likely target from the brief.
 
 Operating rules:
 1. Start by reading the execution brief. Then use list_files / search_files / read_file to locate the exact files you need. Do not edit blind.
@@ -79,9 +87,11 @@ export async function runIterationAgent(input: {
   planId: string;
   snapshotBeforeId: string;
   executionBrief: ExecutionBrief;
+  attachments?: Attachment[];
   logId?: string;
 }): Promise<void> {
   const { sessionId, userId, projectId, planId, snapshotBeforeId, executionBrief, logId } = input;
+  const attachments = input.attachments ?? [];
 
   await clearSessionEvents(sessionId);
 
@@ -142,11 +152,21 @@ export async function runIterationAgent(input: {
   });
 
   const planMetadataJson = JSON.stringify(planData).slice(0, PLAN_METADATA_CAP);
+  const briefForAgent = { ...executionBrief, attachments };
   const userMessage = [
     '## Execution brief',
     '```json',
-    JSON.stringify(executionBrief, null, 2),
+    JSON.stringify(briefForAgent, null, 2),
     '```',
+    ...(attachments.length > 0
+      ? [
+          '',
+          '## Attachments (already uploaded; reference these URLs directly)',
+          ...attachments.map(
+            (a, i) => `${i + 1}. ${a.filename} (${a.mimeType}) → ${a.url}`,
+          ),
+        ]
+      : []),
     '',
     '## App plan metadata',
     '```json',

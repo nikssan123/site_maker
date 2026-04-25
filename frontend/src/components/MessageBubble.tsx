@@ -1,17 +1,25 @@
-import { Box, Typography } from '@mui/material';
+import { Box, Stack, Typography } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import BrandMark from './BrandMark';
+
+export interface MessageAttachment {
+  url: string;
+  filename: string;
+  mimeType: string;
+}
 
 interface Props {
   role: 'user' | 'assistant';
   content: string;
+  attachments?: MessageAttachment[];
 }
 
 const PLAN_BLOCK = /```plan[\s\S]*?```|<PLAN>[\s\S]*?<\/PLAN>/gi;
 
-export default function MessageBubble({ role, content }: Props) {
+export default function MessageBubble({ role, content, attachments }: Props) {
   const isUser = role === 'user';
   const displayContent = content.replace(PLAN_BLOCK, '').trim();
+  const hasAttachments = Boolean(attachments && attachments.length > 0);
 
   if (isUser) {
     return (
@@ -26,9 +34,31 @@ export default function MessageBubble({ role, content }: Props) {
             boxShadow: '0 4px 24px rgba(99,102,241,0.25)',
           }}
         >
-          <Typography variant="body1" sx={{ color: '#fff', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
-            {displayContent}
-          </Typography>
+          {hasAttachments && (
+            <Stack direction="row" gap={0.75} flexWrap="wrap" sx={{ mb: displayContent ? 1 : 0 }}>
+              {attachments!.map((a) => (
+                <Box
+                  key={a.url}
+                  component="img"
+                  src={a.url}
+                  alt={a.filename}
+                  loading="lazy"
+                  sx={{
+                    width: 72,
+                    height: 72,
+                    objectFit: 'cover',
+                    borderRadius: 1.25,
+                    border: '1px solid rgba(255,255,255,0.35)',
+                  }}
+                />
+              ))}
+            </Stack>
+          )}
+          {displayContent && (
+            <Typography variant="body1" sx={{ color: '#fff', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
+              {displayContent}
+            </Typography>
+          )}
         </Box>
       </Box>
     );

@@ -1,20 +1,52 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box, TextField, Button, Stack, Typography, LinearProgress, Paper, Chip, CircularProgress,
+  IconButton,
 } from '@mui/material';
 import DiamondIcon from '@mui/icons-material/Diamond';
 import SendIcon from '@mui/icons-material/Send';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
+import AttachFileIcon from '@mui/icons-material/AttachFile';
+import CloseIcon from '@mui/icons-material/Close';
 import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../store/project';
 import { useIterationPlanStore } from '../store/iterationPlan';
 import { api } from '../lib/api';
 import SupportDialog from './SupportDialog';
 
+export interface IterationAttachment {
+  url: string;
+  filename: string;
+  mimeType: string;
+}
+
+interface PendingAttachment {
+  id: string;
+  file: File;
+  previewUrl: string;
+  uploading: boolean;
+  uploaded?: IterationAttachment;
+  error?: string;
+}
+
 interface Props {
-  onSubmit: (message: string) => void;
+  onSubmit: (message: string, attachments: IterationAttachment[]) => void;
   loading: boolean;
   loadingLabel?: string;
+  /** Project the photos belong to. Required for the upload endpoint. */
+  projectId?: string;
+}
+
+const MAX_ATTACHMENTS = 4;
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(new Error('read failed'));
+    reader.readAsDataURL(file);
+  });
 }
 
 function pctColor(pct: number): 'primary' | 'warning' | 'error' {
@@ -23,12 +55,15 @@ function pctColor(pct: number): 'primary' | 'warning' | 'error' {
   return 'primary';
 }
 
-export default function IterationBar({ onSubmit, loading, loadingLabel }: Props) {
+export default function IterationBar({ onSubmit, loading, loadingLabel, projectId }: Props) {
   const { t, i18n } = useTranslation();
   const [value, setValue] = useState('');
   const [supportOpen, setSupportOpen] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
   const [buyingTopup, setBuyingTopup] = useState(false);
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const [dragActive, setDragActive] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
   const { iterationsTotal, freeIterationLimit } = useProjectStore();
   const plan = useIterationPlanStore();
 
@@ -58,10 +93,74 @@ export default function IterationBar({ onSubmit, loading, loadingLabel }: Props)
     }
   }, [plan.periodEnd, i18n.language]);
 
+  const anyUploading = attachments.some((a) => a.uploading);
+  const readyAttachments = attachments
+    .map((a) => a.uploaded)
+    .filter((a): a is IterationAttachment => Boolean(a));
+  const canSend =
+    hasQuota && !loading && !anyUploading && (value.trim().length > 0 || readyAttachments.length > 0);
+
+  const handleAddFiles = async (files: File[]) => {
+    if (!projectId) return;
+    const room = MAX_ATTACHMENTS - attachments.length;
+    const accepted = files.filter((f) => f.type.startsWith('image/')).slice(0, room);
+    if (accepted.length === 0) return;
+
+    const queued: PendingAttachment[] = accepted.map((file) => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      file,
+      previewUrl: URL.createObjectURL(file),
+      uploading: true,
+    }));
+    setAttachments((prev) => [...prev, ...queued]);
+
+    for (const item of queued) {
+      if (item.file.size > MAX_FILE_BYTES) {
+        setAttachments((prev) =>
+          prev.map((a) => (a.id === item.id ? { ...a, uploading: false, error: 'too large' } : a)),
+        );
+        continue;
+      }
+      try {
+        const dataUrl = await readAsDataUrl(item.file);
+        const { url } = await api.uploadImage(projectId, dataUrl, item.file.name);
+        setAttachments((prev) =>
+          prev.map((a) =>
+            a.id === item.id
+              ? {
+                  ...a,
+                  uploading: false,
+                  uploaded: { url, filename: item.file.name, mimeType: item.file.type },
+                }
+              : a,
+          ),
+        );
+      } catch (err: any) {
+        setAttachments((prev) =>
+          prev.map((a) =>
+            a.id === item.id
+              ? { ...a, uploading: false, error: err?.message ?? 'upload failed' }
+              : a,
+          ),
+        );
+      }
+    }
+  };
+
+  const handleRemoveAttachment = (id: string) => {
+    setAttachments((prev) => {
+      const target = prev.find((a) => a.id === id);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((a) => a.id !== id);
+    });
+  };
+
   const handleSubmit = () => {
-    if (!value.trim() || !hasQuota) return;
-    onSubmit(value.trim());
+    if (!canSend) return;
+    onSubmit(value.trim(), readyAttachments);
     setValue('');
+    attachments.forEach((a) => URL.revokeObjectURL(a.previewUrl));
+    setAttachments([]);
   };
 
   const handleSubscribe = async () => {
@@ -181,38 +280,141 @@ export default function IterationBar({ onSubmit, loading, loadingLabel }: Props)
           </Stack>
         ) : (
           <>
-            <TextField
-              fullWidth
-              multiline
-              minRows={2}
-              maxRows={5}
-              placeholder={
-                hasQuota
-                  ? t('iteration.placeholderLong')
-                  : t('iteration.noCreditsPlaceholder')
-              }
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              disabled={!hasQuota || loading}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSubmit();
-                }
-              }}
-              sx={{ mb: 1.25 }}
-            />
+            {attachments.length > 0 && (
+              <Stack direction="row" gap={0.75} flexWrap="wrap" sx={{ mb: 1 }}>
+                {attachments.map((a) => (
+                  <Box
+                    key={a.id}
+                    sx={{
+                      position: 'relative',
+                      width: 56,
+                      height: 56,
+                      borderRadius: 1.5,
+                      overflow: 'hidden',
+                      border: '1px solid',
+                      borderColor: a.error ? 'error.main' : 'rgba(99,102,241,0.4)',
+                      bgcolor: 'rgba(0,0,0,0.4)',
+                    }}
+                  >
+                    <Box
+                      component="img"
+                      src={a.previewUrl}
+                      alt={a.file.name}
+                      sx={{ width: '100%', height: '100%', objectFit: 'cover', opacity: a.uploading ? 0.45 : 1 }}
+                    />
+                    {a.uploading && (
+                      <Box sx={{
+                        position: 'absolute', inset: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <CircularProgress size={18} sx={{ color: '#fff' }} />
+                      </Box>
+                    )}
+                    <IconButton
+                      size="small"
+                      onClick={() => handleRemoveAttachment(a.id)}
+                      sx={{
+                        position: 'absolute', top: 2, right: 2,
+                        width: 18, height: 18, p: 0,
+                        bgcolor: 'rgba(0,0,0,0.65)', color: '#fff',
+                        '&:hover': { bgcolor: 'rgba(0,0,0,0.85)' },
+                      }}
+                    >
+                      <CloseIcon sx={{ fontSize: 12 }} />
+                    </IconButton>
+                  </Box>
+                ))}
+              </Stack>
+            )}
 
-            <Button
-              variant="contained"
-              fullWidth
-              disabled={loading || !value.trim() || !hasQuota}
-              onClick={handleSubmit}
-              startIcon={loading ? <CircularProgress size={14} sx={{ color: 'inherit' }} /> : <SendIcon fontSize="small" />}
-              sx={{ background: 'linear-gradient(135deg, #6366f1, #a855f7)', fontWeight: 700 }}
+            <Box
+              onDragOver={(e) => {
+                if (!projectId) return;
+                e.preventDefault();
+                setDragActive(true);
+              }}
+              onDragLeave={() => setDragActive(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragActive(false);
+                if (!projectId) return;
+                const files = Array.from(e.dataTransfer.files ?? []);
+                if (files.length > 0) void handleAddFiles(files);
+              }}
+              sx={{
+                position: 'relative',
+                borderRadius: 2,
+                outline: dragActive ? '2px dashed' : 'none',
+                outlineColor: 'primary.main',
+                outlineOffset: 2,
+                mb: 1.25,
+              }}
             >
-              {loading ? (loadingLabel ?? t('preview.applyingChanges')) : t('iteration.apply')}
-            </Button>
+              <TextField
+                fullWidth
+                multiline
+                minRows={2}
+                maxRows={5}
+                placeholder={
+                  hasQuota
+                    ? t('iteration.placeholderLong')
+                    : t('iteration.noCreditsPlaceholder')
+                }
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                disabled={!hasQuota || loading}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmit();
+                  }
+                }}
+              />
+            </Box>
+
+            <Stack direction="row" gap={1} alignItems="center">
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                multiple
+                hidden
+                onChange={(e) => {
+                  const files = Array.from(e.target.files ?? []);
+                  if (files.length > 0) void handleAddFiles(files);
+                  if (fileRef.current) fileRef.current.value = '';
+                }}
+              />
+              <IconButton
+                size="small"
+                onClick={() => fileRef.current?.click()}
+                disabled={!projectId || !hasQuota || loading || attachments.length >= MAX_ATTACHMENTS}
+                aria-label={t('iteration.attachPhoto', { defaultValue: 'Attach photo' })}
+                sx={{
+                  border: '1px solid rgba(99,102,241,0.4)',
+                  color: 'primary.light',
+                  borderRadius: 1.5,
+                  width: 36, height: 36,
+                  '&:hover': { bgcolor: 'rgba(99,102,241,0.08)' },
+                }}
+              >
+                <AttachFileIcon fontSize="small" />
+              </IconButton>
+
+              <Button
+                variant="contained"
+                disabled={!canSend}
+                onClick={handleSubmit}
+                startIcon={loading || anyUploading ? <CircularProgress size={14} sx={{ color: 'inherit' }} /> : <SendIcon fontSize="small" />}
+                sx={{ flex: 1, background: 'linear-gradient(135deg, #6366f1, #a855f7)', fontWeight: 700 }}
+              >
+                {loading
+                  ? (loadingLabel ?? t('preview.applyingChanges'))
+                  : anyUploading
+                    ? t('iteration.uploadingPhotos', { defaultValue: 'Uploading…' })
+                    : t('iteration.apply')}
+              </Button>
+            </Stack>
 
             {!stillOnFreeTier && plan.pct >= 70 && plan.pct < 100 && (
               <Box sx={{ mt: 1 }}>

@@ -12,7 +12,7 @@ import {
   MAX_LIST_PATHS,
   MAX_SEARCH_MATCHES,
 } from '../../lib/projectSandbox';
-import { buildProject } from '../appRunner';
+import { buildProject, runProjectScript } from '../appRunner';
 import { restoreProjectSnapshot } from '../projectSnapshotService';
 import { prisma } from '../../index';
 import type { AgentContext } from './context';
@@ -83,6 +83,10 @@ const searchSchema = z.object({
 const writeSchema = z.object({ path: z.string(), content: z.string() });
 const patchSchema = z.object({ path: z.string(), diff: z.string() });
 const deleteSchema = z.object({ path: z.string() });
+const scriptSchema = z.object({
+  code: z.string().min(1).max(32_000),
+  timeoutMs: z.number().int().min(1_000).max(60_000).optional(),
+});
 const emptySchema = z.object({}).passthrough();
 
 export function buildAgentTools(ctx: AgentContext): ToolHandler[] {
@@ -317,6 +321,27 @@ export function buildAgentTools(ctx: AgentContext): ToolHandler[] {
       async handler(input) {
         emptySchema.parse(input ?? {});
         return { ok: true, lastBuild: ctx.lastBuild };
+      },
+    },
+    {
+      name: 'run_node_script',
+      description:
+        'Execute a one-shot Node.js (CommonJS) script inside the project root. Use ONLY for live DB mutations (typically via the project\'s @prisma/client) — for file edits use patch_file/write_file. The script\'s cwd is the project directory; require() resolves the project\'s installed packages. Anything you log to stdout/stderr is returned. Default timeout 20s.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          code: { type: 'string', description: 'CommonJS source. Wrap async work in (async () => { ... })().' },
+          timeoutMs: { type: 'integer', minimum: 1000, maximum: 60_000 },
+        },
+        required: ['code'],
+      },
+      async handler(input) {
+        const parsed = scriptSchema.safeParse(input);
+        if (!parsed.success) return { ok: false, error: 'invalid input' };
+        const result = await runProjectScript(ctx.projectId, parsed.data.code, parsed.data.timeoutMs);
+        ctx.hasMutated = true;
+        ctx.mutationCount++;
+        return { ok: true, success: result.success, log: result.log, truncated: result.truncated };
       },
     },
     {

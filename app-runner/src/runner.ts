@@ -284,6 +284,47 @@ function rewriteViteDistRootAssets(projectId: string, dir: string): void {
   walk(dist);
 }
 
+/**
+ * Execute a one-shot Node.js script inside the project's directory.
+ * Used by the iteration agent to mutate live DB rows (e.g. set imageUrl after a chat upload).
+ * The script runs with cwd = project root, so `require('@prisma/client')` and other deps resolve.
+ * stdout + stderr are captured and truncated.
+ */
+export function runScript(
+  projectId: string,
+  code: string,
+  timeoutMs = 20_000,
+): { success: boolean; log: string; truncated: boolean } {
+  const dir = getProjectDir(projectId);
+  if (!fs.existsSync(dir)) {
+    return { success: false, log: `Project dir not found: ${dir}`, truncated: false };
+  }
+
+  const scriptName = `.iterate-script-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.cjs`;
+  const scriptPath = path.join(dir, scriptName);
+  fs.writeFileSync(scriptPath, code, 'utf8');
+
+  try {
+    const out = execFileSync('node', [scriptName], {
+      cwd: dir,
+      timeout: timeoutMs,
+      encoding: 'utf8',
+      stdio: 'pipe',
+      maxBuffer: 1024 * 1024,
+    });
+    const log = String(out ?? '').slice(0, 8 * 1024);
+    return { success: true, log, truncated: (out?.length ?? 0) > log.length };
+  } catch (err: any) {
+    const stderr = String(err.stderr ?? '');
+    const stdout = String(err.stdout ?? '');
+    const msg = stderr || stdout || err.message || String(err);
+    const log = msg.slice(0, 8 * 1024);
+    return { success: false, log, truncated: msg.length > log.length };
+  } finally {
+    try { fs.unlinkSync(scriptPath); } catch {}
+  }
+}
+
 export function install(projectId: string): { success: boolean; log: string } {
   const dir = getProjectDir(projectId);
   try {

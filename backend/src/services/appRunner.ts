@@ -48,6 +48,25 @@ export async function stopProject(projectId: string): Promise<void> {
   await axios.post(`${APP_RUNNER_URL}/stop`, { projectId }).catch(() => {});
 }
 
+export interface RunScriptResult {
+  success: boolean;
+  log: string;
+  truncated: boolean;
+}
+
+export async function runProjectScript(
+  projectId: string,
+  code: string,
+  timeoutMs = 20_000,
+): Promise<RunScriptResult> {
+  const { data } = await axios.post<RunScriptResult>(
+    `${APP_RUNNER_URL}/run-script`,
+    { projectId, code, timeoutMs },
+    { timeout: Math.max(timeoutMs + 5_000, 30_000) },
+  );
+  return data;
+}
+
 export async function ensureRunning(projectId: string): Promise<RunnerResult> {
   const { data } = await axios.post<RunnerResult>(
     `${APP_RUNNER_URL}/ensure-running`,

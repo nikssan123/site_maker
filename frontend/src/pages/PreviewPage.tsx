@@ -34,7 +34,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import AppLogo from '../components/AppLogo';
 import PreviewFrame, { type PreviewFrameHandle } from '../components/PreviewFrame';
 import AdminWorkspace, { type AdminWorkspaceMode } from '../components/AdminWorkspace';
-import IterationBar from '../components/IterationBar';
+import IterationBar, { type IterationAttachment } from '../components/IterationBar';
 import IterationPlanCard from '../components/IterationPlanCard';
 import ProjectCheckout from '../components/UpgradeGate';
 import PaymentsSetupDialog from '../components/PaymentsSetupDialog';
@@ -60,6 +60,7 @@ interface PendingIterationPlan {
   spec: string;
   targetFiles: string[];
   explorerContextNotes?: string;
+  attachments?: IterationAttachment[];
 }
 
 interface ProjectSnapshotEntry {
@@ -179,7 +180,7 @@ export default function PreviewPage() {
   const [downloadPreparingOpen, setDownloadPreparingOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(() => !window.matchMedia('(max-width:899.95px)').matches);
   const [drawerMode, setDrawerMode] = useState<'improvements' | AdminWorkspaceMode>('improvements');
-  const [iterateChat, setIterateChat] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  const [iterateChat, setIterateChat] = useState<Array<{ role: 'user' | 'assistant'; content: string; attachments?: IterationAttachment[] }>>([]);
   const [pendingIterationPlan, setPendingIterationPlan] = useState<PendingIterationPlan | null>(null);
   const [iterationHistory, setIterationHistory] = useState<Array<{ id: string; title: string | null; description: string | null; createdAt: string }>>([]);
   const [snapshotHistory, setSnapshotHistory] = useState<ProjectSnapshotEntry[]>([]);
@@ -688,6 +689,7 @@ export default function PreviewPage() {
     spec: string;
     targetFiles: string[];
     explorerContextNotes?: string;
+    attachments?: IterationAttachment[];
   }) => {
     if (!store.sessionId) return;
 
@@ -714,6 +716,7 @@ export default function PreviewPage() {
         spec: snapshot.spec,
         targetFiles: snapshot.targetFiles,
         explorerContextNotes: snapshot.explorerContextNotes,
+        attachments: snapshot.attachments,
       },
       (event: any) => {
         if (event.step) store.updateStep({ step: event.step, label: event.label, status: event.status });
@@ -740,13 +743,19 @@ export default function PreviewPage() {
     );
   };
 
-  const handleIterate = async (message: string) => {
+  const handleIterate = async (message: string, attachments: IterationAttachment[] = []) => {
     if (!store.sessionId) return;
     const text = message.trim();
-    if (!text || clarifyingIteration || iterating) return;
+    if ((!text && attachments.length === 0) || clarifyingIteration || iterating) return;
+
+    const effectiveText =
+      text || (attachments.length > 0 ? t('preview.attachmentImplicitMessage', { defaultValue: 'Used the attached photo(s).' }) : '');
 
     setPendingIterationPlan(null);
-    setIterateChat((prev) => [...prev, { role: 'user', content: text }]);
+    setIterateChat((prev) => [
+      ...prev,
+      { role: 'user', content: effectiveText, attachments: attachments.length > 0 ? attachments : undefined },
+    ]);
     setClarifyingIteration(true);
 
     try {
@@ -761,10 +770,15 @@ export default function PreviewPage() {
           targetFiles: string[];
           nonGoals: string[];
           explorerContextNotes?: string;
+          attachments?: IterationAttachment[];
         }
       >(
         '/iterate/clarify',
-        { sessionId: store.sessionId, messages: [...iterateChat, { role: 'user', content: text }] },
+        {
+          sessionId: store.sessionId,
+          messages: [...iterateChat, { role: 'user', content: effectiveText }],
+          attachments,
+        },
       );
 
       if (res.kind === 'question') {
@@ -788,6 +802,7 @@ export default function PreviewPage() {
         spec: res.spec,
         targetFiles: res.targetFiles ?? [],
         explorerContextNotes: res.explorerContextNotes,
+        attachments: res.attachments ?? attachments,
       });
       return;
     } catch {
@@ -1367,7 +1382,7 @@ export default function PreviewPage() {
                   />
                 )}
                 {iterateChat.map((m, idx) => (
-                  <MessageBubble key={idx} role={m.role} content={m.content} />
+                  <MessageBubble key={idx} role={m.role} content={m.content} attachments={m.attachments} />
                 ))}
 
                 {clarifyingIteration && (
@@ -1573,6 +1588,7 @@ export default function PreviewPage() {
                 <IterationBar
                   onSubmit={handleIterate}
                   loading={clarifyingIteration || iterating}
+                  projectId={projectId}
                   loadingLabel={
                     clarifyingIteration
                       ? t('preview.improvementsThinking', {
@@ -1605,7 +1621,7 @@ export default function PreviewPage() {
                   <MessageBubble role="assistant" content={t('preview.improvementsHint')} />
                 )}
                 {iterateChat.map((msg, i) => (
-                  <MessageBubble key={i} role={msg.role} content={msg.content} />
+                  <MessageBubble key={i} role={msg.role} content={msg.content} attachments={msg.attachments} />
                 ))}
                 {clarifyingIteration && (
                   <MessageBubble
@@ -1691,6 +1707,7 @@ export default function PreviewPage() {
                 <IterationBar
                   onSubmit={handleIterate}
                   loading={clarifyingIteration || iterating}
+                  projectId={projectId}
                   loadingLabel={
                     clarifyingIteration
                       ? t('preview.improvementsThinking', {

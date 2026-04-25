@@ -5,6 +5,7 @@ import { getIterateAssistClient, ChatMessage } from './aiClient';
 import { logTokens } from './tokenAccountingService';
 import { scopeIteration } from './iterateScopeService';
 import { buildFileTree } from '../lib/fileTree';
+import type { Attachment } from './iterateAgent/attachments';
 
 const EXECUTION_BRIEF_SCHEMA = z.object({
   userRequest: z.string().min(1),
@@ -28,6 +29,7 @@ export type IterateClarifyResult =
       nonGoals: string[];
       executionBrief: ExecutionBrief;
       explorerContextNotes?: string;
+      attachments?: Attachment[];
     };
 
 const RESULT_SCHEMA = z.object({
@@ -136,6 +138,7 @@ export async function clarifyIteration(
   sessionId: string,
   userId: string,
   conversation: ChatMessage[],
+  attachments: Attachment[] = [],
 ): Promise<IterateClarifyResult> {
   const session = await prisma.session.findFirst({
     where: { id: sessionId, userId },
@@ -157,6 +160,12 @@ export async function clarifyIteration(
 
   const fileTree = buildFileTree(projectFiles, 500);
   const lastUser = lastUserContent(conversation);
+  const hasAttachments = attachments.length > 0;
+  const attachmentsBlock = hasAttachments
+    ? `\n\nПРИКАЧЕНИ ОТ ПОТРЕБИТЕЛЯ ФАЙЛОВЕ (изображения, вече качени и достъпни на тези URL):\n${attachments
+        .map((a, i) => `  ${i + 1}. ${a.filename} (${a.mimeType}) → ${a.url}`)
+        .join('\n')}\nТретирай тези снимки като част от заявката: ползвай ги за лого/хедър/static изображения или като нова стойност за DB записи. Никога не питай „искаш ли да ги използвам" — ползвай ги.`
+    : '';
 
   // Single LLM call: model returns either a clarifying question or a complete ready payload
   // (bullets + spec + targetFiles). No explore loop, no separate draftSpec call, no separate
@@ -173,7 +182,7 @@ export async function clarifyIteration(
 ${fileTree}
 
 - Последен разговор:
-${conversationContext || '(няма)'}
+${conversationContext || '(няма)'}${attachmentsBlock}
 
 ЦЕЛ: винаги връщай готова промяна. Само при крайна неяснота — ОДИН кратък продуктов въпрос.
 
@@ -238,8 +247,10 @@ ${conversationContext || '(няма)'}
 
   // The model auto-proceeds on "actionable" requests (clear verbs, UI nouns) even if it
   // hesitated to set ready: true. Combined with alreadyAskedAQuestion, this keeps the
-  // pipeline moving without a stuck back-and-forth.
-  const shouldAutoProceed = alreadyAskedAQuestion || isActionableImprovementRequest(lastUser);
+  // pipeline moving without a stuck back-and-forth. Attachments alone are enough — if the
+  // user dropped a photo into chat, they want it used.
+  const shouldAutoProceed =
+    alreadyAskedAQuestion || hasAttachments || isActionableImprovementRequest(lastUser);
 
   // Helper: when the model didn't return targetFiles, fall back to the scope service.
   // This is the only place a second LLM call may happen, and only on the unhappy path.
@@ -302,6 +313,7 @@ ${conversationContext || '(няма)'}
       targetFiles: finalTargets,
       nonGoals,
       executionBrief,
+      attachments,
     };
   }
 

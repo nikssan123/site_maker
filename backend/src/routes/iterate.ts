@@ -8,6 +8,7 @@ import { assertCanIterate } from '../services/tokenAccountingService';
 import { prisma } from '../index';
 import { AppError } from '../middleware/errorHandler';
 import { createProjectSnapshot } from '../services/projectSnapshotService';
+import { AttachmentSchema, type Attachment } from '../services/iterateAgent/attachments';
 
 export const FREE_ITERATION_LIMIT = 2;
 
@@ -15,16 +16,17 @@ const router = Router();
 
 router.post('/clarify', requireAuth, async (req, res, next) => {
   try {
-    const { sessionId, messages } = z.object({
+    const { sessionId, messages, attachments } = z.object({
       sessionId: z.string(),
       messages: z.array(z.object({
         role: z.enum(['user', 'assistant']),
         content: z.string(),
       })).min(1),
+      attachments: z.array(AttachmentSchema).max(8).optional(),
     }).parse(req.body);
 
     const userId = req.user.userId;
-    const result = await clarifyIteration(sessionId, userId, messages);
+    const result = await clarifyIteration(sessionId, userId, messages, attachments ?? []);
 
     if (result.kind === 'ready') {
       const session = await prisma.session.findFirst({
@@ -34,6 +36,9 @@ router.post('/clarify', requireAuth, async (req, res, next) => {
       if (!session?.project) throw new AppError(400, 'Проектът не е намерен');
 
       const changeRequest = [...messages].reverse().find((m) => m.role === 'user')?.content?.trim() ?? '';
+      const briefWithAttachments = result.executionBrief
+        ? { ...result.executionBrief, attachments: result.attachments ?? [] }
+        : undefined;
       const plan = await prisma.iterationPlan.create({
         data: {
           projectId: session.project.id,
@@ -44,7 +49,7 @@ router.post('/clarify', requireAuth, async (req, res, next) => {
           spec: result.spec,
           targetFiles: result.targetFiles,
           nonGoals: result.nonGoals,
-          executionBrief: result.executionBrief,
+          executionBrief: briefWithAttachments,
           explorerContextNotes: result.explorerContextNotes,
         },
       });
@@ -60,7 +65,7 @@ router.post('/clarify', requireAuth, async (req, res, next) => {
 
 router.post('/', requireAuth, async (req, res, next) => {
   try {
-    const { sessionId, message, spec, targetFiles, explorerContextNotes, planId } = z
+    const { sessionId, message, spec, targetFiles, explorerContextNotes, planId, attachments } = z
       .object({
         sessionId: z.string(),
         message: z.string().min(1),
@@ -68,6 +73,7 @@ router.post('/', requireAuth, async (req, res, next) => {
         spec: z.string().min(1).optional(),
         targetFiles: z.array(z.string().min(1)).max(12).optional(),
         explorerContextNotes: z.string().max(50_000).optional(),
+        attachments: z.array(AttachmentSchema).max(8).optional(),
       })
       .parse(req.body);
 
@@ -96,6 +102,7 @@ router.post('/', requireAuth, async (req, res, next) => {
     let applyExplorerContextNotes = explorerContextNotes;
     let approvedPlanId: string | undefined;
     let executionBrief: ExecutionBrief | null = null;
+    let applyAttachments: Attachment[] = attachments ?? [];
 
     if (planId) {
       const plan = await prisma.iterationPlan.findFirst({
@@ -111,7 +118,13 @@ router.post('/', requireAuth, async (req, res, next) => {
       applyExplorerContextNotes = plan.explorerContextNotes ?? undefined;
       approvedPlanId = plan.id;
       if (plan.executionBrief && typeof plan.executionBrief === 'object') {
-        executionBrief = plan.executionBrief as unknown as ExecutionBrief;
+        const briefObj = plan.executionBrief as Record<string, unknown>;
+        executionBrief = briefObj as unknown as ExecutionBrief;
+        const persisted = Array.isArray(briefObj.attachments) ? briefObj.attachments : [];
+        if (persisted.length > 0) {
+          const parsed = z.array(AttachmentSchema).safeParse(persisted);
+          if (parsed.success) applyAttachments = parsed.data;
+        }
       }
     }
 
@@ -154,6 +167,7 @@ router.post('/', requireAuth, async (req, res, next) => {
         planId: approvedPlanId,
         snapshotBeforeId: snapshot.id,
         executionBrief,
+        attachments: applyAttachments,
         logId: log.id,
       }).catch((err) => {
         console.error('[iterate-agent] unhandled pipeline error', err);
