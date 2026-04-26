@@ -40,6 +40,7 @@ import SupportDialog from '../components/SupportDialog';
 import MessageBubble from '../components/MessageBubble';
 import HistoryPanel, { type HistoryItem } from '../components/HistoryPanel';
 import EditDialog, { type EditTarget, type EditEvent } from '../components/EditDialog';
+import EditToolbar from '../components/EditToolbar';
 import HostingDialog from '../components/HostingDialog';
 import type { TextStylePatch } from '../components/EditDialog';
 
@@ -240,10 +241,16 @@ export default function PreviewPage() {
   const [editError, setEditError] = useState<{ message: string; severity: 'error' | 'warning' } | null>(null);
   const [editDialogTarget, setEditDialogTarget] = useState<EditTarget | null>(null);
   const [editDialogBusy, setEditDialogBusy] = useState(false);
+  // Floating toolbar selection state. Separate from the icon picker dialog above.
+  const [toolbarTarget, setToolbarTarget] = useState<EditTarget | null>(null);
+  const [toolbarRect, setToolbarRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const [iframeRect, setIframeRect] = useState<DOMRect | null>(null);
+  const [toolbarLiveText, setToolbarLiveText] = useState<string>('');
   const [pendingEdits, setPendingEdits] = useState<Array<
     | { op: 'content'; original: string; replacement: string }
     | { op: 'textStyle'; original: string; replacement: string; style: TextStylePatch }
     | { op: 'icon'; sourcePathD: string; width: number; height: number; newIconName?: string; uploadedUrl?: string }
+    | { op: 'imageAttrs'; anchor: string; width?: string; height?: string; borderRadius?: string }
     | { op: 'delete'; kind: 'text' | 'image' | 'icon'; anchor: string }
   >>([]);
   const [unsavedPromptOpen, setUnsavedPromptOpen] = useState(false);
@@ -334,6 +341,9 @@ export default function PreviewPage() {
       return;
     }
     setEditToken(null);
+    setToolbarTarget(null);
+    setToolbarRect(null);
+    setToolbarLiveText('');
   };
 
   const pollUntilRunning = async (id: string) => {
@@ -422,10 +432,22 @@ export default function PreviewPage() {
 
   const showDynamicContentNotice = useCallback(() => {
     setEditDialogTarget(null);
+    setToolbarTarget(null);
+    setToolbarRect(null);
     setEditDynamicError(true);
   }, []);
 
-  const handleEditSelect = useCallback(async (target: EditTarget) => {
+  const closeToolbar = useCallback(() => {
+    setToolbarTarget(null);
+    setToolbarRect(null);
+    setToolbarLiveText('');
+    previewFrameRef.current?.postToIframe({ type: 'EDIT_DESELECT' });
+  }, []);
+
+  const handleEditSelect = useCallback(async (
+    target: EditTarget,
+    rect: { left: number; top: number; width: number; height: number } | null,
+  ) => {
     if (!projectId) return;
     if (target.kind === 'text' || target.kind === 'image') {
       try {
@@ -437,115 +459,235 @@ export default function PreviewPage() {
       } catch {
         // Non-fatal: keep the existing edit flow and let save-time validation decide.
       }
+      // Refresh iframe rect at selection time so toolbar uses the up-to-date viewport position.
+      const newIframeRect = previewFrameRef.current?.getIframeRect() ?? null;
+      setIframeRect(newIframeRect);
+      setToolbarRect(rect);
+      setToolbarTarget(target);
+      setToolbarLiveText(target.kind === 'text' ? target.anchor : '');
+      return;
     }
+    // icon — keep using the existing dialog (icon picker is a large modal)
     setEditDialogTarget(target);
   }, [projectId, showDynamicContentNotice]);
 
-  // Listen for click-selects from the in-iframe overlay and route them to the EditDialog.
   useEffect(() => {
     if (!editToken) return;
     const handler = (e: MessageEvent) => {
       if (!e.data) return;
-      if (e.data.type === 'EDIT_SELECT' && e.data.target) {
-        void handleEditSelect(e.data.target as EditTarget);
-        return;
-      }
-      if (e.data.type === 'EDIT_DYNAMIC_BLOCKED') {
-        showDynamicContentNotice();
-        return;
-      }
-      if (e.data.type === 'EDIT_ESCAPE') {
-        setEditDialogTarget(null);
+      const data = e.data as any;
+      switch (data.type) {
+        case 'EDIT_SELECT':
+          if (data.target) void handleEditSelect(data.target as EditTarget, data.rect ?? null);
+          break;
+        case 'EDIT_SELECTION_RECT':
+          if (data.rect) setToolbarRect(data.rect);
+          break;
+        case 'EDIT_DESELECT':
+          setToolbarTarget(null);
+          setToolbarRect(null);
+          setToolbarLiveText('');
+          break;
+        case 'EDIT_TEXT_INPUT':
+          if (typeof data.value === 'string') setToolbarLiveText(data.value);
+          break;
+        case 'EDIT_TEXT_COMMIT':
+          if (typeof data.value === 'string' && typeof data.anchor === 'string') {
+            setToolbarLiveText(data.value);
+            if (!data.reverted && data.value.trim() && data.value !== data.anchor) {
+              void handleEditEvent({
+                kind: 'text',
+                anchor: data.anchor,
+                replacement: data.value,
+                style: toolbarTarget?.kind === 'text' ? (toolbarTarget.style ?? {}) : {},
+              });
+            }
+          }
+          break;
+        case 'EDIT_IMAGE_RESIZE':
+          if (typeof data.anchor === 'string') {
+            void handleEditEvent({
+              kind: 'image-attrs' as const,
+              anchor: data.anchor,
+              width: typeof data.width === 'string' ? data.width : undefined,
+              height: typeof data.height === 'string' ? data.height : undefined,
+            } as any);
+          }
+          break;
+        case 'EDIT_DYNAMIC_BLOCKED':
+          showDynamicContentNotice();
+          break;
+        case 'EDIT_ESCAPE':
+          setEditDialogTarget(null);
+          closeToolbar();
+          break;
       }
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [editToken, handleEditSelect, showDynamicContentNotice]);
+    // handleEditEvent is defined later in the component but stable enough; we deliberately
+    // omit it from deps since adding it would cause a forward-reference. The handler is
+    // re-created when toolbarTarget changes so it always reads a fresh style snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editToken, handleEditSelect, showDynamicContentNotice, closeToolbar, toolbarTarget]);
+
+  // Keep the iframe rect fresh on parent layout changes (resize, scroll, drawer open/close).
+  useEffect(() => {
+    if (!toolbarTarget) return;
+    const refresh = () => {
+      const r = previewFrameRef.current?.getIframeRect() ?? null;
+      setIframeRect(r);
+    };
+    refresh();
+    window.addEventListener('resize', refresh);
+    window.addEventListener('scroll', refresh, true);
+    return () => {
+      window.removeEventListener('resize', refresh);
+      window.removeEventListener('scroll', refresh, true);
+    };
+  }, [toolbarTarget]);
 
   const reportEditError = (err: any) => {
     const msg: string = err?.message ?? '';
     const status: number | undefined = err?.status;
-    if (err?.code === 'dynamic_content') {
+    const code: string | undefined = err?.code;
+    if (code === 'dynamic_content') {
       setEditDynamicError(true);
-    } else {
-      const userFacing = status === 404 || status === 422;
-      setEditError({
-        message: userFacing && msg ? msg : t('editMode.patchFailed'),
-        severity: status === 422 ? 'warning' : 'error',
-      });
+      return;
     }
+    // Icon failures point to the improvement chat — the in-place editor can only handle MUI
+    // icons-material with a single, statically-imported usage; anything else needs the LLM.
+    if (code === 'icon_unrecognized' || code === 'icon_not_in_source' || code === 'icon_ambiguous') {
+      const key =
+        code === 'icon_ambiguous' ? 'editMode.iconAmbiguous'
+        : code === 'icon_not_in_source' ? 'editMode.iconNotInSource'
+        : 'editMode.iconUnrecognized';
+      setEditError({ message: t(key), severity: 'warning' });
+      return;
+    }
+    const userFacing = status === 404 || status === 422;
+    setEditError({
+      message: userFacing && msg ? msg : t('editMode.patchFailed'),
+      severity: status === 422 ? 'warning' : 'error',
+    });
   };
 
-  // Handle a save from the EditDialog: translate into a batch op, upload any file
-  // first, apply an optimistic DOM change in the iframe, and queue the op.
+  // Handle a change from the toolbar/dialog: translate into a batch op, upload any file
+  // first, apply an optimistic DOM change in the iframe, and queue the op (deduped by anchor
+  // so rapid style toggles collapse into a single textStyle op).
   const handleEditEvent = async (event: EditEvent) => {
     if (!projectId || !editToken) return;
-    const post = (msg: unknown) => previewFrameRef.current?.postToIframe(msg);
+    // The overlay's message router only dispatches op-style payloads when wrapped in EDIT_APPLY,
+    // so wrap them here once instead of repeating the field at every call site.
+    const post = (msg: Record<string, unknown>) =>
+      previewFrameRef.current?.postToIframe({ type: 'EDIT_APPLY', ...msg });
 
     try {
       setEditDialogBusy(true);
 
       if (event.kind === 'text') {
-        setPendingEdits((prev) => [
-          ...prev,
-          event.style && Object.keys(event.style).length > 0
-            ? { op: 'textStyle', original: event.anchor, replacement: event.replacement, style: event.style }
-            : { op: 'content', original: event.anchor, replacement: event.replacement },
-        ]);
+        const hasStyle = event.style && Object.keys(event.style).length > 0;
+        const newOp = hasStyle
+          ? { op: 'textStyle' as const, original: event.anchor, replacement: event.replacement, style: event.style! }
+          : { op: 'content' as const, original: event.anchor, replacement: event.replacement };
+        setPendingEdits((prev) => {
+          // Drop any prior content/textStyle op for the same anchor — the new op supersedes it.
+          const filtered = prev.filter((p) => {
+            if (p.op === 'content' || p.op === 'textStyle') return p.original !== event.anchor;
+            return true;
+          });
+          return [...filtered, newOp];
+        });
         post({ op: 'replace-text', anchor: event.anchor, replacement: event.replacement, style: event.style });
         setEditDialogTarget(null);
         return;
       }
 
       if (event.kind === 'image-url') {
-        setPendingEdits((prev) => [
-          ...prev,
-          { op: 'content', original: event.anchor, replacement: event.replacement },
-        ]);
+        setPendingEdits((prev) => {
+          const filtered = prev.filter((p) => !(p.op === 'content' && p.original === event.anchor));
+          return [...filtered, { op: 'content', original: event.anchor, replacement: event.replacement }];
+        });
         post({ op: 'replace-image', anchor: event.anchor, replacement: event.replacement });
-        setEditDialogTarget(null);
         return;
       }
 
       if (event.kind === 'image-file') {
         const { url } = await api.uploadImage(projectId, event.dataUrl, event.filename);
-        setPendingEdits((prev) => [
-          ...prev,
-          { op: 'content', original: event.anchor, replacement: url },
-        ]);
+        setPendingEdits((prev) => {
+          const filtered = prev.filter((p) => !(p.op === 'content' && p.original === event.anchor));
+          return [...filtered, { op: 'content', original: event.anchor, replacement: url }];
+        });
         post({ op: 'replace-image', anchor: event.anchor, replacement: url });
-        setEditDialogTarget(null);
+        return;
+      }
+
+      if (event.kind === 'image-attrs') {
+        // Resize handle release. Merge with any prior imageAttrs op for the same anchor.
+        setPendingEdits((prev) => {
+          const existing = prev.find((p) => p.op === 'imageAttrs' && p.anchor === event.anchor) as
+            | { op: 'imageAttrs'; anchor: string; width?: string; height?: string; borderRadius?: string }
+            | undefined;
+          const merged = {
+            op: 'imageAttrs' as const,
+            anchor: event.anchor,
+            width: event.width ?? existing?.width,
+            height: event.height ?? existing?.height,
+            borderRadius: event.borderRadius ?? existing?.borderRadius,
+          };
+          const filtered = prev.filter((p) => !(p.op === 'imageAttrs' && p.anchor === event.anchor));
+          return [...filtered, merged];
+        });
+        post({
+          op: 'image-attrs',
+          anchor: event.anchor,
+          width: event.width,
+          height: event.height,
+          borderRadius: event.borderRadius,
+        });
         return;
       }
 
       if (event.kind === 'icon-library') {
-        setPendingEdits((prev) => [
-          ...prev,
-          {
-            op: 'icon',
-            sourcePathD: event.sourcePathD,
-            width: event.width,
-            height: event.height,
-            newIconName: event.name,
-          },
-        ]);
-        post({ op: 'replace-icon-preview', sourcePathD: event.sourcePathD });
+        // Dedupe on sourcePathD: a second pick for the same icon supersedes the first one,
+        // since the backend only swaps the source-side import once per source path-d.
+        setPendingEdits((prev) => {
+          const filtered = prev.filter((p) => !(p.op === 'icon' && p.sourcePathD === event.sourcePathD));
+          return [
+            ...filtered,
+            {
+              op: 'icon',
+              sourcePathD: event.sourcePathD,
+              width: event.width,
+              height: event.height,
+              newIconName: event.name,
+            },
+          ];
+        });
+        post({
+          op: 'replace-icon-preview',
+          sourcePathD: event.sourcePathD,
+          newPathD: event.newPathD,
+        });
         setEditDialogTarget(null);
         return;
       }
 
       if (event.kind === 'icon-file') {
         const { url } = await api.uploadImage(projectId, event.dataUrl, event.filename);
-        setPendingEdits((prev) => [
-          ...prev,
-          {
-            op: 'icon',
-            sourcePathD: event.sourcePathD,
-            width: event.width,
-            height: event.height,
-            uploadedUrl: url,
-          },
-        ]);
+        setPendingEdits((prev) => {
+          const filtered = prev.filter((p) => !(p.op === 'icon' && p.sourcePathD === event.sourcePathD));
+          return [
+            ...filtered,
+            {
+              op: 'icon',
+              sourcePathD: event.sourcePathD,
+              width: event.width,
+              height: event.height,
+              uploadedUrl: url,
+            },
+          ];
+        });
         post({
           op: 'replace-icon-image',
           sourcePathD: event.sourcePathD,
@@ -565,20 +707,24 @@ export default function PreviewPage() {
             { op: 'delete', kind: 'icon', anchor: target.sourcePathD },
           ]);
           post({ op: 'delete-icon', sourcePathD: target.sourcePathD });
+          setEditDialogTarget(null);
         } else if (target.kind === 'image') {
           setPendingEdits((prev) => [
             ...prev,
             { op: 'delete', kind: 'image', anchor: target.anchor },
           ]);
           post({ op: 'delete-image', anchor: target.anchor });
+          setToolbarTarget(null);
+          setToolbarRect(null);
         } else {
           setPendingEdits((prev) => [
             ...prev,
             { op: 'delete', kind: 'text', anchor: target.anchor },
           ]);
           post({ op: 'delete-text', anchor: target.anchor });
+          setToolbarTarget(null);
+          setToolbarRect(null);
         }
-        setEditDialogTarget(null);
         return;
       }
     } catch (err) {
@@ -614,12 +760,16 @@ export default function PreviewPage() {
       setRefreshKey((k) => k + 1);
       await loadProject();
       setPendingEdits([]);
+      // Iframe reloads after a rebuild — drop any selection state so the toolbar isn't dangling
+      // over an element that no longer matches its old anchor.
+      setToolbarTarget(null);
+      setToolbarRect(null);
+      setToolbarLiveText('');
       if (thenExit) setEditToken(null);
     } catch (err) {
+      // Keep pendingEdits and the optimistic iframe state so the user can retry "Apply all" or
+      // explicitly discard. Refreshing/dropping silently used to lose work on transient failures.
       reportEditError(err);
-      // On failure the iframe will reload with the unchanged source; roll back optimistic state.
-      setRefreshKey((k) => k + 1);
-      setPendingEdits([]);
     } finally {
       setEditSaving(false);
     }
@@ -1688,6 +1838,24 @@ export default function PreviewPage() {
         busy={editDialogBusy}
         onClose={() => setEditDialogTarget(null)}
         onSave={handleEditEvent}
+      />
+
+      <EditToolbar
+        target={toolbarTarget}
+        rect={toolbarRect}
+        iframeRect={iframeRect}
+        busy={editDialogBusy}
+        liveText={toolbarLiveText}
+        onChange={handleEditEvent}
+        onBeginInlineEdit={() => {
+          if (toolbarTarget?.kind !== 'text') return;
+          previewFrameRef.current?.postToIframe({ type: 'EDIT_BEGIN_TEXT', anchor: toolbarTarget.anchor });
+        }}
+        onClose={closeToolbar}
+        onDelete={() => {
+          if (!toolbarTarget) return;
+          void handleEditEvent({ kind: 'delete', target: toolbarTarget });
+        }}
       />
 
       <Dialog

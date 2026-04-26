@@ -204,9 +204,17 @@ export const api = {
             style: {
               bold?: boolean;
               italic?: boolean;
+              underline?: boolean;
               fontSize?: string;
               fontFamily?: string;
               color?: string;
+              textAlign?: 'left' | 'center' | 'right' | 'justify';
+              lineHeight?: string;
+              letterSpacing?: string;
+              padding?: string;
+              margin?: string;
+              background?: string;
+              borderRadius?: string;
             };
           }
         | {
@@ -216,6 +224,13 @@ export const api = {
             uploadedUrl?: string;
             width?: number;
             height?: number;
+          }
+        | {
+            op: 'imageAttrs';
+            anchor: string;
+            width?: string;
+            height?: string;
+            borderRadius?: string;
           }
         | { op: 'delete'; kind: 'text' | 'image' | 'icon'; anchor: string }
       >;

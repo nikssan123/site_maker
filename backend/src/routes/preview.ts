@@ -270,6 +270,51 @@ function sourceFileHasAnchor(content: string, anchor: string): boolean {
   return new RegExp(escaped.replace(/ /g, '\\s+')).test(content);
 }
 
+/**
+ * Split a JSX element body into text segments, skipping over tags and {expressions}.
+ * Returns [{ text, start, end }] where start/end are offsets within `body`.
+ *
+ * Used both for whole-body content edits and for surgically wrapping a single text
+ * segment (so a style edit on "world" inside `<p>Hello <span>!</span> world</p>` only
+ * touches the " world" segment, not the whole element).
+ */
+function splitJsxTextSegments(body: string): Array<{ text: string; start: number; end: number }> {
+  const segments: Array<{ text: string; start: number; end: number }> = [];
+  let i = 0;
+  let segStart = 0;
+  let braceDepth = 0;
+  while (i < body.length) {
+    const ch = body[i];
+    if (braceDepth === 0 && ch === '<') {
+      if (i > segStart) segments.push({ text: body.slice(segStart, i), start: segStart, end: i });
+      const tagEnd = body.indexOf('>', i);
+      if (tagEnd === -1) { i = body.length; break; }
+      i = tagEnd + 1;
+      segStart = i;
+      continue;
+    }
+    if (ch === '{') {
+      if (braceDepth === 0 && i > segStart) {
+        segments.push({ text: body.slice(segStart, i), start: segStart, end: i });
+      }
+      braceDepth++;
+      i++;
+      continue;
+    }
+    if (ch === '}') {
+      braceDepth = Math.max(0, braceDepth - 1);
+      i++;
+      if (braceDepth === 0) segStart = i;
+      continue;
+    }
+    i++;
+  }
+  if (braceDepth === 0 && segStart < body.length) {
+    segments.push({ text: body.slice(segStart), start: segStart, end: body.length });
+  }
+  return segments;
+}
+
 function renderedJsxText(body: string): string {
   return normalizePatchText(
     body
@@ -284,12 +329,25 @@ function renderedJsxText(body: string): string {
   );
 }
 
+const cssLength = /^\d{1,4}(\.\d+)?(px|rem|em|%)$/;
+const cssLengthShorthand = /^\d{1,4}(\.\d+)?(px|rem|em|%)(\s+\d{1,4}(\.\d+)?(px|rem|em|%)){0,3}$/;
+const cssLineHeight = /^(\d+(\.\d+)?|\d{1,4}(\.\d+)?(px|rem|em|%))$/;
+const cssHexColor = /^#[0-9a-fA-F]{6}$/;
+
 const TextStyleSchema = z.object({
   bold: z.boolean().optional(),
   italic: z.boolean().optional(),
-  fontSize: z.string().regex(/^\d{1,3}(\.\d+)?(px|rem|em|%)$/).optional(),
+  underline: z.boolean().optional(),
+  fontSize: z.string().regex(cssLength).optional(),
   fontFamily: z.string().max(120).regex(/^[\w\s"',.-]+$/).optional(),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  color: z.string().regex(cssHexColor).optional(),
+  textAlign: z.enum(['left', 'center', 'right', 'justify']).optional(),
+  lineHeight: z.string().regex(cssLineHeight).optional(),
+  letterSpacing: z.string().regex(/^-?\d{1,3}(\.\d+)?(px|rem|em)$/).optional(),
+  padding: z.string().regex(cssLengthShorthand).optional(),
+  margin: z.string().regex(cssLengthShorthand).optional(),
+  background: z.string().regex(cssHexColor).optional(),
+  borderRadius: z.string().regex(cssLength).optional(),
 });
 
 type TextStyleInput = z.infer<typeof TextStyleSchema>;
@@ -298,19 +356,67 @@ function textStyleToReactProps(style: TextStyleInput): string {
   const parts: string[] = [];
   if (style.bold) parts.push('fontWeight: 700');
   if (style.italic) parts.push("fontStyle: 'italic'");
+  if (style.underline) parts.push("textDecoration: 'underline'");
   if (style.fontSize) parts.push(`fontSize: ${JSON.stringify(style.fontSize)}`);
   if (style.fontFamily) parts.push(`fontFamily: ${JSON.stringify(style.fontFamily)}`);
   if (style.color) parts.push(`color: ${JSON.stringify(style.color)}`);
+  if (style.textAlign) parts.push(`textAlign: ${JSON.stringify(style.textAlign)}`);
+  if (style.lineHeight) parts.push(`lineHeight: ${JSON.stringify(style.lineHeight)}`);
+  if (style.letterSpacing) parts.push(`letterSpacing: ${JSON.stringify(style.letterSpacing)}`);
+  if (style.padding) parts.push(`padding: ${JSON.stringify(style.padding)}`);
+  if (style.margin) parts.push(`margin: ${JSON.stringify(style.margin)}`);
+  if (style.background) parts.push(`background: ${JSON.stringify(style.background)}`);
+  if (style.borderRadius) parts.push(`borderRadius: ${JSON.stringify(style.borderRadius)}`);
   return parts.join(', ');
 }
 
-function applyReactStyleToOpeningTag(openingTag: string, style: TextStyleInput): string {
-  const props = textStyleToReactProps(style);
+/**
+ * Merge a pre-built React style props string (e.g. "fontWeight: 700, color: '#fff'") into
+ * a JSX opening tag. Handles object literals, variable references, MUI's sx attribute, and
+ * self-closing tags. Throws 422 for the legacy HTML string form (`style="…"`) since merging
+ * a string into a JSX object literal would produce invalid syntax.
+ */
+function injectStylePropsIntoOpeningTag(openingTag: string, props: string): string {
   if (!props) return openingTag;
-  if (/style=\{\{/.test(openingTag)) {
+  // sx={{ ... }} (MUI) — prefer over style if present, since the surrounding code is MUI-aware.
+  if (/\bsx=\{\{/.test(openingTag)) {
+    return openingTag.replace(/sx=\{\{/, `sx={{ ${props}, `);
+  }
+  // style={{ ... }} object literal.
+  if (/\bstyle=\{\{/.test(openingTag)) {
     return openingTag.replace(/style=\{\{/, `style={{ ${props}, `);
   }
+  // style={someVar} or style={expr} → spread-merge wrapped in parens so ternaries don't break.
+  const variableStyle = openingTag.match(/\bstyle=\{([^{}]+)\}/);
+  if (variableStyle) {
+    return openingTag.replace(
+      variableStyle[0],
+      `style={{ ...(${variableStyle[1].trim()}), ${props} }}`,
+    );
+  }
+  if (/\bstyle="/.test(openingTag)) {
+    throw new AppError(
+      422,
+      'This element uses a string-form style attribute that cannot be merged automatically. Edit the source manually or pick a different text block.',
+    );
+  }
+  // sx={someVar} or sx={expr}
+  const variableSx = openingTag.match(/\bsx=\{([^{}]+)\}/);
+  if (variableSx) {
+    return openingTag.replace(
+      variableSx[0],
+      `sx={{ ...(${variableSx[1].trim()}), ${props} }}`,
+    );
+  }
+  // No existing style or sx — append. Preserve self-closing form when present.
+  if (/\/>$/.test(openingTag)) {
+    return openingTag.replace(/\/>$/, ` style={{ ${props} }} />`);
+  }
   return openingTag.replace(/>$/, ` style={{ ${props} }}>`);
+}
+
+function applyReactStyleToOpeningTag(openingTag: string, style: TextStyleInput): string {
+  return injectStylePropsIntoOpeningTag(openingTag, textStyleToReactProps(style));
 }
 
 function inspectEditAnchor(projectId: string, target: { kind: 'text' | 'image'; anchor: string }): {
@@ -502,44 +608,6 @@ function applyContentPatch(projectId: string, original: string, replacement: str
   // JSXText segment whose normalized value equals the normalized `original` and replace only
   // that segment. If no single segment accounts for the match, refuse with 422.
   const hasInlineJsxChildren = (body: string): boolean => /<[A-Za-z]/.test(body);
-  // Split a JSX body into text segments, skipping over tags and {expressions}. Returns
-  // [{ text, start, end }] where start/end are offsets within `body`.
-  const splitJsxTextSegments = (body: string): Array<{ text: string; start: number; end: number }> => {
-    const segments: Array<{ text: string; start: number; end: number }> = [];
-    let i = 0;
-    let segStart = 0;
-    let braceDepth = 0;
-    while (i < body.length) {
-      const ch = body[i];
-      if (braceDepth === 0 && ch === '<') {
-        if (i > segStart) segments.push({ text: body.slice(segStart, i), start: segStart, end: i });
-        const tagEnd = body.indexOf('>', i);
-        if (tagEnd === -1) { i = body.length; break; }
-        i = tagEnd + 1;
-        segStart = i;
-        continue;
-      }
-      if (ch === '{') {
-        if (braceDepth === 0 && i > segStart) {
-          segments.push({ text: body.slice(segStart, i), start: segStart, end: i });
-        }
-        braceDepth++;
-        i++;
-        continue;
-      }
-      if (ch === '}') {
-        braceDepth = Math.max(0, braceDepth - 1);
-        i++;
-        if (braceDepth === 0) segStart = i;
-        continue;
-      }
-      i++;
-    }
-    if (braceDepth === 0 && segStart < body.length) {
-      segments.push({ text: body.slice(segStart), start: segStart, end: body.length });
-    }
-    return segments;
-  };
 
   for (const { path: fp, content } of jsxFirst) {
     if (!/\.[jt]sx$/i.test(fp)) continue;
@@ -603,6 +671,7 @@ function applyTextStylePatch(
   const projectDir = projectPath(projectId);
   const files = walkSourceFiles(projectDir).filter((f) => /\.[jt]sx$/i.test(f));
   const norm = normalizePatchText(original);
+  const props = textStyleToReactProps(style);
 
   for (const fp of files) {
     const content = fs.readFileSync(fp, 'utf8');
@@ -611,19 +680,38 @@ function applyTextStylePatch(
     while ((match = elementRegex.exec(content)) !== null) {
       const full = match[0];
       const body = match[2] ?? '';
-      if (renderedJsxText(body) !== norm) continue;
-
       const openingEnd = full.indexOf('>');
       if (openingEnd < 0) continue;
       const opening = full.slice(0, openingEnd + 1);
       const closing = `</${match[1]}>`;
-      const nextBody = replacement.trim() || original;
-      const updatedFull = `${applyReactStyleToOpeningTag(opening, style)}${nextBody}${closing}`;
-      fs.writeFileSync(
-        fp,
-        content.slice(0, match.index) + updatedFull + content.slice(match.index + full.length),
-        'utf8',
-      );
+
+      // Case 1 — the entire element body matches the text. Apply style to the opening tag.
+      if (renderedJsxText(body) === norm) {
+        const nextBody = replacement.trim() || original;
+        const updatedFull = `${applyReactStyleToOpeningTag(opening, style)}${nextBody}${closing}`;
+        fs.writeFileSync(
+          fp,
+          content.slice(0, match.index) + updatedFull + content.slice(match.index + full.length),
+          'utf8',
+        );
+        return;
+      }
+
+      // Case 2 — text is one of multiple segments inside the body (split by inline children
+      // like <span>/<a>). Wrap that single segment in <span style={{…}}> instead of bailing.
+      if (!props) continue;
+      const segments = splitJsxTextSegments(body);
+      const matching = segments.filter((s) => normalizePatchText(s.text) === norm);
+      if (matching.length !== 1) continue;
+      const seg = matching[0];
+      const leading = seg.text.match(/^\s*/)?.[0] ?? '';
+      const trailing = seg.text.match(/\s*$/)?.[0] ?? '';
+      const inner = replacement.trim() || original;
+      const wrapped = `${leading}<span style={{ ${props} }}>${inner}</span>${trailing}`;
+      const bodyStart = match.index + full.indexOf(body);
+      const absStart = bodyStart + seg.start;
+      const absEnd = bodyStart + seg.end;
+      fs.writeFileSync(fp, content.slice(0, absStart) + wrapped + content.slice(absEnd), 'utf8');
       return;
     }
   }
@@ -634,6 +722,46 @@ function applyTextStylePatch(
   }
 
   throw new AppError(422, 'This text style could not be applied safely. Try selecting a simpler text block.');
+}
+
+interface ImageAttrPatch {
+  width?: string;
+  height?: string;
+  borderRadius?: string;
+}
+
+/**
+ * Apply width/height/borderRadius to an <img> (or <Box component="img">) found by its src.
+ * Used by the resize handles in the toolbar overlay.
+ */
+function applyImageAttrsPatch(projectId: string, anchor: string, attrs: ImageAttrPatch): void {
+  const parts: string[] = [];
+  if (attrs.width) parts.push(`width: ${JSON.stringify(attrs.width)}`);
+  if (attrs.height) parts.push(`height: ${JSON.stringify(attrs.height)}`);
+  if (attrs.borderRadius) parts.push(`borderRadius: ${JSON.stringify(attrs.borderRadius)}`);
+  if (parts.length === 0) return;
+  const props = parts.join(', ');
+
+  const projectDir = projectPath(projectId);
+  const files = walkSourceFiles(projectDir).filter((f) => /\.[jt]sx$/i.test(f));
+  const escapedAnchor = anchor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Self-closing tag whose attribute blob contains src="anchor" (single or double quotes).
+  const tagRegex = new RegExp(
+    `<([A-Za-z][\\w.]*)\\b[^>]*\\bsrc=["']${escapedAnchor}["'][^>]*\\/>`,
+    'g',
+  );
+
+  for (const fp of files) {
+    const content = fs.readFileSync(fp, 'utf8');
+    const m = tagRegex.exec(content);
+    tagRegex.lastIndex = 0;
+    if (!m) continue;
+    const updated = injectStylePropsIntoOpeningTag(m[0], props);
+    fs.writeFileSync(fp, content.slice(0, m.index) + updated + content.slice(m.index + m[0].length), 'utf8');
+    return;
+  }
+
+  throw new AppError(404, 'Image not found in source files');
 }
 
 // ─── Icon swap / upload helpers ──────────────────────────────────────────────
@@ -714,7 +842,10 @@ function applyIconPatch(
   const projectDir = projectPath(projectId);
   const oldIconName = resolveIconName(projectDir, sourcePathD);
   if (!oldIconName) {
-    throw new AppError(422, 'Иконката не може да бъде разпозната. Опитай отново или редактирай през чата.');
+    // Icons that aren't MUI icons-material (custom SVG, lucide, react-icons, dynamic lookups…)
+    // can't be located by path-d fingerprint. Surface a code so the frontend can render a
+    // localized "use the improvement chat" message rather than the raw error string.
+    throw new AppError(422, 'Icon could not be identified for in-place edit.', 'icon_unrecognized');
   }
 
   const files = walkSourceFiles(projectDir).filter((f) => /\.[jt]sx$/i.test(f));
@@ -727,12 +858,11 @@ function applyIconPatch(
   }
 
   const totalUsages = matches.reduce((n, m) => n + m.usages.length, 0);
-  if (totalUsages === 0) throw new AppError(404, 'Иконката не е намерена в изходния код.');
+  if (totalUsages === 0) {
+    throw new AppError(404, 'Icon not found in source.', 'icon_not_in_source');
+  }
   if (totalUsages > 1) {
-    throw new AppError(
-      422,
-      'Тази иконка се използва на повече от едно място и не може да се редактира автоматично. Редактирай през чата.',
-    );
+    throw new AppError(422, 'Icon appears in more than one place.', 'icon_ambiguous');
   }
 
   const { path: fp, content, usages } = matches[0];
@@ -868,7 +998,7 @@ function applyElementDelete(
 
   if (kind === 'icon') {
     const iconName = resolveIconName(projectDir, anchor);
-    if (!iconName) throw new AppError(422, 'Иконката не може да бъде разпозната.');
+    if (!iconName) throw new AppError(422, 'Icon could not be identified.', 'icon_unrecognized');
     const files = walkSourceFiles(projectDir).filter((f) => /\.[jt]sx$/i.test(f));
     const matches: Array<{ path: string; content: string; usages: ReturnType<typeof findIconUsages> }> = [];
     for (const fp of files) {
@@ -878,8 +1008,8 @@ function applyElementDelete(
       if (usages.length > 0) matches.push({ path: fp, content, usages });
     }
     const total = matches.reduce((n, m) => n + m.usages.length, 0);
-    if (total === 0) throw new AppError(404, 'Иконката не е намерена.');
-    if (total > 1) throw new AppError(422, 'Иконката се използва на повече от едно място.');
+    if (total === 0) throw new AppError(404, 'Icon not found in source.', 'icon_not_in_source');
+    if (total > 1) throw new AppError(422, 'Icon appears in more than one place.', 'icon_ambiguous');
     const { path: fp, content, usages } = matches[0];
     const usage = usages[0];
     let updated = sliceOutElement(content, usage.start, usage.end);
@@ -1875,6 +2005,13 @@ const BatchOpSchema = z.discriminatedUnion('op', [
     height: z.number().positive().optional(),
   }),
   z.object({
+    op: z.literal('imageAttrs'),
+    anchor: z.string().min(1),
+    width: z.string().regex(cssLength).optional(),
+    height: z.string().regex(cssLength).optional(),
+    borderRadius: z.string().regex(cssLength).optional(),
+  }),
+  z.object({
     op: z.literal('delete'),
     kind: z.enum(['text', 'image', 'icon']),
     anchor: z.string().min(1),
@@ -1917,6 +2054,12 @@ router.patch('/:projectId/content-batch', requireAuth, async (req, res, next) =>
             replacementJsx = `<img src="${esc}" alt="" width={${w}} height={${h}} style={{ verticalAlign: 'middle' }} />`;
           }
           applyIconPatch(projectId, op.sourcePathD, op.newIconName ?? null, replacementJsx);
+        } else if (op.op === 'imageAttrs') {
+          applyImageAttrsPatch(projectId, op.anchor, {
+            width: op.width,
+            height: op.height,
+            borderRadius: op.borderRadius,
+          });
         } else {
           applyElementDelete(projectId, op.kind, op.anchor);
         }

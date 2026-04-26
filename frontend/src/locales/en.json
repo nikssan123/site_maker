@@ -445,6 +445,9 @@
     "dynamicContentError": "This content is managed from the admin workspace. Open the correct panel to edit it safely.",
     "dynamicContentHover": "This content is managed from Catalog.",
     "patchFailed": "The change could not be saved. Try again or edit via chat.",
+    "iconUnrecognized": "We couldn't identify this icon for an in-place swap. Use the improvement chat below to change it.",
+    "iconNotInSource": "We couldn't locate this icon in the source to swap it. Use the improvement chat below to change it.",
+    "iconAmbiguous": "This icon is used in multiple places, so it can't be swapped automatically. Use the improvement chat below to change it.",
     "useCatalogTooltip": "Open catalog — edit dynamic content here",
     "pendingCount_one": "{{count}} unsaved edit",
     "pendingCount_other": "{{count}} unsaved edits",
@@ -480,6 +483,21 @@
     "font": "Font",
     "fontDefault": "Default",
     "color": "Color"
+  },
+  "editToolbar": {
+    "editText": "Edit text inline",
+    "more": "More options",
+    "background": "Background",
+    "padding": "Padding",
+    "margin": "Margin",
+    "radius": "Corner radius",
+    "lineHeight": "Line height",
+    "clear": "Clear",
+    "upload": "Upload image",
+    "delete": "Delete",
+    "confirmDelete": "Delete",
+    "cancel": "Cancel",
+    "close": "Close"
   },
   "iconPicker": {
     "title": "Pick an icon",

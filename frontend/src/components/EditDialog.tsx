@@ -17,9 +17,24 @@ import IconPickerBody, { type IconPickResult } from './IconPickerBody';
 export type TextStylePatch = {
   bold?: boolean;
   italic?: boolean;
+  underline?: boolean;
   fontSize?: string;
   fontFamily?: string;
   color?: string;
+  textAlign?: 'left' | 'center' | 'right' | 'justify';
+  lineHeight?: string;
+  letterSpacing?: string;
+  padding?: string;
+  margin?: string;
+  background?: string;
+  borderRadius?: string;
+};
+
+/** Width/height/borderRadius applied to an <img> via the imageAttrs op. */
+export type ImageAttrsPatch = {
+  width?: string;
+  height?: string;
+  borderRadius?: string;
 };
 
 export type EditTarget =
@@ -35,7 +50,8 @@ export type EditEvent =
   | { kind: 'text'; anchor: string; replacement: string; style?: TextStylePatch }
   | { kind: 'image-url'; anchor: string; replacement: string }
   | { kind: 'image-file'; anchor: string; dataUrl: string; filename: string }
-  | { kind: 'icon-library'; sourcePathD: string; width: number; height: number; name: string }
+  | { kind: 'image-attrs'; anchor: string; width?: string; height?: string; borderRadius?: string }
+  | { kind: 'icon-library'; sourcePathD: string; width: number; height: number; name: string; newPathD?: string }
   | { kind: 'icon-file'; sourcePathD: string; width: number; height: number; dataUrl: string; filename: string }
   | { kind: 'delete'; target: EditTarget };
 
@@ -51,9 +67,17 @@ function cleanTextStyle(style: TextStylePatch): TextStylePatch {
   return {
     ...(style.bold ? { bold: true } : {}),
     ...(style.italic ? { italic: true } : {}),
+    ...(style.underline ? { underline: true } : {}),
     ...(style.fontSize ? { fontSize: style.fontSize } : {}),
     ...(style.fontFamily ? { fontFamily: style.fontFamily } : {}),
     ...(style.color ? { color: style.color } : {}),
+    ...(style.textAlign ? { textAlign: style.textAlign } : {}),
+    ...(style.lineHeight ? { lineHeight: style.lineHeight } : {}),
+    ...(style.letterSpacing ? { letterSpacing: style.letterSpacing } : {}),
+    ...(style.padding ? { padding: style.padding } : {}),
+    ...(style.margin ? { margin: style.margin } : {}),
+    ...(style.background ? { background: style.background } : {}),
+    ...(style.borderRadius ? { borderRadius: style.borderRadius } : {}),
   };
 }
 
@@ -142,6 +166,7 @@ export default function EditDialog({ target, onSave, onClose, busy = false }: Pr
         width: target.width,
         height: target.height,
         name: result.name,
+        newPathD: result.pathD,
       });
     } else if (result.kind === 'upload' && result.dataUrl) {
       onSave({

@@ -1,4 +1,5 @@
-import { useMemo, useState, useRef } from 'react';
+import { useMemo, useState, useRef, createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import {
   Box, Typography, TextField, InputAdornment, Tabs, Tab,
   Button, Stack, ToggleButtonGroup, ToggleButton, Alert,
@@ -12,8 +13,26 @@ import { ICON_CATEGORIES, ICON_NAMES, type IconCatalogEntry } from '../lib/iconC
 export interface IconPickResult {
   kind: 'library' | 'upload';
   name?: string;
+  /** First <path d="…"> rendered by the picked MUI icon — used by the iframe overlay for live preview. */
+  pathD?: string;
   dataUrl?: string;
   filename?: string;
+}
+
+/**
+ * Render the picked MUI icon to static SVG markup and pull out its first path-d. Lets the
+ * iframe overlay swap the on-screen path immediately instead of just dimming the old icon.
+ */
+function extractIconPathD(name: string): string | null {
+  const Component = (MuiIcons as Record<string, React.ComponentType<unknown>>)[name];
+  if (!Component) return null;
+  try {
+    const html = renderToStaticMarkup(createElement(Component));
+    const m = /<path[^>]*\bd="([^"]+)"/.exec(html);
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
 }
 
 interface Props {
@@ -155,7 +174,7 @@ export default function IconPickerBody({ onPick, compact = false }: Props) {
               filteredIcons.map((ic) => (
                 <Box
                   key={ic.name}
-                  onClick={() => onPick({ kind: 'library', name: ic.name })}
+                  onClick={() => onPick({ kind: 'library', name: ic.name, pathD: extractIconPathD(ic.name) ?? undefined })}
                   sx={{
                     aspectRatio: '1 / 1',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',

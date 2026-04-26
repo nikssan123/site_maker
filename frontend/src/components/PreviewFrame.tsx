@@ -22,6 +22,8 @@ interface Props {
 export interface PreviewFrameHandle {
   /** Post a message to the embedded iframe (e.g. EDIT_APPLY). No-op if the iframe isn't mounted. */
   postToIframe: (msg: unknown) => void;
+  /** The iframe's bounding rect in parent viewport coords — used to position the floating toolbar. */
+  getIframeRect: () => DOMRect | null;
 }
 
 const WARN_AFTER_MS = 35_000;
@@ -84,6 +86,13 @@ const PreviewFrame = forwardRef<PreviewFrameHandle, Props>(function PreviewFrame
         win.postMessage(msg, origin);
       } catch {
         /* ignore cross-origin or detached iframe */
+      }
+    },
+    getIframeRect: () => {
+      try {
+        return iframeRef.current?.getBoundingClientRect() ?? null;
+      } catch {
+        return null;
       }
     },
   }), []);
